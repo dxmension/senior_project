@@ -2,7 +2,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import ForeignKey, String, Boolean, Float, Integer
 
 from app.models.base import Base, IDMixin, TimestampMixin
-from app.models.enrollment import Enrollment
 
 
 class User(Base, IDMixin, TimestampMixin):

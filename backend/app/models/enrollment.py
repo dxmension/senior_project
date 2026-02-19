@@ -4,8 +4,6 @@ from sqlalchemy import Enum, ForeignKey, Integer, String, UniqueConstraint, Floa
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, IDMixin, TimestampMixin
-from app.models.user import User
-from app.models.course import Course
 
 
 class EnrollmentStatus(str, enum.Enum):

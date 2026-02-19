@@ -2,7 +2,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, Integer, Text
 
 from app.models.base import Base, IDMixin
-from app.models.enrollment import Enrollment
 
 
 class Course(Base, IDMixin):
