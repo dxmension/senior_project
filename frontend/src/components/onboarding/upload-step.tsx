@@ -101,7 +101,7 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
       )}
 
       {error && (
-        <div className="flex items-center gap-2 p-3 rounded-[var(--radius-sm)] bg-accent-red-dim text-accent-red text-sm">
+        <div className="flex items-center gap-2 p-3 rounded-sm)] bg-accent-red-dim text-accent-red text-sm">
           <AlertCircle size={16} className="shrink-0" />
           {error}
         </div>

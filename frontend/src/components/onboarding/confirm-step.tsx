@@ -17,7 +17,6 @@ const emptyCourse: CourseRecord = {
   code: "",
   title: "",
   semester: "Fall",
-  term: new Date().getFullYear(),
   grade: "A",
   grade_points: 4.0,
   ects: 6,
@@ -181,14 +180,6 @@ function CourseTable({ courses, onUpdate, onRemove }: CourseTableProps) {
                     <option value="Spring">Spring</option>
                     <option value="Summer">Summer</option>
                   </select>
-                </td>
-                <td className="px-4 py-2">
-                  <input
-                    type="number"
-                    value={c.term}
-                    onChange={(e) => onUpdate(idx, "term", Number(e.target.value))}
-                    className="glass-input px-2 py-1 w-20 text-xs"
-                  />
                 </td>
                 <td className="px-4 py-2">
                   <input
