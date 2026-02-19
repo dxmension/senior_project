@@ -18,3 +18,10 @@ class UserRepository(BaseRepository[User]):
         stmt = select(User).where(User.google_id == google_id)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def get_by_name(self, first_name: str, last_name: str) -> User | None:
+        stmt = select(User).where(
+            User.first_name == first_name, User.last_name == last_name
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()

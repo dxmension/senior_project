@@ -11,6 +11,9 @@ class UserProfileResponse(BaseModel):
     avatar_url: str | None = None
     major: str | None = None
     study_year: int | None = None
+    cgpa: float | None = None
+    total_credits_earned: int | None = None
+    total_credits_enrolled: int | None = None
     is_onboarded: bool
     created_at: datetime
 
@@ -34,7 +37,6 @@ class EnrollmentResponse(BaseModel):
     grade: str | None = None
     grade_points: float | None = None
     semester: str
-    term: int
     status: str
 
     class Config:

@@ -11,7 +11,6 @@ from app.repositories.user import UserRepository
 from app.services.auth import AuthService
 from app.services.transcript import TranscriptService
 from app.services.user import UserService
-from app.storage import get_storage, LocalStorage
 from app.utils.jwt import JWTService
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/google/callback")
@@ -26,9 +25,8 @@ async def get_auth_service(
 
 async def get_transcript_service(
     session: AsyncSession = Depends(get_async_session),
-    storage: LocalStorage = Depends(get_storage),
 ) -> TranscriptService:
-    return TranscriptService(session=session, storage=storage)
+    return TranscriptService(session=session)
 
 
 async def get_user_service(
@@ -50,7 +48,12 @@ async def get_current_user(
     if not user_id:
         raise InvalidTokenError()
 
-    user = await UserRepository(session).get_by_id(user_id)
+    try:
+        user_id_int = int(user_id)
+    except (ValueError, TypeError):
+        raise InvalidTokenError()
+
+    user = await UserRepository(session).get_by_id(user_id_int)
     if not user:
         raise InvalidTokenError("User not found")
 

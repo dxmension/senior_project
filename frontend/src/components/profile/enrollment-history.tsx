@@ -25,9 +25,11 @@ function groupBySemester(enrollments: EnrollmentItem[]): SemesterGroup[] {
   const map = new Map<string, SemesterGroup>();
 
   for (const e of enrollments) {
-    const key = `${e.semester} ${e.term}`;
+    const key = e.semester;
     if (!map.has(key)) {
-      map.set(key, { label: key, sortKey: e.term * 10 + (e.semester === "Spring" ? 1 : e.semester === "Summer" ? 2 : 3), items: [] });
+      // Simple semester ordering: Fall > Summer > Spring
+      const semesterOrder = e.semester === "Fall" ? 3 : e.semester === "Summer" ? 2 : e.semester === "Spring" ? 1 : 0;
+      map.set(key, { label: key, sortKey: semesterOrder, items: [] });
     }
     map.get(key)!.items.push(e);
   }

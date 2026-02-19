@@ -78,10 +78,10 @@ export default function OnboardingPage() {
           )}
           {step === "upload" && (
             <UploadStep
-              onNext={(data) => {
-                setParsedData(data);
-                setIsManual(false);
-                setStep("confirm");
+              onNext={() => {
+                // After successful upload, user is marked as onboarded
+                // Redirect to dashboard
+                router.replace("/dashboard");
               }}
               onSkip={() => {
                 setIsManual(true);

@@ -4,6 +4,8 @@ from sqlalchemy import Enum, ForeignKey, Integer, String, UniqueConstraint, Floa
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, IDMixin, TimestampMixin
+from app.models.user import User
+from app.models.course import Course
 
 
 class EnrollmentStatus(str, enum.Enum):
@@ -11,6 +13,8 @@ class EnrollmentStatus(str, enum.Enum):
     IN_PROGRESS = "in_progress"
     WITHDRAWN = "withdrawn"
     FAILED = "failed"
+    AUDIT = "audit"
+    INCOMPLETE = "incomplete"
 
 
 class Enrollment(Base, IDMixin, TimestampMixin):
@@ -26,7 +30,6 @@ class Enrollment(Base, IDMixin, TimestampMixin):
         Integer, ForeignKey("courses.id", ondelete="CASCADE"), nullable=False
     )
     semester: Mapped[str] = mapped_column(String(16), nullable=False)
-    term: Mapped[int] = mapped_column(Integer, nullable=False)
     grade: Mapped[str | None] = mapped_column(String(4))
     grade_points: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[EnrollmentStatus] = mapped_column(

@@ -19,6 +19,4 @@ class TimestampMixin:
 
 
 class IDMixin:
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, index=True, unique=True
-    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, unique=True)
