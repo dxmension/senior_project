@@ -26,7 +26,7 @@ class ApiClient {
     if (!refreshToken) return false;
 
     try {
-      const res = await fetch(`${API_BASE}/auth/refresh`, {
+      const res = await fetch(`${API_BASE}/auth/tokens/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh_token: refreshToken }),
@@ -38,6 +38,10 @@ class ApiClient {
       }
 
       const json = await res.json();
+      if (json.ok === false) {
+        this.clearTokens();
+        return false;
+      }
       const data = json.data;
       this.setTokens(data.access_token, data.refresh_token);
       return true;
@@ -82,12 +86,15 @@ class ApiClient {
       }
     }
 
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({ message: "Request failed" }));
-      throw new Error(error.message || `HTTP ${res.status}`);
+    const payload = await res
+      .json()
+      .catch(() => ({ ok: false, error: { message: "Request failed" } }));
+
+    if (!res.ok || payload.ok === false) {
+      throw new Error(payload.error?.message || `HTTP ${res.status}`);
     }
 
-    return res.json();
+    return payload;
   }
 
   async get<T>(endpoint: string): Promise<T> {
@@ -141,12 +148,15 @@ class ApiClient {
       }
     }
 
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({ message: "Upload failed" }));
-      throw new Error(error.message || `HTTP ${res.status}`);
+    const payload = await res
+      .json()
+      .catch(() => ({ ok: false, error: { message: "Upload failed" } }));
+
+    if (!res.ok || payload.ok === false) {
+      throw new Error(payload.error?.message || `HTTP ${res.status}`);
     }
 
-    return res.json();
+    return payload;
   }
 }
 

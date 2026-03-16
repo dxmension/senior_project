@@ -26,7 +26,7 @@ export default function AuthCallbackClient() {
     (async () => {
       try {
         const res = await api.post<ApiResponse<TokenPair>>(
-          "/auth/google/callback",
+          "/auth/google-callback",
           { code }
         );
         const { access_token, refresh_token, is_onboarded } = res.data;

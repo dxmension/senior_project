@@ -21,15 +21,26 @@ interface SemesterGroup {
   items: EnrollmentItem[];
 }
 
+function semesterSortKey(semester: string): number {
+  const text = (semester || "").trim();
+  if (!text) return -1;
+
+  const match = text.match(/(spring|summer|fall)\s*(\d{4})?/i);
+  if (!match) return -1;
+
+  const term = match[1].toLowerCase();
+  const termOrder = term === "spring" ? 0 : term === "summer" ? 1 : 2;
+  const year = match[2] ? Number(match[2]) : 9999;
+  return year * 10 + termOrder;
+}
+
 function groupBySemester(enrollments: EnrollmentItem[]): SemesterGroup[] {
   const map = new Map<string, SemesterGroup>();
 
   for (const e of enrollments) {
     const key = e.semester;
     if (!map.has(key)) {
-      // Simple semester ordering: Fall > Summer > Spring
-      const semesterOrder = e.semester === "Fall" ? 3 : e.semester === "Summer" ? 2 : e.semester === "Spring" ? 1 : 0;
-      map.set(key, { label: key, sortKey: semesterOrder, items: [] });
+      map.set(key, { label: key, sortKey: semesterSortKey(key), items: [] });
     }
     map.get(key)!.items.push(e);
   }

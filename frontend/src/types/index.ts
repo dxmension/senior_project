@@ -16,6 +16,7 @@ export interface User {
 export interface TokenPair {
   access_token: string;
   refresh_token: string;
+  token_type: string;
   is_onboarded: boolean;
 }
 
@@ -74,13 +75,16 @@ export interface UserStats {
 }
 
 export interface ApiResponse<T = null> {
-  success: boolean;
+  ok: boolean;
   data: T;
-  message: string | null;
+  meta: Record<string, unknown> | null;
 }
 
 export interface ApiError {
-  success: false;
-  error_code: string;
-  message: string;
+  ok: false;
+  error: {
+    code: string;
+    message: string;
+    details: Record<string, unknown> | null;
+  };
 }

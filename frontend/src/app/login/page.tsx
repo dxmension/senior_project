@@ -11,7 +11,7 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
-      const res = await api.get<ApiResponse<{ url: string }>>("/auth/google/url");
+      const res = await api.get<ApiResponse<{ url: string }>>("/auth/google-url");
       window.location.href = res.data.url;
     } catch {
       setLoading(false);

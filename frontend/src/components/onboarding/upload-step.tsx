@@ -42,7 +42,7 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
     setError(null);
 
     try {
-      await api.uploadFile<ApiResponse>("/transcripts/upload", file);
+      await api.uploadFile<ApiResponse>("/transcripts/uploads", file);
       setUploading(false);
       // Transcript is processed synchronously, just move to next step
       onNext();

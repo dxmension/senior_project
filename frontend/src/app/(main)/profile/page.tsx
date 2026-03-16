@@ -19,8 +19,8 @@ export default function ProfilePage() {
     async function load() {
       try {
         const [statsRes, enrollRes] = await Promise.all([
-          api.get<ApiResponse<UserStats>>("/users/stats"),
-          api.get<ApiResponse<EnrollmentItem[]>>("/users/enrollments"),
+          api.get<ApiResponse<UserStats>>("/profile/stats"),
+          api.get<ApiResponse<EnrollmentItem[]>>("/profile/enrollments"),
         ]);
         setStats(statsRes.data);
         setEnrollments(enrollRes.data);

@@ -1,3 +1,5 @@
+from pathlib import Path
+import sys
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
@@ -5,12 +7,14 @@ from sqlalchemy import pool
 
 from alembic import context
 
-from app.config import settings
+sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
-from app.models.base import Base
-from app.models.user import User
-from app.models.course import Course
-from app.models.enrollment import Enrollment
+from nutrack.config import settings
+
+from nutrack.models import Base
+from nutrack.courses.models import Course  # noqa: F401
+from nutrack.models import Enrollment  # noqa: F401
+from nutrack.users.models import User  # noqa: F401
 
 
 # this is the Alembic Config object, which provides
@@ -74,7 +78,10 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+        )
 
         with context.begin_transaction():
             context.run_migrations()
