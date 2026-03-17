@@ -13,7 +13,7 @@ from nutrack.config import settings
 
 from nutrack.models import Base
 from nutrack.courses.models import Course  # noqa: F401
-from nutrack.models import Enrollment  # noqa: F401
+from nutrack.enrollments.models import Enrollment  # noqa: F401
 from nutrack.users.models import User  # noqa: F401
 
 

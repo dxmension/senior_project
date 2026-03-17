@@ -7,13 +7,16 @@ from pathlib import Path
 
 from fastapi import UploadFile
 
+from nutrack.config import settings
 from nutrack.courses.exceptions import (
     CourseScheduleFileError,
     CourseScheduleParsingError,
 )
-from nutrack.courses.repository import CourseRepository
 from nutrack.courses.domain import CourseEntity
 from nutrack.courses.parser import parse_pdf_courses
+from nutrack.courses.repository import CourseRepository
+from nutrack.courses.schemas import CourseSearchItem
+from nutrack.semester import normalize_term
 
 MAX_FILE_SIZE = 10 * 1024 * 1024
 UPLOAD_DIR = Path("/tmp/schedule_uploads")
@@ -26,6 +29,21 @@ PDF_TYPES = {
 logger = logging.getLogger(__name__)
 
 
+def _course_option(course) -> CourseSearchItem:
+    return CourseSearchItem(
+        id=course.id,
+        code=course.code,
+        level=course.level,
+        section=course.section,
+        title=course.title,
+        ects=course.ects,
+        term=course.term,
+        year=course.year,
+        meeting_time=course.meeting_time,
+        room=course.room,
+    )
+
+
 def _remove_tmp_file(file_path: str) -> None:
     try:
         os.remove(file_path)
@@ -35,12 +53,18 @@ def _remove_tmp_file(file_path: str) -> None:
 
 def _log_duplicate_keys(courses: list[CourseEntity]) -> None:
     keys = Counter(
-        (course.code, course.level, course.section)
+        (
+            course.code,
+            course.level,
+            course.section,
+            course.term,
+            course.year,
+        )
         for course in courses
     )
     duplicates = [
-        (code, level, section, count)
-        for (code, level, section), count in keys.items()
+        (code, level, section, term, year, count)
+        for (code, level, section, term, year), count in keys.items()
         if count > 1
     ]
     if not duplicates:
@@ -63,16 +87,30 @@ class CourseScheduleService:
     async def ingest(
         self,
         file: UploadFile,
+        term: str,
+        year: int,
     ) -> dict[str, int | list[dict[str, object]]]:
+        normalized_term = normalize_term(term)
         logger.info(
             "Course schedule upload started.",
-            extra={"filename": file.filename, "content_type": file.content_type},
+            extra={
+                "filename": file.filename,
+                "content_type": file.content_type,
+                "term": normalized_term,
+                "year": year,
+            },
         )
         payload = await self._read_payload(file)
         path = self._store_tmp_file(payload)
         try:
             courses, invalid_rows = await self._parse_pdf(path)
-            result = await self._upsert_courses(courses)
+            scoped_courses = [
+                course.model_copy(update={"term": normalized_term, "year": year})
+                for course in courses
+            ]
+            result = await self._upsert_courses(scoped_courses)
+            result["term"] = normalized_term
+            result["year"] = year
             result["invalid_rows"] = invalid_rows
             result["invalid_rows_count"] = len(invalid_rows)
             logger.info(
@@ -82,6 +120,8 @@ class CourseScheduleService:
                     "inserted_count": result["inserted_count"],
                     "updated_count": result["updated_count"],
                     "invalid_rows_count": result["invalid_rows_count"],
+                    "term": normalized_term,
+                    "year": year,
                 },
             )
             return result
@@ -137,6 +177,8 @@ class CourseScheduleService:
                 course.code,
                 course.level,
                 course.section,
+                course.term,
+                course.year,
             )
             if not existing:
                 await self.repository.create(**course.model_dump())
@@ -149,3 +191,36 @@ class CourseScheduleService:
             "inserted_count": inserted,
             "updated_count": updated,
         }
+
+
+class CourseSearchService:
+    def __init__(self, repository: CourseRepository) -> None:
+        self.repository = repository
+
+    async def search_courses(
+        self,
+        query: str | None,
+        limit: int = 10,
+        term: str | None = None,
+        year: int | None = None,
+    ) -> list[CourseSearchItem]:
+        resolved_term, resolved_year = self._resolve_term_year(term, year)
+        bounded_limit = min(max(limit, 1), 20)
+        courses = await self.repository.search(
+            query,
+            bounded_limit,
+            resolved_term,
+            resolved_year,
+        )
+        return [_course_option(course) for course in courses]
+
+    def _resolve_term_year(
+        self,
+        term: str | None,
+        year: int | None,
+    ) -> tuple[str, int]:
+        if term is None and year is None:
+            return (settings.CURRENT_TERM, settings.CURRENT_YEAR)
+        if term is None or year is None:
+            raise ValueError("term and year must be provided together")
+        return (normalize_term(term), year)

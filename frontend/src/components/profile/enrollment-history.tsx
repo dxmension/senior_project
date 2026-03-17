@@ -21,26 +21,32 @@ interface SemesterGroup {
   items: EnrollmentItem[];
 }
 
-function semesterSortKey(semester: string): number {
-  const text = (semester || "").trim();
-  if (!text) return -1;
+function termOrder(term: string): number {
+  if (term === "Spring") return 0;
+  if (term === "Summer") return 1;
+  if (term === "Fall") return 2;
+  return 99;
+}
 
-  const match = text.match(/(spring|summer|fall)\s*(\d{4})?/i);
-  if (!match) return -1;
+function termYearLabel(term: string, year: number): string {
+  return `${term} ${year}`;
+}
 
-  const term = match[1].toLowerCase();
-  const termOrder = term === "spring" ? 0 : term === "summer" ? 1 : 2;
-  const year = match[2] ? Number(match[2]) : 9999;
-  return year * 10 + termOrder;
+function termYearSortKey(term: string, year: number): number {
+  return year * 10 + termOrder(term);
 }
 
 function groupBySemester(enrollments: EnrollmentItem[]): SemesterGroup[] {
   const map = new Map<string, SemesterGroup>();
 
   for (const e of enrollments) {
-    const key = e.semester;
+    const key = termYearLabel(e.term, e.year);
     if (!map.has(key)) {
-      map.set(key, { label: key, sortKey: semesterSortKey(key), items: [] });
+      map.set(key, {
+        label: key,
+        sortKey: termYearSortKey(e.term, e.year),
+        items: [],
+      });
     }
     map.get(key)!.items.push(e);
   }
@@ -79,7 +85,7 @@ export function EnrollmentHistory({ enrollments }: EnrollmentHistoryProps) {
               <tbody>
                 {group.items.map((e) => (
                   <tr
-                    key={e.id}
+                    key={`${e.course_id}:${e.term}:${e.year}`}
                     className="border-b border-border-primary last:border-0 hover:bg-bg-card-hover transition-colors"
                   >
                     <td className="px-4 py-3 font-mono text-xs text-accent-green">

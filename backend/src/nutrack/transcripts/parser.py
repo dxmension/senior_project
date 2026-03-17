@@ -3,7 +3,16 @@ import re
 
 import pdfplumber
 
-from nutrack.models import EnrollmentStatus
+from nutrack.enrollments.models import EnrollmentStatus
+from nutrack.semester import normalize_term
+
+
+def parse_term_year(text: str | None) -> tuple[str, int] | None:
+    match = re.search(r"((?:Fall|Spring|Summer)\s+(\d{4}))", text or "")
+    if not match:
+        return None
+    term = normalize_term(match.group(1).split()[0])
+    return (term, int(match.group(2)))
 
 
 def extract_text_from_bytes(file_bytes: bytes) -> str:
@@ -24,7 +33,13 @@ def parse_transcript(text: str) -> dict:
     result["major"] = match.group(1).strip() if match else None
 
     match = re.search(r"Admission semester:\s*(.+)", text)
-    result["enrollment_semester"] = match.group(1).strip() if match else None
+    enrollment_term_year = parse_term_year(match.group(1) if match else None)
+    result["enrollment_term"] = (
+        enrollment_term_year[0] if enrollment_term_year else None
+    )
+    result["enrollment_year"] = (
+        enrollment_term_year[1] if enrollment_term_year else None
+    )
 
     overall_section = text
     if "Overall" in text:
@@ -61,10 +76,12 @@ def parse_transcript(text: str) -> dict:
                 current_semester = semester_match.group(1)
             else:
                 break
+        term_year = parse_term_year(current_semester)
 
         courses.append(
             {
-                "semester": current_semester or "",
+                "term": term_year[0] if term_year else "",
+                "year": term_year[1] if term_year else 0,
                 "course_code": match.group(1).strip(),
                 "course_title": match.group(2).strip(),
                 "grade": match.group(3).strip(),

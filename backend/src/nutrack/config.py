@@ -1,6 +1,9 @@
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from nutrack.semester import normalize_term
 
 
 class Settings(BaseSettings):
@@ -30,11 +33,18 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
 
     OPENAI_API_KEY: str = ""
+    CURRENT_TERM: str = "Spring"
+    CURRENT_YEAR: int = 2026
 
     model_config = SettingsConfigDict(
         env_file=[Path(__file__).resolve().parents[2] / ".env"],
         extra="ignore",
     )
+
+    @field_validator("CURRENT_TERM")
+    @classmethod
+    def validate_current_term(cls, value: str) -> str:
+        return normalize_term(value)
 
 
 settings = Settings()

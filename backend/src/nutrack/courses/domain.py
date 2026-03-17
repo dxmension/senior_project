@@ -8,6 +8,8 @@ class CourseEntity(BaseModel):
     title: str = Field(min_length=1, max_length=256)
     department: str | None = Field(default=None, max_length=64)
     level: str = Field(min_length=1, max_length=16)
+    term: str | None = Field(default=None, max_length=16)
+    year: int | None = Field(default=None, ge=2000)
     ects: int = Field(ge=0)
     description: str | None = None
     school: str | None = Field(default=None, max_length=32)

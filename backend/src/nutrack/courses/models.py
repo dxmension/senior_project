@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from nutrack.models import Base, IDMixin
 
 if TYPE_CHECKING:
-    from nutrack.models import Enrollment
+    from nutrack.enrollments.models import Enrollment
 
 
 class Course(Base, IDMixin):
@@ -17,12 +17,16 @@ class Course(Base, IDMixin):
             "code",
             "level",
             "section",
-            name="uq_courses_code_level_section",
+            "term",
+            "year",
+            name="uq_courses_code_level_section_term_year",
         ),
     )
 
     code: Mapped[str] = mapped_column(String(16))
     level: Mapped[str] = mapped_column(String(16))
+    term: Mapped[str] = mapped_column(String(16))
+    year: Mapped[int] = mapped_column(Integer)
     title: Mapped[str] = mapped_column(String(256))
     department: Mapped[str | None] = mapped_column(String(64))
     ects: Mapped[int] = mapped_column(Integer)
@@ -84,5 +88,5 @@ class Course(Base, IDMixin):
     def __repr__(self) -> str:
         return (
             f"<Course(course_id={self.id}, code={self.code}, "
-            f"level={self.level}, title={self.title})>"
+            f"level={self.level}, term={self.term}, year={self.year})>"
         )

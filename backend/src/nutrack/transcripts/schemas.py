@@ -15,7 +15,8 @@ class TranscriptUploadStatusResponse(BaseModel):
 class ManualCourseRecord(BaseModel):
     code: str
     title: str
-    semester: str
+    term: str
+    year: int
     grade: str
     grade_points: float | None = None
     ects: int = 3

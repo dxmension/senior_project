@@ -3,7 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, load_only
 
 from nutrack.courses.models import Course
-from nutrack.models import Enrollment, EnrollmentStatus
+from nutrack.enrollments.models import Enrollment, EnrollmentStatus
+from nutrack.enrollments.service import EnrollmentService
+from nutrack.semester import format_term_year
 from nutrack.users.exceptions import NotFoundError
 from nutrack.users.repository import UserRepository
 from nutrack.users.schemas import (
@@ -13,16 +15,7 @@ from nutrack.users.schemas import (
     UserProfileUpdate,
     UserStatsResponse,
 )
-from nutrack.users.utils import semester_desc_sort_key, semester_sort_key
-
-
-def format_course_code(code: str, level: str) -> str:
-    if any(char.isdigit() for char in code):
-        return code
-    clean_level = (level or "").strip()
-    if not clean_level or clean_level == "0":
-        return code
-    return f"{code} {clean_level}"
+from nutrack.users.utils import term_year_sort_key
 
 
 def course_loader():
@@ -64,36 +57,8 @@ class UserService:
         return UserProfileResponse.model_validate(user)
 
     async def get_enrollments(self, user_id: int) -> list[EnrollmentResponse]:
-        stmt = (
-            select(Enrollment)
-            .options(course_loader())
-            .where(Enrollment.user_id == user_id)
-        )
-        result = await self.session.execute(stmt)
-        enrollments = result.scalars().unique().all()
-        ordered_enrollments = sorted(
-            enrollments,
-            key=lambda enrollment: semester_desc_sort_key(
-                enrollment.semester
-            ),
-        )
-
-        return [
-            EnrollmentResponse(
-                id=enrollment.id,
-                course_code=format_course_code(
-                    enrollment.course.code,
-                    enrollment.course.level,
-                ),
-                course_title=enrollment.course.title,
-                ects=enrollment.course.ects,
-                grade=enrollment.grade,
-                grade_points=enrollment.grade_points,
-                semester=enrollment.semester,
-                status=enrollment.status.value,
-            )
-            for enrollment in ordered_enrollments
-        ]
+        service = EnrollmentService(self.session)
+        return await service.list_enrollments(user_id)
 
     async def get_stats(self, user_id: int) -> UserStatsResponse:
         user = await self.user_repo.get_by_id(user_id)
@@ -112,23 +77,25 @@ class UserService:
         completed_courses = len(
             [e for e in enrollments if e.status == EnrollmentStatus.PASSED]
         )
-        semesters = {e.semester for e in enrollments}
+        semesters = {(e.term, e.year) for e in enrollments}
 
-        credits_map: dict[str, int] = {}
+        credits_map: dict[tuple[str, int], int] = {}
         for enrollment in enrollments:
-            credits_map[enrollment.semester] = (
-                credits_map.get(enrollment.semester, 0) + enrollment.course.ects
+            key = (enrollment.term, enrollment.year)
+            credits_map[key] = (
+                credits_map.get(key, 0) + enrollment.course.ects
             )
 
         credits_by_semester = [
             CreditsBySemester(
-                semester=semester,
-                term=semester_sort_key(semester)[1],
+                semester=format_term_year(term, year),
+                term=term,
+                year=year,
                 credits=credits,
             )
-            for semester, credits in sorted(
+            for (term, year), credits in sorted(
                 credits_map.items(),
-                key=lambda item: semester_sort_key(item[0]),
+                key=lambda item: term_year_sort_key(item[0][0], item[0][1]),
             )
         ]
 

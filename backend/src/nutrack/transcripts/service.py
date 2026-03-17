@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 import re
 from uuid import uuid4
@@ -20,9 +21,11 @@ from nutrack.transcripts.repository import (
     EnrollmentRepository,
 )
 from nutrack.users.repository import UserRepository
+from nutrack.semester import normalize_term
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 UPLOAD_KEY_PREFIX = "transcript_upload:"
+logger = logging.getLogger(__name__)
 
 
 class TranscriptService:
@@ -114,9 +117,8 @@ class TranscriptService:
                     "You uploaded not your own transcript"
                 )
 
-            enrollment_semester = student_info.get("enrollment_semester", "")
             try:
-                enrollment_year = int(enrollment_semester.split()[-1])
+                enrollment_year = int(student_info.get("enrollment_year"))
                 current_year = datetime.now(timezone.utc).year
                 study_year = max(1, current_year - enrollment_year)
             except Exception:
@@ -137,33 +139,55 @@ class TranscriptService:
                 course_code, course_level = self._parse_course_identity(
                     raw_code
                 )
+                course_term = self._course_term(course_data)
+                course_year = self._course_year(course_data)
                 course_title = course_data.get("course_title", "")
                 course_ects = course_data.get("ects", 3)
 
                 course = await self.course_repo.get_or_create(
                     course_code,
                     course_level,
+                    course_term,
+                    course_year,
                     defaults={
                         "title": course_title,
                         "department": course_code or None,
                         "ects": course_ects,
+                        "section": None,
                     },
                 )
 
                 await self.enrollment_repo.create(
                     user_id=user_id,
                     course_id=course.id,
-                    semester=course_data.get("semester", ""),
+                    term=course_term,
+                    year=course_year,
                     grade=course_data.get("grade", ""),
                     grade_points=float(course_data.get("grade_points", 0) or 0),
                     status=get_enrollment_status(course_data.get("grade")),
                 )
 
             await self._set_upload_status(upload_id, "completed")
+            logger.info(
+                "Transcript upload completed",
+                extra={
+                    "upload_id": upload_id,
+                    "user_id": user_id,
+                    "courses_count": len(student_info["courses"]),
+                },
+            )
             return upload_id
         except (FileValidationError, TranscriptParsingError):
             raise
         except Exception as exc:
+            logger.exception(
+                "Transcript upload failed",
+                extra={
+                    "upload_id": upload_id,
+                    "user_id": user_id,
+                    "filename": file.filename,
+                },
+            )
             await self._set_upload_status(
                 upload_id,
                 "failed",
@@ -192,6 +216,8 @@ class TranscriptService:
         for course_data in courses:
             raw_code = course_data.get("code", "").strip()
             course_code, course_level = self._parse_course_identity(raw_code)
+            course_term = self._course_term(course_data)
+            course_year = self._course_year(course_data)
             course_title = course_data.get("title", "").strip()
             if not course_code or not course_title:
                 continue
@@ -199,17 +225,21 @@ class TranscriptService:
             course = await self.course_repo.get_or_create(
                 course_code,
                 course_level,
+                course_term,
+                course_year,
                 defaults={
                     "title": course_title,
                     "department": course_code or None,
                     "ects": int(course_data.get("ects", 3) or 3),
+                    "section": None,
                 },
             )
 
             existing = await self.enrollment_repo.get_by_user_and_course(
                 user_id=user_id,
                 course_id=course.id,
-                semester=course_data.get("semester", ""),
+                term=course_term,
+                year=course_year,
             )
             if existing:
                 continue
@@ -217,7 +247,8 @@ class TranscriptService:
             await self.enrollment_repo.create(
                 user_id=user_id,
                 course_id=course.id,
-                semester=course_data.get("semester", ""),
+                term=course_term,
+                year=course_year,
                 grade=course_data.get("grade", ""),
                 grade_points=float(course_data.get("grade_points", 0) or 0),
                 status=get_enrollment_status(course_data.get("grade")),
@@ -235,3 +266,18 @@ class TranscriptService:
         if letters:
             return letters.group(1).strip(), "0"
         return text, "0"
+
+    def _course_term(self, course_data: dict) -> str:
+        term = str(course_data.get("term", "")).strip()
+        if not term:
+            raise FileValidationError("Course term is required")
+        return normalize_term(term)
+
+    def _course_year(self, course_data: dict) -> int:
+        try:
+            year = int(course_data.get("year", 0) or 0)
+        except (TypeError, ValueError) as exc:
+            raise FileValidationError("Course year is required") from exc
+        if year < 2000:
+            raise FileValidationError("Course year is required")
+        return year

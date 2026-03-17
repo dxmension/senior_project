@@ -23,7 +23,8 @@ export interface TokenPair {
 export interface CourseRecord {
   code: string;
   title: string;
-  semester: string;
+  term: string;
+  year: number;
   grade: string;
   grade_points: number;
   ects: number;
@@ -50,19 +51,38 @@ export interface TranscriptStatus {
 }
 
 export interface EnrollmentItem {
-  id: number;
+  user_id: number;
+  course_id: number;
   course_code: string;
+  section: string | null;
   course_title: string;
   ects: number;
   grade: string | null;
   grade_points: number | null;
-  semester: string;
+  term: string;
+  year: number;
   status: string;
+  meeting_time: string | null;
+  room: string | null;
+}
+
+export interface CourseOption {
+  id: number;
+  code: string;
+  level: string;
+  section: string | null;
+  title: string;
+  ects: number;
+  term: string;
+  year: number;
+  meeting_time: string | null;
+  room: string | null;
 }
 
 export interface CreditsBySemester {
   semester: string;
-  term: number;
+  term: string;
+  year: number;
   credits: number;
 }
 

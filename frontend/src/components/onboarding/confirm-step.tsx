@@ -16,7 +16,8 @@ interface ConfirmStepProps {
 const emptyCourse: CourseRecord = {
   code: "",
   title: "",
-  semester: "Fall",
+  term: "Fall",
+  year: new Date().getFullYear(),
   grade: "A",
   grade_points: 4.0,
   ects: 6,
@@ -172,14 +173,22 @@ function CourseTable({ courses, onUpdate, onRemove }: CourseTableProps) {
                 </td>
                 <td className="px-4 py-2">
                   <select
-                    value={c.semester}
-                    onChange={(e) => onUpdate(idx, "semester", e.target.value)}
+                    value={c.term}
+                    onChange={(e) => onUpdate(idx, "term", e.target.value)}
                     className="glass-input px-2 py-1 text-xs"
                   >
                     <option value="Fall">Fall</option>
                     <option value="Spring">Spring</option>
                     <option value="Summer">Summer</option>
                   </select>
+                </td>
+                <td className="px-4 py-2">
+                  <input
+                    type="number"
+                    value={c.year}
+                    onChange={(e) => onUpdate(idx, "year", Number(e.target.value))}
+                    className="glass-input px-2 py-1 w-20 text-xs"
+                  />
                 </td>
                 <td className="px-4 py-2">
                   <input

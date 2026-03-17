@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from nutrack.enrollments.schemas import EnrollmentItemResponse as EnrollmentResponse
+
 
 class UserProfileResponse(BaseModel):
     id: int
@@ -29,23 +31,10 @@ class UserProfileUpdate(BaseModel):
     avatar_url: str | None = None
 
 
-class EnrollmentResponse(BaseModel):
-    id: int
-    course_code: str
-    course_title: str
-    ects: int
-    grade: str | None = None
-    grade_points: float | None = None
-    semester: str
-    status: str
-
-    class Config:
-        from_attributes = True
-
-
 class CreditsBySemester(BaseModel):
     semester: str
-    term: int
+    term: str
+    year: int
     credits: int
 
 

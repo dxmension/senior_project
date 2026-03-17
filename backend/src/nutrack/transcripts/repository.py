@@ -1,9 +1,9 @@
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutrack.courses.models import Course
+from nutrack.enrollments.models import Enrollment
 from nutrack.shared.db.base_repository import BaseRepository
-from nutrack.models import Enrollment
 
 
 class CourseRepository(BaseRepository[Course]):
@@ -14,10 +14,24 @@ class CourseRepository(BaseRepository[Course]):
         self,
         code: str,
         level: str,
+        term: str,
+        year: int,
     ) -> Course | None:
-        stmt = select(Course).where(
-            Course.code == code,
-            Course.level == level,
+        # Transcript rows do not include section, so prefer a non-section
+        # course if present and otherwise fall back to the first section.
+        stmt = (
+            select(Course)
+            .where(
+                Course.code == code,
+                Course.level == level,
+                Course.term == term,
+                Course.year == year,
+            )
+            .order_by(
+                case((Course.section.is_(None), 0), else_=1),
+                Course.id,
+            )
+            .limit(1)
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
@@ -26,12 +40,20 @@ class CourseRepository(BaseRepository[Course]):
         self,
         code: str,
         level: str,
+        term: str,
+        year: int,
         defaults: dict,
     ) -> Course:
-        course = await self.get_by_code_and_level(code, level)
+        course = await self.get_by_code_and_level(code, level, term, year)
         if course:
             return course
-        return await self.create(code=code, level=level, **defaults)
+        return await self.create(
+            code=code,
+            level=level,
+            term=term,
+            year=year,
+            **defaults,
+        )
 
 
 class EnrollmentRepository(BaseRepository[Enrollment]):
@@ -47,12 +69,14 @@ class EnrollmentRepository(BaseRepository[Enrollment]):
         self,
         user_id: int,
         course_id: int,
-        semester: str,
+        term: str,
+        year: int,
     ) -> Enrollment | None:
         stmt = select(Enrollment).where(
             Enrollment.user_id == user_id,
             Enrollment.course_id == course_id,
-            Enrollment.semester == semester,
+            Enrollment.term == term,
+            Enrollment.year == year,
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()

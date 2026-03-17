@@ -115,6 +115,10 @@ class ApiClient {
     });
   }
 
+  async delete<T>(endpoint: string): Promise<T> {
+    return this.request<T>(endpoint, { method: "DELETE" });
+  }
+
   async uploadFile<T>(endpoint: string, file: File): Promise<T> {
     const token = this.getAccessToken();
     const formData = new FormData();

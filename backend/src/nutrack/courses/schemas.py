@@ -1,6 +1,19 @@
 from pydantic import BaseModel, Field
 
 
+class CourseSearchItem(BaseModel):
+    id: int
+    code: str
+    level: str
+    section: str | None = None
+    title: str
+    ects: int
+    term: str
+    year: int
+    meeting_time: str | None = None
+    room: str | None = None
+
+
 class InvalidScheduleRow(BaseModel):
     row: int
     course_code: str | None = None
@@ -9,6 +22,8 @@ class InvalidScheduleRow(BaseModel):
 
 
 class CourseScheduleUploadResponse(BaseModel):
+    term: str
+    year: int
     processed_rows: int
     inserted_count: int
     updated_count: int
