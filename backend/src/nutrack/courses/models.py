@@ -1,7 +1,15 @@
 from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, Float, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Date,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from nutrack.models import Base, IDMixin
@@ -16,17 +24,12 @@ class Course(Base, IDMixin):
         UniqueConstraint(
             "code",
             "level",
-            "section",
-            "term",
-            "year",
-            name="uq_courses_code_level_section_term_year",
+            name="uq_courses_code_level",
         ),
     )
 
     code: Mapped[str] = mapped_column(String(16))
     level: Mapped[str] = mapped_column(String(16))
-    term: Mapped[str] = mapped_column(String(16))
-    year: Mapped[int] = mapped_column(Integer)
     title: Mapped[str] = mapped_column(String(256))
     department: Mapped[str | None] = mapped_column(String(64))
     ects: Mapped[int] = mapped_column(Integer)
@@ -40,12 +43,43 @@ class Course(Base, IDMixin):
         String(16),
         nullable=True,
     )
-    section: Mapped[str | None] = mapped_column(
-        String(16),
-        nullable=True,
-    )
     credits_us: Mapped[float | None] = mapped_column(
         Float,
+        nullable=True,
+    )
+
+    offerings: Mapped[list["CourseOffering"]] = relationship(
+        back_populates="course",
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<Course(course_id={self.id}, code={self.code}, "
+            f"level={self.level})>"
+        )
+
+
+class CourseOffering(Base, IDMixin):
+    __tablename__ = "course_offerings"
+    __table_args__ = (
+        UniqueConstraint(
+            "course_id",
+            "term",
+            "year",
+            "section",
+            name="uq_course_offerings_course_term_year_section",
+        ),
+    )
+
+    course_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    term: Mapped[str] = mapped_column(String(16))
+    year: Mapped[int] = mapped_column(Integer)
+    section: Mapped[str | None] = mapped_column(
+        String(16),
         nullable=True,
     )
     start_date: Mapped[date | None] = mapped_column(
@@ -81,12 +115,15 @@ class Course(Base, IDMixin):
         nullable=True,
     )
 
+    course: Mapped["Course"] = relationship(
+        back_populates="offerings",
+    )
     enrollments: Mapped[list["Enrollment"]] = relationship(
-        back_populates="course",
+        back_populates="course_offering",
     )
 
     def __repr__(self) -> str:
         return (
-            f"<Course(course_id={self.id}, code={self.code}, "
-            f"level={self.level}, term={self.term}, year={self.year})>"
+            f"<CourseOffering(id={self.id}, course_id={self.course_id}, "
+            f"term={self.term}, year={self.year}, section={self.section})>"
         )

@@ -2,20 +2,28 @@ from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, load_only
 
-from nutrack.courses.models import Course
+from nutrack.courses.models import Course, CourseOffering
 from nutrack.enrollments.models import Enrollment, EnrollmentStatus
 from nutrack.shared.db.base_repository import BaseRepository
 
 
-def course_loader():
-    return joinedload(Enrollment.course).options(
+def course_offering_loader():
+    return joinedload(Enrollment.course_offering).options(
         load_only(
-            Course.id,
+            CourseOffering.id,
+            CourseOffering.course_id,
+            CourseOffering.section,
+            CourseOffering.term,
+            CourseOffering.year,
+            CourseOffering.meeting_time,
+            CourseOffering.room,
+        ),
+        joinedload(CourseOffering.course).load_only(
             Course.code,
             Course.level,
             Course.title,
             Course.ects,
-        )
+        ),
     )
 
 
@@ -51,4 +59,4 @@ class EnrollmentRepository(BaseRepository[Enrollment]):
         return result.scalar_one_or_none()
 
     def _base_query(self) -> Select[tuple[Enrollment]]:
-        return select(Enrollment).options(course_loader())
+        return select(Enrollment).options(course_offering_loader())

@@ -1,7 +1,7 @@
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from nutrack.courses.repository import CourseRepository
+from nutrack.courses.repository import CourseOfferingRepository
 from nutrack.enrollments.exceptions import (
     EnrollmentConflictError,
     EnrollmentNotFoundError,
@@ -9,7 +9,7 @@ from nutrack.enrollments.exceptions import (
 from nutrack.enrollments.models import Enrollment, EnrollmentStatus
 from nutrack.enrollments.repository import EnrollmentRepository
 from nutrack.enrollments.schemas import EnrollmentItemResponse
-from nutrack.semester import current_term_year, term_year_desc_sort_key
+from nutrack.semester import term_year_desc_sort_key
 from nutrack.users.exceptions import NotFoundError
 
 
@@ -24,29 +24,31 @@ def format_course_code(code: str, level: str) -> str:
 def build_enrollment_response(
     enrollment: Enrollment,
 ) -> EnrollmentItemResponse:
+    offering = enrollment.course_offering
+    course = offering.course
     return EnrollmentItemResponse(
         user_id=enrollment.user_id,
         course_id=enrollment.course_id,
         course_code=format_course_code(
-            enrollment.course.code,
-            enrollment.course.level,
+            course.code,
+            course.level,
         ),
-        section=enrollment.course.section,
-        course_title=enrollment.course.title,
-        ects=enrollment.course.ects,
+        section=offering.section,
+        course_title=course.title,
+        ects=course.ects,
         grade=enrollment.grade,
         grade_points=enrollment.grade_points,
         term=enrollment.term,
         year=enrollment.year,
         status=enrollment.status.value,
-        meeting_time=enrollment.course.meeting_time,
-        room=enrollment.course.room,
+        meeting_time=offering.meeting_time,
+        room=offering.room,
     )
 
 
 class EnrollmentService:
     def __init__(self, session: AsyncSession) -> None:
-        self.course_repo = CourseRepository(session)
+        self.course_offering_repo = CourseOfferingRepository(session)
         self.enrollment_repo = EnrollmentRepository(session)
 
     async def list_enrollments(
@@ -66,19 +68,23 @@ class EnrollmentService:
         user_id: int,
         course_id: int,
     ) -> EnrollmentItemResponse:
-        course = await self.course_repo.get_by_id(course_id)
-        if not course:
+        offering = await self.course_offering_repo.get_by_id(course_id)
+        if not offering:
             raise NotFoundError("Course")
-        term, year = current_term_year()
         existing = await self.enrollment_repo.get_by_identity(
             user_id,
             course_id,
-            term,
-            year,
+            offering.term,
+            offering.year,
         )
         if existing:
             raise EnrollmentConflictError()
-        enrollment = await self._create(user_id, course_id, term, year)
+        enrollment = await self._create(
+            user_id,
+            course_id,
+            offering.term,
+            offering.year,
+        )
         return build_enrollment_response(enrollment)
 
     async def delete_enrollment(

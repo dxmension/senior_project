@@ -8,13 +8,13 @@ from pathlib import Path
 from fastapi import UploadFile
 
 from nutrack.config import settings
+from nutrack.courses.domain import CourseEntity
 from nutrack.courses.exceptions import (
     CourseScheduleFileError,
     CourseScheduleParsingError,
 )
-from nutrack.courses.domain import CourseEntity
 from nutrack.courses.parser import parse_pdf_courses
-from nutrack.courses.repository import CourseRepository
+from nutrack.courses.repository import CourseOfferingRepository, CourseRepository
 from nutrack.courses.schemas import CourseSearchItem
 from nutrack.semester import normalize_term
 
@@ -29,18 +29,55 @@ PDF_TYPES = {
 logger = logging.getLogger(__name__)
 
 
-def _course_option(course) -> CourseSearchItem:
+def _canonical_payload(course: CourseEntity) -> dict[str, object]:
+    return {
+        "code": course.code,
+        "level": course.level,
+        "title": course.title,
+        "department": course.department,
+        "ects": course.ects,
+        "description": course.description,
+        "school": course.school,
+        "academic_level": course.academic_level,
+        "credits_us": course.credits_us,
+    }
+
+
+def _offering_payload(
+    course: CourseEntity,
+    course_id: int,
+    term: str,
+    year: int,
+) -> dict[str, object]:
+    return {
+        "course_id": course_id,
+        "term": term,
+        "year": year,
+        "section": course.section,
+        "start_date": course.start_date,
+        "end_date": course.end_date,
+        "days": course.days,
+        "meeting_time": course.meeting_time,
+        "enrolled": course.enrolled,
+        "capacity": course.capacity,
+        "faculty": course.faculty,
+        "room": course.room,
+    }
+
+
+def _course_option(offering) -> CourseSearchItem:
+    course = offering.course
     return CourseSearchItem(
-        id=course.id,
+        id=offering.id,
         code=course.code,
         level=course.level,
-        section=course.section,
+        section=offering.section,
         title=course.title,
         ects=course.ects,
-        term=course.term,
-        year=course.year,
-        meeting_time=course.meeting_time,
-        room=course.room,
+        term=offering.term,
+        year=offering.year,
+        meeting_time=offering.meeting_time,
+        room=offering.room,
     )
 
 
@@ -51,37 +88,36 @@ def _remove_tmp_file(file_path: str) -> None:
         return
 
 
-def _log_duplicate_keys(courses: list[CourseEntity]) -> None:
-    keys = Counter(
-        (
-            course.code,
-            course.level,
-            course.section,
-            course.term,
-            course.year,
-        )
-        for course in courses
-    )
+def _log_duplicate_keys(
+    courses: list[CourseEntity],
+    term: str,
+    year: int,
+) -> None:
+    keys = Counter((course.code, course.level, course.section, term, year) for course in courses)
     duplicates = [
-        (code, level, section, term, year, count)
-        for (code, level, section, term, year), count in keys.items()
+        (code, level, section, dup_term, dup_year, count)
+        for (code, level, section, dup_term, dup_year), count in keys.items()
         if count > 1
     ]
     if not duplicates:
         return
-    sample = duplicates[:10]
     logger.warning(
         "Duplicate course keys found in parsed file.",
-        extra={"duplicate_keys_count": len(duplicates), "sample_keys": sample},
+        extra={
+            "duplicate_keys_count": len(duplicates),
+            "sample_keys": duplicates[:10],
+        },
     )
 
 
 class CourseScheduleService:
     def __init__(
         self,
-        repository: CourseRepository,
+        course_repository: CourseRepository,
+        offering_repository: CourseOfferingRepository,
     ):
-        self.repository = repository
+        self.course_repository = course_repository
+        self.offering_repository = offering_repository
         UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
     async def ingest(
@@ -104,11 +140,7 @@ class CourseScheduleService:
         path = self._store_tmp_file(payload)
         try:
             courses, invalid_rows = await self._parse_pdf(path)
-            scoped_courses = [
-                course.model_copy(update={"term": normalized_term, "year": year})
-                for course in courses
-            ]
-            result = await self._upsert_courses(scoped_courses)
+            result = await self._upsert_courses(courses, normalized_term, year)
             result["term"] = normalized_term
             result["year"] = year
             result["invalid_rows"] = invalid_rows
@@ -168,23 +200,26 @@ class CourseScheduleService:
     async def _upsert_courses(
         self,
         courses: list[CourseEntity],
+        term: str,
+        year: int,
     ) -> dict[str, int]:
         inserted = 0
         updated = 0
-        _log_duplicate_keys(courses)
-        for course in courses:
-            existing = await self.repository.get_by_code_level_and_section(
-                course.code,
-                course.level,
-                course.section,
-                course.term,
-                course.year,
+        _log_duplicate_keys(courses, term, year)
+        for parsed in courses:
+            course = await self._upsert_course(parsed)
+            offering = await self.offering_repository.get_by_identity(
+                course.id,
+                term,
+                year,
+                parsed.section,
             )
-            if not existing:
-                await self.repository.create(**course.model_dump())
+            payload = _offering_payload(parsed, course.id, term, year)
+            if not offering:
+                await self.offering_repository.create(**payload)
                 inserted += 1
                 continue
-            await self.repository.update(existing, **course.model_dump())
+            await self.offering_repository.update(offering, **payload)
             updated += 1
         return {
             "processed_rows": len(courses),
@@ -192,9 +227,19 @@ class CourseScheduleService:
             "updated_count": updated,
         }
 
+    async def _upsert_course(self, parsed: CourseEntity):
+        course = await self.course_repository.get_by_code_and_level(
+            parsed.code,
+            parsed.level,
+        )
+        payload = _canonical_payload(parsed)
+        if not course:
+            return await self.course_repository.create(**payload)
+        return await self.course_repository.update(course, **payload)
+
 
 class CourseSearchService:
-    def __init__(self, repository: CourseRepository) -> None:
+    def __init__(self, repository: CourseOfferingRepository) -> None:
         self.repository = repository
 
     async def search_courses(
@@ -206,13 +251,13 @@ class CourseSearchService:
     ) -> list[CourseSearchItem]:
         resolved_term, resolved_year = self._resolve_term_year(term, year)
         bounded_limit = min(max(limit, 1), 20)
-        courses = await self.repository.search(
+        offerings = await self.repository.search(
             query,
             bounded_limit,
             resolved_term,
             resolved_year,
         )
-        return [_course_option(course) for course in courses]
+        return [_course_option(offering) for offering in offerings]
 
     def _resolve_term_year(
         self,
