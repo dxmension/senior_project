@@ -18,14 +18,20 @@ def make_enrollment(
     status: EnrollmentStatus = EnrollmentStatus.IN_PROGRESS,
 ):
     course = SimpleNamespace(
-        id=7,
         code="CSCI",
         level="151",
-        section="2",
         title="Programming",
         ects=6,
+    )
+    offering = SimpleNamespace(
+        id=7,
+        course_id=4,
+        section="2",
+        term=term,
+        year=year,
         meeting_time="10:00-10:50",
         room="6.310",
+        course=course,
     )
     return SimpleNamespace(
         user_id=1,
@@ -35,24 +41,22 @@ def make_enrollment(
         grade=None,
         grade_points=None,
         status=status,
-        course=course,
+        course_offering=offering,
     )
 
 
 @pytest.mark.asyncio
-async def test_create_manual_enrollment_sets_defaults(monkeypatch) -> None:
+async def test_create_manual_enrollment_sets_defaults() -> None:
     service = EnrollmentService(session=None)
     created = make_enrollment("Fall", 2026)
     create_mock = AsyncMock(return_value=created)
     load_mock = AsyncMock(side_effect=[None, created])
 
-    service.course_repo.get_by_id = AsyncMock(return_value=created.course)
+    service.course_offering_repo.get_by_id = AsyncMock(
+        return_value=created.course_offering
+    )
     service.enrollment_repo.get_by_identity = load_mock
     service.enrollment_repo.create = create_mock
-    monkeypatch.setattr(
-        "nutrack.enrollments.service.current_term_year",
-        lambda: ("Fall", 2026),
-    )
 
     response = await service.create_manual_enrollment(1, 7)
 
@@ -76,15 +80,13 @@ async def test_create_manual_enrollment_sets_defaults(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_manual_enrollment_rejects_duplicates(monkeypatch) -> None:
+async def test_create_manual_enrollment_rejects_duplicates() -> None:
     service = EnrollmentService(session=None)
-    service.course_repo.get_by_id = AsyncMock(return_value=SimpleNamespace(id=7))
+    service.course_offering_repo.get_by_id = AsyncMock(
+        return_value=SimpleNamespace(term="Fall", year=2026)
+    )
     service.enrollment_repo.get_by_identity = AsyncMock(
         return_value=make_enrollment("Fall", 2026)
-    )
-    monkeypatch.setattr(
-        "nutrack.enrollments.service.current_term_year",
-        lambda: ("Fall", 2026),
     )
 
     with pytest.raises(EnrollmentConflictError):
@@ -94,7 +96,7 @@ async def test_create_manual_enrollment_rejects_duplicates(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_create_manual_enrollment_requires_existing_course() -> None:
     service = EnrollmentService(session=None)
-    service.course_repo.get_by_id = AsyncMock(return_value=None)
+    service.course_offering_repo.get_by_id = AsyncMock(return_value=None)
 
     with pytest.raises(NotFoundError):
         await service.create_manual_enrollment(1, 7)

@@ -17,6 +17,7 @@ from nutrack.transcripts.parser import (
     parse_transcript_from_bytes,
 )
 from nutrack.transcripts.repository import (
+    CourseOfferingRepository,
     CourseRepository,
     EnrollmentRepository,
 )
@@ -33,6 +34,7 @@ class TranscriptService:
         self.session = session
         self.redis = redis
         self.course_repo = CourseRepository(session)
+        self.offering_repo = CourseOfferingRepository(session)
         self.enrollment_repo = EnrollmentRepository(session)
         self.user_repo = UserRepository(session)
 
@@ -147,19 +149,23 @@ class TranscriptService:
                 course = await self.course_repo.get_or_create(
                     course_code,
                     course_level,
-                    course_term,
-                    course_year,
                     defaults={
                         "title": course_title,
                         "department": course_code or None,
                         "ects": course_ects,
-                        "section": None,
                     },
+                )
+                offering = await self.offering_repo.get_or_create(
+                    course.id,
+                    course_term,
+                    course_year,
+                    None,
+                    defaults={},
                 )
 
                 await self.enrollment_repo.create(
                     user_id=user_id,
-                    course_id=course.id,
+                    course_id=offering.id,
                     term=course_term,
                     year=course_year,
                     grade=course_data.get("grade", ""),
@@ -225,19 +231,23 @@ class TranscriptService:
             course = await self.course_repo.get_or_create(
                 course_code,
                 course_level,
-                course_term,
-                course_year,
                 defaults={
                     "title": course_title,
                     "department": course_code or None,
                     "ects": int(course_data.get("ects", 3) or 3),
-                    "section": None,
                 },
+            )
+            offering = await self.offering_repo.get_or_create(
+                course.id,
+                course_term,
+                course_year,
+                None,
+                defaults={},
             )
 
             existing = await self.enrollment_repo.get_by_user_and_course(
                 user_id=user_id,
-                course_id=course.id,
+                course_id=offering.id,
                 term=course_term,
                 year=course_year,
             )
@@ -246,7 +256,7 @@ class TranscriptService:
 
             await self.enrollment_repo.create(
                 user_id=user_id,
-                course_id=course.id,
+                course_id=offering.id,
                 term=course_term,
                 year=course_year,
                 grade=course_data.get("grade", ""),

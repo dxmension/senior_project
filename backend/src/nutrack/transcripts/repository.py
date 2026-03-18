@@ -1,7 +1,7 @@
-from sqlalchemy import case, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from nutrack.courses.models import Course
+from nutrack.courses.models import Course, CourseOffering
 from nutrack.enrollments.models import Enrollment
 from nutrack.shared.db.base_repository import BaseRepository
 
@@ -14,23 +14,11 @@ class CourseRepository(BaseRepository[Course]):
         self,
         code: str,
         level: str,
-        term: str,
-        year: int,
     ) -> Course | None:
-        # Transcript rows do not include section, so prefer a non-section
-        # course if present and otherwise fall back to the first section.
         stmt = (
             select(Course)
-            .where(
-                Course.code == code,
-                Course.level == level,
-                Course.term == term,
-                Course.year == year,
-            )
-            .order_by(
-                case((Course.section.is_(None), 0), else_=1),
-                Course.id,
-            )
+            .where(Course.code == code, Course.level == level)
+            .order_by(Course.id)
             .limit(1)
         )
         result = await self.session.execute(stmt)
@@ -40,18 +28,54 @@ class CourseRepository(BaseRepository[Course]):
         self,
         code: str,
         level: str,
-        term: str,
-        year: int,
         defaults: dict,
     ) -> Course:
-        course = await self.get_by_code_and_level(code, level, term, year)
+        course = await self.get_by_code_and_level(code, level)
         if course:
             return course
+        return await self.create(code=code, level=level, **defaults)
+
+
+class CourseOfferingRepository(BaseRepository[CourseOffering]):
+    def __init__(self, session: AsyncSession):
+        super().__init__(session, CourseOffering)
+
+    async def get_by_identity(
+        self,
+        course_id: int,
+        term: str,
+        year: int,
+        section: str | None,
+    ) -> CourseOffering | None:
+        stmt = select(CourseOffering).where(
+            CourseOffering.course_id == course_id,
+            CourseOffering.term == term,
+            CourseOffering.year == year,
+        )
+        if section is None:
+            stmt = stmt.where(CourseOffering.section.is_(None))
+        else:
+            stmt = stmt.where(CourseOffering.section == section)
+        stmt = stmt.order_by(CourseOffering.id).limit(1)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_or_create(
+        self,
+        course_id: int,
+        term: str,
+        year: int,
+        section: str | None,
+        defaults: dict,
+    ) -> CourseOffering:
+        offering = await self.get_by_identity(course_id, term, year, section)
+        if offering:
+            return offering
         return await self.create(
-            code=code,
-            level=level,
+            course_id=course_id,
             term=term,
             year=year,
+            section=section,
             **defaults,
         )
 

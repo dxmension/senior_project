@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, load_only
 
-from nutrack.courses.models import Course
+from nutrack.courses.models import Course, CourseOffering
 from nutrack.enrollments.models import Enrollment, EnrollmentStatus
 from nutrack.enrollments.service import EnrollmentService
 from nutrack.semester import format_term_year
@@ -19,14 +19,15 @@ from nutrack.users.utils import term_year_sort_key
 
 
 def course_loader():
-    return joinedload(Enrollment.course).options(
-        load_only(
+    return joinedload(Enrollment.course_offering).options(
+        load_only(CourseOffering.id, CourseOffering.course_id),
+        joinedload(CourseOffering.course).load_only(
             Course.id,
             Course.code,
             Course.level,
             Course.title,
             Course.ects,
-        )
+        ),
     )
 
 
@@ -83,7 +84,8 @@ class UserService:
         for enrollment in enrollments:
             key = (enrollment.term, enrollment.year)
             credits_map[key] = (
-                credits_map.get(key, 0) + enrollment.course.ects
+                credits_map.get(key, 0)
+                + enrollment.course_offering.course.ects
             )
 
         credits_by_semester = [

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from nutrack.models import Base, TimestampMixin
 
 if TYPE_CHECKING:
-    from nutrack.courses.models import Course
+    from nutrack.courses.models import CourseOffering
     from nutrack.users.models import User
 
 
@@ -30,7 +30,7 @@ class Enrollment(Base, TimestampMixin):
     )
     course_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("courses.id", ondelete="CASCADE"),
+        ForeignKey("course_offerings.id", ondelete="CASCADE"),
         primary_key=True,
     )
     term: Mapped[str] = mapped_column(String(16), primary_key=True)
@@ -44,7 +44,9 @@ class Enrollment(Base, TimestampMixin):
     )
 
     user: Mapped["User"] = relationship(back_populates="enrollments")
-    course: Mapped["Course"] = relationship(back_populates="enrollments")
+    course_offering: Mapped["CourseOffering"] = relationship(
+        back_populates="enrollments",
+    )
 
     def __repr__(self) -> str:
         return (

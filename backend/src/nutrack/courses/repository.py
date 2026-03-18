@@ -1,7 +1,8 @@
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
-from nutrack.courses.models import Course
+from nutrack.courses.models import Course, CourseOffering
 from nutrack.shared.db.base_repository import BaseRepository
 
 
@@ -37,41 +38,38 @@ class CourseRepository(BaseRepository[Course]):
         self,
         code: str,
         level: str,
-        term: str,
-        year: int,
     ) -> Course | None:
         stmt = (
             select(Course)
-            .where(
-                Course.code == code,
-                Course.level == level,
-                Course.term == term,
-                Course.year == year,
-            )
+            .where(Course.code == code, Course.level == level)
             .order_by(Course.id)
             .limit(1)
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_by_code_level_and_section(
+
+class CourseOfferingRepository(BaseRepository[CourseOffering]):
+    def __init__(self, session: AsyncSession):
+        super().__init__(session, CourseOffering)
+
+    async def get_by_identity(
         self,
-        code: str,
-        level: str,
-        section: str | None,
+        course_id: int,
         term: str,
         year: int,
-    ) -> Course | None:
-        stmt = select(Course).where(
-            Course.code == code,
-            Course.level == level,
-            Course.term == term,
-            Course.year == year,
+        section: str | None,
+    ) -> CourseOffering | None:
+        stmt = select(CourseOffering).where(
+            CourseOffering.course_id == course_id,
+            CourseOffering.term == term,
+            CourseOffering.year == year,
         )
         if section is None:
-            stmt = stmt.where(Course.section.is_(None)).order_by(Course.id).limit(1)
+            stmt = stmt.where(CourseOffering.section.is_(None))
         else:
-            stmt = stmt.where(Course.section == section)
+            stmt = stmt.where(CourseOffering.section == section)
+        stmt = stmt.order_by(CourseOffering.id).limit(1)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -81,8 +79,16 @@ class CourseRepository(BaseRepository[Course]):
         limit: int,
         term: str,
         year: int,
-    ) -> list[Course]:
-        stmt = select(Course).where(Course.term == term, Course.year == year)
+    ) -> list[CourseOffering]:
+        stmt = (
+            select(CourseOffering)
+            .join(CourseOffering.course)
+            .options(joinedload(CourseOffering.course))
+            .where(
+                CourseOffering.term == term,
+                CourseOffering.year == year,
+            )
+        )
         cleaned = (query or "").strip()
         if cleaned:
             pattern = f"%{cleaned}%"
@@ -92,7 +98,7 @@ class CourseRepository(BaseRepository[Course]):
             Course.code,
             Course.level,
             Course.title,
-            Course.section,
+            CourseOffering.section,
         )
         stmt = stmt.limit(limit)
         result = await self.session.execute(stmt)
