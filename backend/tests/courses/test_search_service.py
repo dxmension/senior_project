@@ -41,8 +41,10 @@ def test_resolve_term_year_accepts_valid_inputs(
 
 
 def test_resolve_term_year_requires_term_and_year_together() -> None:
+    from nutrack.courses.exceptions import CourseSearchError
+
     service = CourseSearchService(repository=object())
 
-    with pytest.raises(ValueError, match="provided together"):
+    with pytest.raises(CourseSearchError, match="provided together"):
         service._resolve_term_year("Fall", None)  # noqa: SLF001
 

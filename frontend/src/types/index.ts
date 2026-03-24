@@ -94,6 +94,23 @@ export interface UserStats {
   credits_by_semester: CreditsBySemester[];
 }
 
+export interface CatalogCourse {
+  id: number;
+  code: string;
+  level: string;
+  title: string;
+  ects: number;
+  department: string | null;
+  school: string | null;
+  academic_level: string | null;
+  description: string | null;
+  prerequisites: string | null;
+  credits_us: number | null;
+  pass_grade: string | null;
+  avg_gpa: number | null;
+  total_enrolled: number | null;
+}
+
 export interface ApiResponse<T = null> {
   ok: boolean;
   data: T;

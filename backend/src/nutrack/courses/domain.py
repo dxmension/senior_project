@@ -10,6 +10,8 @@ class CourseEntity(BaseModel):
     level: str = Field(min_length=1, max_length=16)
     ects: int = Field(ge=0)
     description: str | None = None
+    prerequisites: str | None = None
+    pass_grade: str | None = None
     school: str | None = Field(default=None, max_length=32)
     academic_level: str | None = Field(default=None, max_length=16)
     section: str | None = Field(default=None, max_length=16)

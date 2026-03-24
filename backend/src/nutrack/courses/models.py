@@ -6,13 +6,14 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from nutrack.models import Base, IDMixin
+from nutrack.models import Base, IDMixin, TimestampMixin
 
 if TYPE_CHECKING:
     from nutrack.enrollments.models import Enrollment
@@ -47,8 +48,15 @@ class Course(Base, IDMixin):
         Float,
         nullable=True,
     )
+    prerequisites: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
 
     offerings: Mapped[list["CourseOffering"]] = relationship(
+        back_populates="course",
+    )
+    gpa_stats: Mapped[list["CourseGpaStats"]] = relationship(
         back_populates="course",
     )
 
@@ -125,5 +133,38 @@ class CourseOffering(Base, IDMixin):
     def __repr__(self) -> str:
         return (
             f"<CourseOffering(id={self.id}, course_id={self.course_id}, "
+            f"term={self.term}, year={self.year}, section={self.section})>"
+        )
+
+
+class CourseGpaStats(Base, IDMixin, TimestampMixin):
+    __tablename__ = "course_gpa_stats"
+    __table_args__ = (
+        UniqueConstraint(
+            "course_id",
+            "term",
+            "year",
+            "section",
+            name="uq_course_gpa_stats_course_term_year_section",
+        ),
+    )
+
+    course_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    term: Mapped[str] = mapped_column(String(16))
+    year: Mapped[int] = mapped_column(Integer)
+    section: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    avg_gpa: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_enrolled: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    grade_distribution: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    course: Mapped["Course"] = relationship(back_populates="gpa_stats")
+
+    def __repr__(self) -> str:
+        return (
+            f"<CourseGpaStats(course_id={self.course_id}, "
             f"term={self.term}, year={self.year}, section={self.section})>"
         )
