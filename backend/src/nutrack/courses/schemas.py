@@ -41,6 +41,27 @@ class CourseScheduleUploadResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class SectionGpaStats(BaseModel):
+    """GPA statistics for one section of a course in a given term/year."""
+
+    section: str | None = None
+    term: str
+    year: int
+    faculty: str | None = None
+    avg_gpa: float | None = None
+    total_enrolled: int | None = None
+    grade_distribution: dict[str, int] = Field(default_factory=dict)
+
+
+class ProfessorStats(BaseModel):
+    """Aggregated stats for a single professor across all their sections."""
+
+    faculty: str
+    sections: list[SectionGpaStats] = Field(default_factory=list)
+    avg_gpa: float | None = None
+    total_enrolled: int = 0
+
+
 class CourseDetailResponse(BaseModel):
     """Full course record from the catalog, optionally annotated with GPA data."""
 
@@ -61,6 +82,12 @@ class CourseDetailResponse(BaseModel):
     # Populated from course_gpa_stats when available
     avg_gpa: float | None = None
     total_enrolled: int | None = None
+    # Terms the course has been offered in (e.g. ["Fall", "Spring"])
+    terms_available: list[str] = Field(default_factory=list)
+    # Per-section stats (populated only in detail endpoint)
+    sections: list[SectionGpaStats] = Field(default_factory=list)
+    # Professors grouped with their avg GPA (populated only in detail endpoint)
+    professors: list[ProfessorStats] = Field(default_factory=list)
 
 
 class InvalidCatalogRow(BaseModel):

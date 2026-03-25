@@ -79,10 +79,24 @@ async def list_catalog(
     q: str | None = Query(default=None, description="Search by code, title, department"),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
+    department: str | None = Query(default=None, description="Filter by department (partial match)"),
+    school: str | None = Query(default=None, description="Filter by school (partial match)"),
+    academic_level: str | None = Query(default=None, description="Filter by academic level, e.g. Undergraduate"),
+    term: str | None = Query(default=None, description="Filter by term availability, e.g. Fall, Spring, Summer"),
+    level_prefix: str | None = Query(default=None, description="Filter by course level prefix: '1' for 100-level, '2' for 200-level, etc."),
     _: User = Depends(get_current_user),
     service: CourseCatalogService = Depends(get_course_catalog_service),
 ):
-    courses, total = await service.list_courses(skip=skip, limit=limit, search=q)
+    courses, total = await service.list_courses(
+        skip=skip,
+        limit=limit,
+        search=q,
+        department=department,
+        school=school,
+        academic_level=academic_level,
+        term=term,
+        level_prefix=level_prefix,
+    )
     return ApiResponse(data=courses, meta={"total": total, "skip": skip, "limit": limit})
 
 

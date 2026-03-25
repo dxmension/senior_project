@@ -31,6 +31,8 @@ from nutrack.courses.schemas import (
     GradeCount,
     InvalidCatalogRow,
     InvalidGpaStatsRow,
+    ProfessorStats,
+    SectionGpaStats,
 )
 from nutrack.semester import normalize_term
 
@@ -361,17 +363,32 @@ class CourseCatalogService:
         skip: int = 0,
         limit: int = 20,
         search: str | None = None,
+        department: str | None = None,
+        school: str | None = None,
+        academic_level: str | None = None,
+        term: str | None = None,
+        level_prefix: str | None = None,
     ) -> tuple[list[CourseDetailResponse], int]:
         courses, total = await asyncio.gather(
-            self.course_repository.list_catalog(skip, limit, search),
-            self.course_repository.count_catalog(search),
+            self.course_repository.list_catalog(
+                skip, limit, search, department, school, academic_level, term, level_prefix
+            ),
+            self.course_repository.count_catalog(
+                search, department, school, academic_level, term, level_prefix
+            ),
         )
         course_ids = [c.id for c in courses]
-        gpa_map = await self.gpa_stats_repository.get_avg_gpa_by_course_ids(course_ids)
+        gpa_map, enrolled_map, terms_map = await asyncio.gather(
+            self.gpa_stats_repository.get_avg_gpa_by_course_ids(course_ids),
+            self.gpa_stats_repository.get_total_enrolled_by_course_ids(course_ids),
+            self.course_repository.get_terms_available_by_ids(course_ids),
+        )
         result = []
         for c in courses:
             resp = CourseDetailResponse.model_validate(c)
             resp.avg_gpa = gpa_map.get(c.id)
+            resp.total_enrolled = enrolled_map.get(c.id)
+            resp.terms_available = terms_map.get(c.id, [])
             result.append(resp)
         return result, total
 
@@ -380,8 +397,28 @@ class CourseCatalogService:
         if not course:
             raise CourseNotFoundError()
         resp = CourseDetailResponse.model_validate(course)
-        gpa_map = await self.gpa_stats_repository.get_avg_gpa_by_course_ids([course_id])
+        gpa_map, enrolled_map, terms_map, section_rows = await asyncio.gather(
+            self.gpa_stats_repository.get_avg_gpa_by_course_ids([course_id]),
+            self.gpa_stats_repository.get_total_enrolled_by_course_ids([course_id]),
+            self.course_repository.get_terms_available_by_ids([course_id]),
+            self.gpa_stats_repository.get_sections_with_faculty(course_id),
+        )
         resp.avg_gpa = gpa_map.get(course_id)
+        resp.total_enrolled = enrolled_map.get(course_id)
+        resp.terms_available = terms_map.get(course_id, [])
+        resp.sections = [
+            SectionGpaStats(
+                section=row["section"],
+                term=row["term"],
+                year=row["year"],
+                faculty=row["faculty"],
+                avg_gpa=row["avg_gpa"],
+                total_enrolled=row["total_enrolled"],
+                grade_distribution=row["grade_distribution"] or {},
+            )
+            for row in section_rows
+        ]
+        resp.professors = _group_by_professor(resp.sections)
         return resp
 
     # ------------------------------------------------------------------
@@ -488,6 +525,34 @@ class CourseStatsService:
             grade_distribution=grade_distribution,
             terms_offered=terms,
         )
+
+
+def _group_by_professor(sections: list[SectionGpaStats]) -> list[ProfessorStats]:
+    """Group section GPA stats by faculty name, compute per-professor avg GPA.
+
+    Sections without a resolved faculty are skipped — they will still appear
+    in the overall grade distribution but won't create a phantom "Unknown" entry.
+    """
+    grouped: dict[str, list[SectionGpaStats]] = {}
+    for s in sections:
+        if not s.faculty:
+            continue
+        grouped.setdefault(s.faculty, []).append(s)
+    result = []
+    for faculty, sec_list in grouped.items():
+        gpas = [s.avg_gpa for s in sec_list if s.avg_gpa is not None]
+        avg = round(sum(gpas) / len(gpas), 3) if gpas else None
+        total = sum(s.total_enrolled for s in sec_list if s.total_enrolled is not None)
+        result.append(
+            ProfessorStats(
+                faculty=faculty,
+                sections=sec_list,
+                avg_gpa=avg,
+                total_enrolled=total,
+            )
+        )
+    result.sort(key=lambda p: (p.avg_gpa is None, -(p.avg_gpa or 0)))
+    return result
 
 
 def _build_grade_distribution(

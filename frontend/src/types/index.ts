@@ -94,6 +94,23 @@ export interface UserStats {
   credits_by_semester: CreditsBySemester[];
 }
 
+export interface SectionGpaStats {
+  section: string | null;
+  term: string;
+  year: number;
+  faculty: string | null;
+  avg_gpa: number | null;
+  total_enrolled: number | null;
+  grade_distribution: Record<string, number>;
+}
+
+export interface ProfessorStats {
+  faculty: string;
+  sections: SectionGpaStats[];
+  avg_gpa: number | null;
+  total_enrolled: number;
+}
+
 export interface CatalogCourse {
   id: number;
   code: string;
@@ -109,6 +126,9 @@ export interface CatalogCourse {
   pass_grade: string | null;
   avg_gpa: number | null;
   total_enrolled: number | null;
+  terms_available: string[];
+  sections: SectionGpaStats[];
+  professors: ProfessorStats[];
 }
 
 export interface ApiResponse<T = null> {
