@@ -69,3 +69,39 @@ class CourseScheduleParsingError(AppException):
             error_code="COURSE_SCHEDULE_PARSE_ERROR",
             details=details,
         )
+
+
+class ReviewNotFoundError(AppException):
+    def __init__(self) -> None:
+        super().__init__(
+            message="Review not found",
+            status_code=404,
+            error_code="REVIEW_NOT_FOUND",
+        )
+
+
+class ReviewAlreadyExistsError(AppException):
+    def __init__(self) -> None:
+        super().__init__(
+            message="You have already reviewed this course",
+            status_code=409,
+            error_code="REVIEW_ALREADY_EXISTS",
+        )
+
+
+class ReviewForbiddenError(AppException):
+    def __init__(self) -> None:
+        super().__init__(
+            message="You can only modify your own reviews",
+            status_code=403,
+            error_code="REVIEW_FORBIDDEN",
+        )
+
+
+class ReviewInappropriateContentError(AppException):
+    def __init__(self) -> None:
+        super().__init__(
+            message="Your review contains inappropriate language. Please revise your comment.",
+            status_code=422,
+            error_code="REVIEW_INAPPROPRIATE_CONTENT",
+        )
