@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -62,6 +64,20 @@ class ProfessorStats(BaseModel):
     total_enrolled: int = 0
 
 
+class CourseOfferingInfo(BaseModel):
+    """Schedule info for a single section offering."""
+
+    section: str | None = None
+    faculty: str | None = None
+    meeting_time: str | None = None
+    room: str | None = None
+    days: str | None = None
+    enrolled: int | None = None
+    capacity: int | None = None
+    term: str
+    year: int
+
+
 class CourseDetailResponse(BaseModel):
     """Full course record from the catalog, optionally annotated with GPA data."""
 
@@ -74,6 +90,12 @@ class CourseDetailResponse(BaseModel):
     ects: int
     description: str | None = None
     prerequisites: str | None = None
+    corequisites: str | None = None
+    antirequisites: str | None = None
+    priority_1: str | None = None
+    priority_2: str | None = None
+    priority_3: str | None = None
+    priority_4: str | None = None
     school: str | None = None
     department: str | None = None
     academic_level: str | None = None
@@ -88,6 +110,11 @@ class CourseDetailResponse(BaseModel):
     sections: list[SectionGpaStats] = Field(default_factory=list)
     # Professors grouped with their avg GPA (populated only in detail endpoint)
     professors: list[ProfessorStats] = Field(default_factory=list)
+    # Schedule offerings from the most recent term (list in catalog, detail in course page)
+    offerings: list[CourseOfferingInfo] = Field(default_factory=list)
+    # Computed for authenticated user: eligibility and registration priority
+    is_eligible: bool | None = None
+    user_priority: int | None = None  # 1, 2, 3, 4 = has that priority; None = open / no priority
 
 
 class InvalidCatalogRow(BaseModel):
@@ -137,7 +164,8 @@ class CourseStatsResponse(BaseModel):
 
 
 class InvalidGpaStatsRow(BaseModel):
-    row: int
+    row: int | None = None
+    line: int | None = None
     page: int | None = None
     error: str
 
@@ -150,3 +178,113 @@ class GpaStatsUploadResponse(BaseModel):
     updated_count: int
     invalid_rows_count: int = 0
     invalid_rows: list[InvalidGpaStatsRow] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Reviews
+# ---------------------------------------------------------------------------
+
+
+class ReviewCreate(BaseModel):
+    comment: str | None = Field(default=None, max_length=2000)
+    overall_rating: int = Field(ge=1, le=5)
+    difficulty: int | None = Field(default=None, ge=1, le=5)
+    informativeness: int | None = Field(default=None, ge=1, le=5)
+    gpa_boost: int | None = Field(default=None, ge=1, le=5)
+    workload: int | None = Field(default=None, ge=1, le=5)
+
+
+class ReviewUpdate(BaseModel):
+    comment: str | None = Field(default=None, max_length=2000)
+    overall_rating: int | None = Field(default=None, ge=1, le=5)
+    difficulty: int | None = Field(default=None, ge=1, le=5)
+    informativeness: int | None = Field(default=None, ge=1, le=5)
+    gpa_boost: int | None = Field(default=None, ge=1, le=5)
+    workload: int | None = Field(default=None, ge=1, le=5)
+
+
+class ReviewAuthor(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+
+
+class ReviewResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    course_id: int
+    user_id: int
+    author: ReviewAuthor
+    comment: str | None
+    overall_rating: int
+    difficulty: int | None
+    informativeness: int | None
+    gpa_boost: int | None
+    workload: int | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReviewStats(BaseModel):
+    total: int
+    avg_overall_rating: float | None = None
+    avg_difficulty: float | None = None
+    avg_informativeness: float | None = None
+    avg_gpa_boost: float | None = None
+    avg_workload: float | None = None
+
+
+class ReviewsPage(BaseModel):
+    stats: ReviewStats
+    reviews: list[ReviewResponse]
+
+
+# ---------------------------------------------------------------------------
+# Requirements upload
+# ---------------------------------------------------------------------------
+
+
+class RequirementsUploadResponse(BaseModel):
+    processed_rows: int
+    updated_count: int
+    not_found_count: int
+    skipped_count: int
+    lower_priority_count: int = 0
+    error_count: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Eligibility
+# ---------------------------------------------------------------------------
+
+
+class PrerequisiteCheck(BaseModel):
+    course_code: str
+    required_grade: str | None = None
+    met: bool
+    your_grade: str | None = None
+
+
+class CorequisiteCheck(BaseModel):
+    course_code: str
+    met: bool
+    your_grade: str | None = None
+    your_status: str | None = None
+
+
+class AntirequisiteCheck(BaseModel):
+    course_code: str
+    blocking: bool  # True if user has already passed this course
+    your_grade: str | None = None
+
+
+class EligibilityResponse(BaseModel):
+    course_id: int
+    can_register: bool
+    prerequisites_met: bool
+    corequisites_met: bool
+    antirequisites_blocking: bool = False
+    prerequisite_checks: list[PrerequisiteCheck] = Field(default_factory=list)
+    corequisite_checks: list[CorequisiteCheck] = Field(default_factory=list)
+    antirequisite_checks: list[AntirequisiteCheck] = Field(default_factory=list)

@@ -2,6 +2,7 @@ from datetime import date
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    CheckConstraint,
     Date,
     Float,
     ForeignKey,
@@ -17,6 +18,7 @@ from nutrack.models import Base, IDMixin, TimestampMixin
 
 if TYPE_CHECKING:
     from nutrack.enrollments.models import Enrollment
+    from nutrack.users.models import User
 
 
 class Course(Base, IDMixin):
@@ -52,11 +54,27 @@ class Course(Base, IDMixin):
         Text,
         nullable=True,
     )
+    corequisites: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    antirequisites: Mapped[str | None] = mapped_column(Text, nullable=True)
+    priority_1: Mapped[str | None] = mapped_column(Text, nullable=True)
+    priority_2: Mapped[str | None] = mapped_column(Text, nullable=True)
+    priority_3: Mapped[str | None] = mapped_column(Text, nullable=True)
+    priority_4: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Tracks which semester's requirements PDF populated the fields above.
+    # Spring is prioritised over Fall for the same year.
+    requirements_term: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    requirements_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     offerings: Mapped[list["CourseOffering"]] = relationship(
         back_populates="course",
     )
     gpa_stats: Mapped[list["CourseGpaStats"]] = relationship(
+        back_populates="course",
+    )
+    reviews: Mapped[list["CourseReview"]] = relationship(
         back_populates="course",
     )
 
@@ -168,3 +186,44 @@ class CourseGpaStats(Base, IDMixin, TimestampMixin):
             f"<CourseGpaStats(course_id={self.course_id}, "
             f"term={self.term}, year={self.year}, section={self.section})>"
         )
+
+
+class CourseReview(Base, IDMixin, TimestampMixin):
+    __tablename__ = "course_reviews"
+    __table_args__ = (
+        UniqueConstraint(
+            "course_id",
+            "user_id",
+            name="uq_course_reviews_course_user",
+        ),
+        CheckConstraint("overall_rating BETWEEN 1 AND 5", name="ck_review_overall_rating"),
+        CheckConstraint("difficulty IS NULL OR difficulty BETWEEN 1 AND 5", name="ck_review_difficulty"),
+        CheckConstraint("informativeness IS NULL OR informativeness BETWEEN 1 AND 5", name="ck_review_informativeness"),
+        CheckConstraint("gpa_boost IS NULL OR gpa_boost BETWEEN 1 AND 5", name="ck_review_gpa_boost"),
+        CheckConstraint("workload IS NULL OR workload BETWEEN 1 AND 5", name="ck_review_workload"),
+    )
+
+    course_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    overall_rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    difficulty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    informativeness: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    gpa_boost: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    workload: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    course: Mapped["Course"] = relationship(back_populates="reviews")
+    user: Mapped["User"] = relationship()
+
+    def __repr__(self) -> str:
+        return f"<CourseReview(id={self.id}, course_id={self.course_id}, user_id={self.user_id})>"

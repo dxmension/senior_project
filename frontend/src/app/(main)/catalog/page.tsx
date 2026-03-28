@@ -1,6 +1,13 @@
 "use client";
 
-import { BookOpen, ChevronDown, Search, TrendingUp, Users } from "lucide-react";
+import {
+  BookOpen,
+  ChevronDown,
+  Clock,
+  Search,
+  TrendingUp,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -8,10 +15,9 @@ import { Badge } from "@/components/ui/badge";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
-import type { ApiResponse, CatalogCourse } from "@/types";
+import type { ApiResponse, CatalogCourse, CourseOfferingInfo } from "@/types";
 
 const PAGE_SIZE = 30;
-
 const TERMS = ["Fall", "Spring", "Summer"];
 
 function gpaVariant(gpa: number): "green" | "orange" | "red" {
@@ -28,39 +34,130 @@ function TermBadge({ term }: { term: string }) {
   };
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${colors[term] ?? "bg-bg-elevated text-text-muted border border-border-primary"}`}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
+        colors[term] ?? "bg-bg-elevated text-text-muted border border-border-primary"
+      }`}
     >
       {term}
     </span>
   );
 }
 
-function CourseCard({ course }: { course: CatalogCourse }) {
+function TimetableRow({ offerings }: { offerings: CourseOfferingInfo[] }) {
+  if (offerings.length === 0) return null;
   return (
-    <Link href={`/catalog/${course.id}`} className="glass-card p-4 flex flex-col gap-3 hover:border-border-light transition-colors block">
+    <div className="flex flex-col gap-1">
+      {offerings.map((o, i) => (
+        <div key={i} className="flex items-center gap-2 text-[11px] text-text-muted">
+          <Clock size={10} className="shrink-0" />
+          <span className="truncate">
+            {[o.section, o.days, o.meeting_time, o.room].filter(Boolean).join(" · ")}
+          </span>
+          {o.enrolled != null && o.capacity != null && (
+            <span className="shrink-0 ml-auto">
+              {o.enrolled}/{o.capacity}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ReqRow({
+  label,
+  text,
+}: {
+  label: string;
+  text: string;
+}) {
+  return (
+    <p className="text-[11px] text-text-muted leading-snug line-clamp-1">
+      <span className="font-semibold text-text-secondary">{label}: </span>
+      {text}
+    </p>
+  );
+}
+
+function CourseCard({ course }: { course: CatalogCourse }) {
+  const hasPrioritySystem =
+    course.priority_1 || course.priority_2 || course.priority_3 || course.priority_4;
+  const hasReqs =
+    course.prerequisites || course.corequisites || course.antirequisites;
+
+  return (
+    <Link
+      href={`/catalog/${course.id}`}
+      className="glass-card p-4 flex flex-col gap-3 hover:border-border-light transition-colors block"
+    >
+      {/* ── Header ── */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-xs font-mono font-semibold text-accent-green">
               {course.code} {course.level}
             </span>
             {course.academic_level && (
               <Badge variant="muted">{course.academic_level}</Badge>
             )}
+            {/* Eligibility */}
+            {course.is_eligible !== null && course.is_eligible !== undefined && (
+              <span
+                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border ${
+                  course.is_eligible
+                    ? "bg-green-500/10 text-green-400 border-green-500/25"
+                    : "bg-red-500/10 text-red-400 border-red-500/25"
+                }`}
+              >
+                {course.is_eligible ? "Eligible" : "Not eligible"}
+              </span>
+            )}
           </div>
           <p className="mt-1 text-sm font-semibold text-text-primary leading-snug line-clamp-2">
             {course.title}
           </p>
         </div>
-        <span className="text-xs text-text-muted whitespace-nowrap shrink-0">
-          {course.ects} ECTS
-        </span>
+
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <span className="text-xs text-text-muted">{course.ects} ECTS</span>
+          {/* Priority badge */}
+          {course.user_priority != null ? (
+            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-accent-blue/10 text-accent-blue border border-accent-blue/25">
+              Priority {course.user_priority}
+            </span>
+          ) : hasPrioritySystem ? (
+            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-bg-elevated text-text-muted border border-border-primary">
+              No priority
+            </span>
+          ) : null}
+        </div>
       </div>
 
       {course.department && (
         <p className="text-xs text-text-secondary truncate">{course.department}</p>
       )}
 
+      {/* ── Prerequisites / Corequisites / Antirequisites ── */}
+      {hasReqs && (
+        <div className="flex flex-col gap-0.5 border-l-2 border-border-primary pl-2">
+          {course.prerequisites && (
+            <ReqRow label="Pre" text={course.prerequisites} />
+          )}
+          {course.corequisites && (
+            <ReqRow label="Co" text={course.corequisites} />
+          )}
+          {course.antirequisites && (
+            <ReqRow label="Anti" text={course.antirequisites} />
+          )}
+        </div>
+      )}
+
+      {/* ── Timetable (latest offerings) ── */}
+      {course.offerings && course.offerings.length > 0 && (
+        <TimetableRow offerings={course.offerings} />
+      )}
+
+      {/* ── Terms available ── */}
       {course.terms_available.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {course.terms_available.map((t) => (
@@ -69,6 +166,7 @@ function CourseCard({ course }: { course: CatalogCourse }) {
         </div>
       )}
 
+      {/* ── Footer: GPA + enrolled ── */}
       <div className="flex items-center gap-3 mt-auto pt-2 border-t border-border-primary">
         {course.avg_gpa != null ? (
           <div className="flex items-center gap-1.5">
@@ -97,12 +195,21 @@ interface Filters {
   term: string;
   academic_level: string;
   level_prefix: string;
+  eligible_only: boolean;
+  has_priority: boolean;
 }
 
 export default function CatalogPage() {
   const [courses, setCourses] = useState<CatalogCourse[]>([]);
   const [total, setTotal] = useState(0);
-  const [filters, setFilters] = useState<Filters>({ query: "", term: "", academic_level: "", level_prefix: "" });
+  const [filters, setFilters] = useState<Filters>({
+    query: "",
+    term: "",
+    academic_level: "",
+    level_prefix: "",
+    eligible_only: false,
+    has_priority: false,
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [skip, setSkip] = useState(0);
@@ -111,17 +218,24 @@ export default function CatalogPage() {
 
   const fetchCourses = useCallback(
     async (f: Filters, offset: number, replace: boolean) => {
-      const params = new URLSearchParams({ skip: String(offset), limit: String(PAGE_SIZE) });
+      const params = new URLSearchParams({
+        skip: String(offset),
+        limit: String(PAGE_SIZE),
+      });
       if (f.query.trim()) params.set("q", f.query.trim());
       if (f.term) params.set("term", f.term);
       if (f.academic_level) params.set("academic_level", f.academic_level);
       if (f.level_prefix) params.set("level_prefix", f.level_prefix);
+      if (f.eligible_only) params.set("eligible_only", "true");
+      if (f.has_priority) params.set("has_priority", "true");
 
       try {
         const res = await api.get<ApiResponse<CatalogCourse[]>>(
           `/courses/catalog?${params.toString()}`
         );
-        const newTotal = Number((res.meta as Record<string, unknown>)?.total ?? 0);
+        const newTotal = Number(
+          (res.meta as Record<string, unknown>)?.total ?? 0
+        );
         setCourses((prev) => (replace ? res.data : [...prev, ...res.data]));
         setTotal(newTotal);
         setError(null);
@@ -136,13 +250,11 @@ export default function CatalogPage() {
     setIsLoading(true);
     setSkip(0);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-
     const delay = filters.query ? 300 : 0;
     debounceRef.current = setTimeout(async () => {
       await fetchCourses(filters, 0, true);
       setIsLoading(false);
     }, delay);
-
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
@@ -190,11 +302,10 @@ export default function CatalogPage() {
         </div>
       </div>
 
-      {/* Filters row */}
+      {/* Filters */}
       <div className="flex flex-wrap gap-2 items-center">
         <span className="text-xs text-text-muted">Filter:</span>
 
-        {/* Term filter */}
         <div className="relative">
           <select
             value={filters.term}
@@ -216,7 +327,6 @@ export default function CatalogPage() {
           />
         </div>
 
-        {/* Academic level filter */}
         <div className="relative">
           <select
             value={filters.academic_level}
@@ -235,7 +345,6 @@ export default function CatalogPage() {
           />
         </div>
 
-        {/* Course level filter (100 / 200 / 300 / 400) */}
         <div className="relative">
           <select
             value={filters.level_prefix}
@@ -257,10 +366,48 @@ export default function CatalogPage() {
           />
         </div>
 
-        {(filters.term || filters.academic_level || filters.level_prefix) && (
+        {/* Toggle buttons for eligible_only and has_priority */}
+        <button
+          type="button"
+          onClick={() => setFilter("eligible_only", !filters.eligible_only)}
+          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+            filters.eligible_only
+              ? "bg-green-500/15 text-green-400 border-green-500/30"
+              : "bg-bg-card text-text-secondary border-border-primary hover:border-border-light"
+          }`}
+        >
+          Eligible only
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setFilter("has_priority", !filters.has_priority)}
+          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+            filters.has_priority
+              ? "bg-accent-blue/15 text-accent-blue border-accent-blue/30"
+              : "bg-bg-card text-text-secondary border-border-primary hover:border-border-light"
+          }`}
+        >
+          Has priority
+        </button>
+
+        {(filters.term ||
+          filters.academic_level ||
+          filters.level_prefix ||
+          filters.eligible_only ||
+          filters.has_priority) && (
           <button
             type="button"
-            onClick={() => setFilters((prev) => ({ ...prev, term: "", academic_level: "", level_prefix: "" }))}
+            onClick={() =>
+              setFilters((prev) => ({
+                ...prev,
+                term: "",
+                academic_level: "",
+                level_prefix: "",
+                eligible_only: false,
+                has_priority: false,
+              }))
+            }
             className="text-xs text-text-muted hover:text-text-secondary transition-colors underline-offset-2 underline"
           >
             Clear filters
@@ -278,7 +425,12 @@ export default function CatalogPage() {
         <GlassCard className="flex flex-col items-center py-16">
           <BookOpen size={40} className="text-text-muted mb-4" />
           <p className="text-sm text-text-secondary">
-            {filters.query || filters.term || filters.academic_level || filters.level_prefix
+            {filters.query ||
+            filters.term ||
+            filters.academic_level ||
+            filters.level_prefix ||
+            filters.eligible_only ||
+            filters.has_priority
               ? "No courses match your filters."
               : "No courses found. Upload a schedule PDF first."}
           </p>
