@@ -1,7 +1,8 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from nutrack.courses.models import Course, CourseOffering
 from nutrack.enrollments.models import Enrollment
@@ -19,6 +20,7 @@ class AdminRepository:
     ) -> list[User]:
         stmt = (
             select(User)
+            .where(User.deleted_at.is_(None))
             .order_by(User.created_at.desc())
             .offset(skip)
             .limit(limit)
@@ -27,7 +29,20 @@ class AdminRepository:
         return list(result.scalars().all())
 
     async def get_user_by_id(self, user_id: int) -> User | None:
-        return await self.session.get(User, user_id)
+        stmt = (
+            select(User)
+            .where(User.id == user_id, User.deleted_at.is_(None))
+            .options(selectinload(User.enrollments))
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_enrollment_count(self, user_id: int) -> int:
+        stmt = select(func.count()).select_from(Enrollment).where(
+            Enrollment.user_id == user_id
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
 
     async def update_user(
         self,
@@ -41,7 +56,7 @@ class AdminRepository:
         return user
 
     async def get_total_users_count(self) -> int:
-        stmt = select(func.count()).select_from(User)
+        stmt = select(func.count()).select_from(User).where(User.deleted_at.is_(None))
         result = await self.session.execute(stmt)
         return result.scalar_one()
 
@@ -62,28 +77,34 @@ class AdminRepository:
 
     async def get_onboarded_users_count(self) -> int:
         stmt = select(func.count()).select_from(User).where(
-            User.is_onboarded.is_(True)
+            User.is_onboarded.is_(True),
+            User.deleted_at.is_(None),
         )
         result = await self.session.execute(stmt)
         return result.scalar_one()
 
     async def get_admin_users_count(self) -> int:
         stmt = select(func.count()).select_from(User).where(
-            User.is_admin.is_(True)
+            User.is_admin.is_(True),
+            User.deleted_at.is_(None),
         )
         result = await self.session.execute(stmt)
         return result.scalar_one()
 
     async def get_active_users_last_30_days(self) -> int:
-        cutoff_date = datetime.utcnow() - timedelta(days=30)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=30)
         stmt = select(func.count()).select_from(User).where(
-            User.updated_at >= cutoff_date
+            User.updated_at >= cutoff_date,
+            User.deleted_at.is_(None),
         )
         result = await self.session.execute(stmt)
         return result.scalar_one()
 
     async def get_average_cgpa(self) -> float | None:
-        stmt = select(func.avg(User.cgpa)).where(User.cgpa.isnot(None))
+        stmt = select(func.avg(User.cgpa)).where(
+            User.cgpa.isnot(None),
+            User.deleted_at.is_(None),
+        )
         result = await self.session.execute(stmt)
         avg = result.scalar_one_or_none()
         return float(avg) if avg else None
@@ -91,7 +112,7 @@ class AdminRepository:
     async def get_users_by_study_year(self) -> dict[int, int]:
         stmt = (
             select(User.study_year, func.count())
-            .where(User.study_year.isnot(None))
+            .where(User.study_year.isnot(None), User.deleted_at.is_(None))
             .group_by(User.study_year)
         )
         result = await self.session.execute(stmt)
@@ -100,7 +121,7 @@ class AdminRepository:
     async def get_users_by_major(self) -> dict[str, int]:
         stmt = (
             select(User.major, func.count())
-            .where(User.major.isnot(None))
+            .where(User.major.isnot(None), User.deleted_at.is_(None))
             .group_by(User.major)
         )
         result = await self.session.execute(stmt)
@@ -139,17 +160,23 @@ class AdminRepository:
         stmt = (
             select(User)
             .where(
+                User.deleted_at.is_(None),
                 (func.lower(User.email).like(search_pattern))
                 | (func.lower(User.first_name).like(search_pattern))
-                | (func.lower(User.last_name).like(search_pattern))
+                | (func.lower(User.last_name).like(search_pattern)),
             )
             .limit(limit)
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def delete_user(self, user: User) -> None:
-        await self.session.delete(user)
+    async def soft_delete_user(self, user: User) -> None:
+        stmt = (
+            update(User)
+            .where(User.id == user.id)
+            .values(deleted_at=datetime.now(timezone.utc))
+        )
+        await self.session.execute(stmt)
         await self.session.flush()
 
     async def get_all_courses(

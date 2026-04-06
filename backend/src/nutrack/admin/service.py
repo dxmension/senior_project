@@ -35,7 +35,7 @@ class AdminService:
         if not user:
             raise UserNotFoundError(user_id)
 
-        enrollment_count = len(user.enrollments) if user.enrollments else 0
+        enrollment_count = await self.repository.get_enrollment_count(user_id)
 
         return UserDetail(
             id=user.id,
@@ -101,7 +101,7 @@ class AdminService:
         if not user:
             raise UserNotFoundError(user_id)
 
-        await self.repository.delete_user(user)
+        await self.repository.soft_delete_user(user)
 
     async def get_database_stats(self) -> DatabaseStats:
         total_users = await self.repository.get_total_users_count()
