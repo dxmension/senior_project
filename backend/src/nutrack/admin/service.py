@@ -35,7 +35,7 @@ class AdminService:
         if not user:
             raise UserNotFoundError(user_id)
 
-        enrollment_count = await self.repository.get_enrollment_count(user_id)
+        enrollment_count = await self.repository.get_user_enrollment_count(user.id)
 
         return UserDetail(
             id=user.id,
