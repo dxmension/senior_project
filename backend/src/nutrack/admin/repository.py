@@ -29,6 +29,13 @@ class AdminRepository:
     async def get_user_by_id(self, user_id: int) -> User | None:
         return await self.session.get(User, user_id)
 
+    async def get_user_enrollment_count(self, user_id: int) -> int:
+        stmt = select(func.count()).select_from(Enrollment).where(
+            Enrollment.user_id == user_id
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
+
     async def update_user(
         self,
         user: User,
@@ -38,6 +45,7 @@ class AdminRepository:
             if value is not None:
                 setattr(user, key, value)
         await self.session.flush()
+        await self.session.refresh(user)
         return user
 
     async def get_total_users_count(self) -> int:
