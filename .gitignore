@@ -10,7 +10,8 @@ wheels/
 venv/
 .venv
 .env
-
+.claude/
+CLAUDE.md
 celerybeat-schedule
 
 # dependencies

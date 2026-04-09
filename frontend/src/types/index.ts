@@ -110,6 +110,133 @@ export interface ApiError {
   };
 }
 
+export type AssessmentType =
+  | "homework"
+  | "quiz"
+  | "midterm"
+  | "final"
+  | "project"
+  | "lab"
+  | "presentation"
+  | "other";
+
+export interface Assessment {
+  id: number;
+  course_id: number;
+  course_code: string;
+  course_title: string;
+  assessment_type: AssessmentType;
+  title: string;
+  description: string | null;
+  deadline: string;
+  weight: number | null;
+  score: number | null;
+  max_score: number | null;
+  is_completed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateAssessmentPayload {
+  course_id: number;
+  assessment_type: AssessmentType;
+  title: string;
+  description?: string;
+  deadline: string;
+  weight?: number;
+  max_score?: number;
+}
+
+export interface CourseProgressItem {
+  course_id: number;
+  course_code: string;
+  course_title: string;
+  term: string;
+  year: number;
+  ects: number;
+  total_assessments: number;
+  completed_assessments: number;
+  progress_pct: number;
+  upcoming_deadline: string | null;
+}
+
+export interface UpcomingDeadlineItem {
+  assessment_id: number;
+  title: string;
+  assessment_type: string;
+  deadline: string;
+  course_code: string;
+  course_title: string;
+  is_completed: boolean;
+  days_until: number;
+}
+
+export interface WorkloadAssessmentItem {
+  assessment_id: number;
+  title: string;
+  assessment_type: string;
+  deadline: string;
+  course_code: string;
+  is_completed: boolean;
+}
+
+export interface WeeklyWorkloadItem {
+  week_start: string;
+  week_label: string;
+  assessment_count: number;
+  assessments: WorkloadAssessmentItem[];
+}
+
+export interface DashboardData {
+  current_gpa: number | null;
+  semester_gpa: number | null;
+  total_credits_earned: number;
+  total_credits_enrolled: number;
+  active_courses_count: number;
+  completed_courses_count: number;
+  upcoming_deadlines_count: number;
+  overdue_count: number;
+  course_progress: CourseProgressItem[];
+  upcoming_deadlines: UpcomingDeadlineItem[];
+  weekly_workload: WeeklyWorkloadItem[];
+}
+
+export interface AISummaryData {
+  summary: string;
+  recommendations: string[];
+  motivation: string;
+  generated_at: string;
+}
+
+export interface UpdateAssessmentPayload {
+  assessment_type?: AssessmentType;
+  title?: string;
+  description?: string;
+  deadline?: string;
+  weight?: number;
+  score?: number;
+  max_score?: number;
+  is_completed?: boolean;
+}
+
+export type CalendarEventType =
+  | "personal_event"
+  | "assessment_deadline"
+  | "course_session";
+
+export interface CalendarEntry {
+  id: number;
+  event_type: CalendarEventType;
+  title: string;
+  description: string | null;
+  start_at: string;
+  end_at: string | null;
+  is_all_day: boolean;
+  location: string | null;
+  color: string | null;
+  category_name: string | null;
+  source_meta: Record<string, unknown>;
+=======
 export interface UserListItem {
   id: number;
   email: string;
@@ -162,4 +289,4 @@ export interface CourseListItem {
   ects: number;
   department: string | null;
   school: string | null;
-}
+

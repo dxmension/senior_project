@@ -11,11 +11,13 @@ import {
   UserCircle,
   Settings,
   X,
+  CalendarDays,
 } from "lucide-react";
 
 const mainNav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/courses", label: "Courses", icon: BookOpen },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/catalog", label: "Catalog", icon: Search },
   { href: "/study", label: "Study Assistant", icon: Brain },
   { href: "/flashcards", label: "Flashcards", icon: Layers },
