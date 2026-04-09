@@ -1,7 +1,8 @@
 from fastapi import APIRouter
-
 from nutrack.assessments.router import router as assessments_router
 from nutrack.dashboard.router import router as dashboard_router
+from nutrack.admin.router import router as admin_router
+
 from nutrack.auth.router import router as auth_router
 from nutrack.calendar.router import router as calendar_router
 from nutrack.categories.router import router as categories_router
@@ -29,3 +30,4 @@ api_router.include_router(dashboard_router, prefix="/dashboard")
 api_router.include_router(study_router)
 api_router.include_router(flashcards_router)
 api_router.include_router(notifications_router)
+api_router.include_router(admin_router)
