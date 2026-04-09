@@ -1,20 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import type { ApiResponse } from "@/types";
 import { GlassCard } from "@/components/ui/glass-card";
+import { AlertCircle, X } from "lucide-react";
 
-export default function LoginPage() {
+const AUTH_ERRORS: Record<string, string> = {
+  auth_failed: "Sign-in failed. Make sure you're using your @nu.edu.kz account.",
+  missing_code: "Authorization code was missing. Please try again.",
+};
+
+function LoginContent() {
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    const error = searchParams.get("error");
+    if (error) {
+      setErrorMsg(AUTH_ERRORS[error] ?? "An unexpected error occurred. Please try again.");
+    }
+  }, [searchParams]);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
+    setErrorMsg(null);
     try {
       const res = await api.get<ApiResponse<{ url: string }>>("/auth/google-url");
       window.location.href = res.data.url;
     } catch {
       setLoading(false);
+      setErrorMsg("Could not reach the server. Please try again.");
     }
   };
 
@@ -33,6 +51,19 @@ export default function LoginPage() {
         <p className="text-text-secondary mb-8">
           Educational platform for Nazarbayev University students
         </p>
+
+        {errorMsg && (
+          <div className="mb-6 flex items-start gap-3 text-left p-4 rounded-lg bg-accent-red-dim border border-accent-red/30">
+            <AlertCircle className="text-accent-red shrink-0 mt-0.5" size={18} />
+            <p className="text-sm text-accent-red flex-1">{errorMsg}</p>
+            <button
+              onClick={() => setErrorMsg(null)}
+              className="text-accent-red/60 hover:text-accent-red shrink-0 transition-colors"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
 
         <button
           onClick={handleGoogleLogin}
@@ -53,5 +84,13 @@ export default function LoginPage() {
         </p>
       </GlassCard>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <LoginContent />
+    </Suspense>
   );
 }
