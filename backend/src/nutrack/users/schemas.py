@@ -1,11 +1,13 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from nutrack.enrollments.schemas import EnrollmentItemResponse as EnrollmentResponse
 
 
 class UserProfileResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     email: str
     first_name: str
@@ -19,9 +21,6 @@ class UserProfileResponse(BaseModel):
     is_onboarded: bool
     is_admin: bool
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class UserProfileUpdate(BaseModel):
