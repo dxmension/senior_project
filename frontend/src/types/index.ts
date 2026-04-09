@@ -217,3 +217,22 @@ export interface UpdateAssessmentPayload {
   max_score?: number;
   is_completed?: boolean;
 }
+
+export type CalendarEventType =
+  | "personal_event"
+  | "assessment_deadline"
+  | "course_session";
+
+export interface CalendarEntry {
+  id: number;
+  event_type: CalendarEventType;
+  title: string;
+  description: string | null;
+  start_at: string;
+  end_at: string | null;
+  is_all_day: boolean;
+  location: string | null;
+  color: string | null;
+  category_name: string | null;
+  source_meta: Record<string, unknown>;
+}
