@@ -10,12 +10,12 @@ class UserRepository(BaseRepository[User]):
         super().__init__(session, User)
 
     async def get_by_email(self, email: str) -> User | None:
-        stmt = select(User).where(User.email == email)
+        stmt = select(User).where(User.email == email, User.deleted_at.is_(None))
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
     async def get_by_google_id(self, google_id: str) -> User | None:
-        stmt = select(User).where(User.google_id == google_id)
+        stmt = select(User).where(User.google_id == google_id, User.deleted_at.is_(None))
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -23,6 +23,7 @@ class UserRepository(BaseRepository[User]):
         stmt = select(User).where(
             User.first_name == first_name,
             User.last_name == last_name,
+            User.deleted_at.is_(None),
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()

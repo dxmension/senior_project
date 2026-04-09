@@ -101,7 +101,7 @@ class AdminService:
         if not user:
             raise UserNotFoundError(user_id)
 
-        await self.repository.delete_user(user)
+        await self.repository.soft_delete_user(user)
 
     async def get_database_stats(self) -> DatabaseStats:
         total_users = await self.repository.get_total_users_count()
