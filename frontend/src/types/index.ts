@@ -112,6 +112,18 @@ export interface ProfessorStats {
   total_enrolled: number;
 }
 
+export interface CourseOfferingInfo {
+  section: string | null;
+  faculty: string | null;
+  meeting_time: string | null;
+  room: string | null;
+  days: string | null;
+  enrolled: number | null;
+  capacity: number | null;
+  term: string;
+  year: number;
+}
+
 export interface CatalogCourse {
   id: number;
   code: string;
@@ -123,6 +135,14 @@ export interface CatalogCourse {
   academic_level: string | null;
   description: string | null;
   prerequisites: string | null;
+  corequisites: string | null;
+  antirequisites: string | null;
+  priority_1: string | null;
+  priority_2: string | null;
+  priority_3: string | null;
+  priority_4: string | null;
+  is_eligible: boolean | null;
+  user_priority: number | null;
   credits_us: number | null;
   pass_grade: string | null;
   avg_gpa: number | null;
@@ -130,6 +150,73 @@ export interface CatalogCourse {
   terms_available: string[];
   sections: SectionGpaStats[];
   professors: ProfessorStats[];
+  offerings: CourseOfferingInfo[];
+}
+
+export interface PrerequisiteCheck {
+  course_code: string;
+  required_grade: string | null;
+  met: boolean;
+  your_grade: string | null;
+}
+
+export interface CorequisiteCheck {
+  course_code: string;
+  met: boolean;
+  your_grade: string | null;
+  your_status: string | null;
+}
+
+export interface AntirequisiteCheck {
+  course_code: string;
+  blocking: boolean;
+  your_grade: string | null;
+}
+
+export interface EligibilityResponse {
+  course_id: number;
+  can_register: boolean;
+  prerequisites_met: boolean;
+  corequisites_met: boolean;
+  antirequisites_blocking: boolean;
+  prerequisite_checks: PrerequisiteCheck[];
+  corequisite_checks: CorequisiteCheck[];
+  antirequisite_checks: AntirequisiteCheck[];
+}
+
+export interface ReviewAuthor {
+  id: number;
+  first_name: string;
+  last_name: string;
+}
+
+export interface CourseReview {
+  id: number;
+  course_id: number;
+  user_id: number;
+  author: ReviewAuthor;
+  comment: string | null;
+  overall_rating: number;
+  difficulty: number | null;
+  informativeness: number | null;
+  gpa_boost: number | null;
+  workload: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReviewStats {
+  total: number;
+  avg_overall_rating: number | null;
+  avg_difficulty: number | null;
+  avg_informativeness: number | null;
+  avg_gpa_boost: number | null;
+  avg_workload: number | null;
+}
+
+export interface ReviewsPage {
+  stats: ReviewStats;
+  reviews: CourseReview[];
 }
 
 export interface ApiResponse<T = null> {

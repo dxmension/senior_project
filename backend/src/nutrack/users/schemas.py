@@ -19,7 +19,7 @@ class UserProfileResponse(BaseModel):
     total_credits_earned: int | None = None
     total_credits_enrolled: int | None = None
     is_onboarded: bool
-    is_admin: bool
+    is_admin: bool = False
     created_at: datetime
 
 
