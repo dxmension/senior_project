@@ -1,15 +1,27 @@
-from typing import AsyncGenerator, Generator
+from importlib import import_module
+from typing import Any, AsyncGenerator, Generator, Generic, TypeVar
 
-from sqlalchemy import QueuePool, create_engine
+from sqlalchemy import MetaData, QueuePool, create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import NullPool
 
 from nutrack.config import settings
 
+ModelT = TypeVar("ModelT")
+MODEL_MODULES = (
+    "nutrack.assessments.models",
+    "nutrack.categories.models",
+    "nutrack.courses.models",
+    "nutrack.enrollments.models",
+    "nutrack.events.models",
+    "nutrack.transcripts.models",
+    "nutrack.users.models",
+)
+
 async_engine = create_async_engine(
     settings.DATABASE_URL,
-    pool_size=10,
-    max_overflow=20,
+    poolclass=NullPool,
     echo=False,
 )
 
@@ -28,6 +40,33 @@ sync_engine = create_engine(
 )
 
 SessionLocal = sessionmaker(bind=sync_engine, expire_on_commit=False)
+
+
+class BaseRepository(Generic[ModelT]):
+    def __init__(self, session: AsyncSession, model: type[ModelT]) -> None:
+        self.session = session
+        self.model = model
+
+    async def get_by_id(self, entity_id: int) -> ModelT | None:
+        return await self.session.get(self.model, entity_id)
+
+    async def create(self, **data: Any) -> ModelT:
+        entity = self.model(**data)
+        self.session.add(entity)
+        await self.session.flush()
+        await self.session.refresh(entity)
+        return entity
+
+    async def update(self, entity: ModelT, **data: Any) -> ModelT:
+        for field, value in data.items():
+            setattr(entity, field, value)
+        await self.session.flush()
+        await self.session.refresh(entity)
+        return entity
+
+    async def delete(self, entity: ModelT) -> None:
+        await self.session.delete(entity)
+        await self.session.flush()
 
 
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
@@ -50,3 +89,16 @@ def get_sync_session() -> Generator[Session, None, None]:
         raise
     finally:
         session.close()
+
+
+def get_sync_database_url() -> str:
+    return settings.SYNC_DATABASE_URL
+
+
+def load_target_metadata() -> MetaData:
+    for module_name in MODEL_MODULES:
+        import_module(module_name)
+
+    from nutrack.models import Base
+
+    return Base.metadata

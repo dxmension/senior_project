@@ -5,7 +5,7 @@ from nutrack.config import settings
 from nutrack.dashboard.dependencies import get_dashboard_service
 from nutrack.dashboard.schemas import AISummaryResponse, DashboardResponse
 from nutrack.dashboard.service import DashboardService
-from nutrack.shared.api.response import ApiResponse
+from nutrack.utils import ApiResponse
 from nutrack.users.models import User
 
 router = APIRouter(tags=["dashboard"])

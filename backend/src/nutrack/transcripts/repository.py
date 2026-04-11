@@ -2,8 +2,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutrack.courses.models import Course, CourseOffering
+from nutrack.database import BaseRepository
 from nutrack.enrollments.models import Enrollment
-from nutrack.shared.db.base_repository import BaseRepository
 
 
 class CourseRepository(BaseRepository[Course]):

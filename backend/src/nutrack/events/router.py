@@ -6,7 +6,7 @@ from nutrack.auth.dependencies import get_current_user
 from nutrack.events.dependencies import get_event_service
 from nutrack.events.schemas import CreateEventRequest, EventResponse, UpdateEventRequest
 from nutrack.events.service import EventService
-from nutrack.shared.api.response import ApiResponse
+from nutrack.utils import ApiResponse
 from nutrack.users.models import User
 
 router = APIRouter(tags=["events"])

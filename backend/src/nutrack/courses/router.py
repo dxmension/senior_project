@@ -12,6 +12,7 @@ from nutrack.courses.dependencies import (
     get_course_stats_service,
 )
 from nutrack.courses.schemas import (
+    CourseCatalogUploadResponse,
     CourseDetailResponse,
     CourseScheduleUploadResponse,
     CourseSearchItem,
@@ -34,7 +35,7 @@ from nutrack.courses.service import (
     CourseSearchService,
     CourseStatsService,
 )
-from nutrack.shared.api.response import ApiResponse
+from nutrack.utils import ApiResponse
 from nutrack.users.models import User
 
 router = APIRouter(prefix="/courses", tags=["courses"])
@@ -81,6 +82,20 @@ async def upload_course_schedule(
 # ---------------------------------------------------------------------------
 
 
+@router.post(
+    "/catalog/upload",
+    response_model=ApiResponse[CourseCatalogUploadResponse],
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload course catalog file",
+)
+async def upload_course_catalog(
+    file: UploadFile = File(...),
+    _: User = Depends(get_current_admin_user),
+    service: CourseCatalogService = Depends(get_course_catalog_service),
+):
+    result = await service.upload(file)
+    return ApiResponse(data=result)
+
 
 @router.get(
     "/catalog",
@@ -101,20 +116,28 @@ async def list_catalog(
     current_user: User = Depends(get_current_user),
     service: CourseCatalogService = Depends(get_course_catalog_service),
 ):
-    courses, total = await service.list_courses(
-        skip=skip,
-        limit=limit,
-        search=q,
-        department=department,
-        school=school,
-        academic_level=academic_level,
-        term=term,
-        level_prefix=level_prefix,
-        eligible_only=eligible_only,
-        has_priority=has_priority,
-        user_id=current_user.id,
-        user_major=current_user.major,
-    )
+    params = {"skip": skip, "limit": limit, "search": q}
+    user_major = getattr(current_user, "major", None)
+    optional_params = {
+        "department": department,
+        "school": school,
+        "academic_level": academic_level,
+        "term": term,
+        "level_prefix": level_prefix,
+    }
+    for key, value in optional_params.items():
+        if value is not None:
+            params[key] = value
+    if eligible_only:
+        params["eligible_only"] = True
+        params["user_id"] = current_user.id
+    if has_priority:
+        params["has_priority"] = True
+        params["user_id"] = current_user.id
+    if user_major is not None:
+        params["user_major"] = user_major
+
+    courses, total = await service.list_courses(**params)
     return ApiResponse(data=courses, meta={"total": total, "skip": skip, "limit": limit})
 
 

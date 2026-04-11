@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from nutrack.auth.dependencies import get_current_user
-from nutrack.shared.api.response import ApiResponse
+from nutrack.utils import ApiResponse
 from nutrack.users.dependencies import get_user_service
 from nutrack.users.models import User
 from nutrack.users.schemas import (

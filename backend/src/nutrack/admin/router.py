@@ -13,7 +13,7 @@ from nutrack.admin.schemas import (
 )
 from nutrack.admin.service import AdminService
 from nutrack.auth.dependencies import get_current_admin_user
-from nutrack.shared.api.response import ApiResponse
+from nutrack.utils import ApiResponse
 from nutrack.users.models import User
 
 router = APIRouter(prefix="/admin", tags=["admin"])

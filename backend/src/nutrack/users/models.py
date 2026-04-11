@@ -1,9 +1,12 @@
-from datetime import datetime
+from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String
+from sqlalchemy import Boolean, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from nutrack.models import Base, IDMixin, TimestampMixin
+
+if TYPE_CHECKING:
+    from nutrack.enrollments.models import Enrollment
 
 
 class User(Base, IDMixin, TimestampMixin):
@@ -29,9 +32,6 @@ class User(Base, IDMixin, TimestampMixin):
     avatar_url: Mapped[str | None] = mapped_column(String, nullable=True)
     is_onboarded: Mapped[bool] = mapped_column(Boolean, default=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
-    deleted_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True, default=None
-    )
 
     enrollments: Mapped[list["Enrollment"]] = relationship(
         back_populates="user",

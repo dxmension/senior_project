@@ -12,6 +12,15 @@ class CourseCatalogFileError(AppException):
         )
 
 
+class CourseRequirementsFileError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(
+            message=message,
+            status_code=422,
+            error_code="COURSE_REQUIREMENTS_FILE_ERROR",
+        )
+
+
 class CourseNotFoundError(AppException):
     def __init__(self) -> None:
         super().__init__(
@@ -54,6 +63,15 @@ class CourseGpaStatsParsingError(AppException):
             message=message,
             status_code=422,
             error_code="COURSE_GPA_STATS_PARSE_ERROR",
+        )
+
+
+class CourseRequirementsParsingError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(
+            message=message,
+            status_code=422,
+            error_code="COURSE_REQUIREMENTS_PARSE_ERROR",
         )
 
 

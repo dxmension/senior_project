@@ -2,12 +2,12 @@ from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel
 
-T = TypeVar("T")
+DataT = TypeVar("DataT")
 
 
-class ApiResponse(BaseModel, Generic[T]):
+class ApiResponse(BaseModel, Generic[DataT]):
     ok: bool = True
-    data: T | None = None
+    data: DataT | None = None
     meta: dict[str, Any] | None = None
 
 

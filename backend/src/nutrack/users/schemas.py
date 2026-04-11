@@ -1,8 +1,9 @@
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
+from nutrack.enrollments.schemas import EnrollmentItemResponse
 
-from nutrack.enrollments.schemas import EnrollmentItemResponse as EnrollmentResponse
+EnrollmentResponse = EnrollmentItemResponse
 
 
 class UserProfileResponse(BaseModel):

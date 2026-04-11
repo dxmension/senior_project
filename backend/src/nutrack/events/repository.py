@@ -4,8 +4,8 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from nutrack.database import BaseRepository
 from nutrack.events.models import Event, RecurrenceType
-from nutrack.shared.db.base_repository import BaseRepository
 
 
 class EventRepository(BaseRepository[Event]):

@@ -6,7 +6,7 @@ from sqlalchemy.orm import joinedload
 
 from nutrack.assessments.models import Assessment
 from nutrack.courses.models import CourseOffering
-from nutrack.shared.db.base_repository import BaseRepository
+from nutrack.database import BaseRepository
 
 
 def _offering_loader():

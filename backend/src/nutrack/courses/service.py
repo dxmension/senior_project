@@ -644,7 +644,6 @@ class CourseStatsService:
 
         total = agg["total_enrollments"] or 0
         passed = agg["passed_count"] or 0
-        failed = agg["failed_count"] or 0
         withdrawn = agg["withdrawn_count"] or 0
 
         pass_rate: float | None = None
