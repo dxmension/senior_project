@@ -1,15 +1,15 @@
 from fastapi import APIRouter, Depends, File, UploadFile
 
 from nutrack.auth.dependencies import get_current_user
-from nutrack.shared.api.response import ApiResponse
 from nutrack.transcripts.dependencies import get_transcript_service
-from nutrack.users.models import User
 from nutrack.transcripts.schemas import (
     ManualTranscriptRequest,
     TranscriptUploadResponse,
     TranscriptUploadStatusResponse,
 )
 from nutrack.transcripts.service import TranscriptService
+from nutrack.users.models import User
+from nutrack.utils import ApiResponse
 
 router = APIRouter(prefix="/transcripts", tags=["transcripts"])
 

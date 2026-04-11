@@ -3,26 +3,39 @@ from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from nutrack.auth.dependencies import get_current_admin_user, get_current_user
 from nutrack.courses.dependencies import (
     get_course_catalog_service,
+    get_course_eligibility_service,
     get_course_gpa_stats_service,
+    get_course_requirements_service,
+    get_course_review_service,
     get_course_schedule_service,
     get_course_search_service,
     get_course_stats_service,
 )
 from nutrack.courses.schemas import (
+    CourseCatalogUploadResponse,
     CourseDetailResponse,
     CourseScheduleUploadResponse,
     CourseSearchItem,
     CourseStatsResponse,
+    EligibilityResponse,
     GpaStatsUploadResponse,
+    RequirementsUploadResponse,
+    ReviewCreate,
+    ReviewResponse,
+    ReviewUpdate,
+    ReviewsPage,
 )
 from nutrack.courses.service import (
     CourseCatalogService,
+    CourseEligibilityService,
     CourseGpaStatsService,
+    CourseRequirementsService,
+    CourseReviewService,
     CourseScheduleService,
     CourseSearchService,
     CourseStatsService,
 )
-from nutrack.shared.api.response import ApiResponse
+from nutrack.utils import ApiResponse
 from nutrack.users.models import User
 
 router = APIRouter(prefix="/courses", tags=["courses"])
@@ -69,6 +82,20 @@ async def upload_course_schedule(
 # ---------------------------------------------------------------------------
 
 
+@router.post(
+    "/catalog/upload",
+    response_model=ApiResponse[CourseCatalogUploadResponse],
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload course catalog file",
+)
+async def upload_course_catalog(
+    file: UploadFile = File(...),
+    _: User = Depends(get_current_admin_user),
+    service: CourseCatalogService = Depends(get_course_catalog_service),
+):
+    result = await service.upload(file)
+    return ApiResponse(data=result)
+
 
 @router.get(
     "/catalog",
@@ -84,19 +111,33 @@ async def list_catalog(
     academic_level: str | None = Query(default=None, description="Filter by academic level, e.g. Undergraduate"),
     term: str | None = Query(default=None, description="Filter by term availability, e.g. Fall, Spring, Summer"),
     level_prefix: str | None = Query(default=None, description="Filter by course level prefix: '1' for 100-level, '2' for 200-level, etc."),
-    _: User = Depends(get_current_user),
+    eligible_only: bool = Query(default=False, description="Only return courses the user is eligible for"),
+    has_priority: bool = Query(default=False, description="Only return courses where the user has a registration priority"),
+    current_user: User = Depends(get_current_user),
     service: CourseCatalogService = Depends(get_course_catalog_service),
 ):
-    courses, total = await service.list_courses(
-        skip=skip,
-        limit=limit,
-        search=q,
-        department=department,
-        school=school,
-        academic_level=academic_level,
-        term=term,
-        level_prefix=level_prefix,
-    )
+    params = {"skip": skip, "limit": limit, "search": q}
+    user_major = getattr(current_user, "major", None)
+    optional_params = {
+        "department": department,
+        "school": school,
+        "academic_level": academic_level,
+        "term": term,
+        "level_prefix": level_prefix,
+    }
+    for key, value in optional_params.items():
+        if value is not None:
+            params[key] = value
+    if eligible_only:
+        params["eligible_only"] = True
+        params["user_id"] = current_user.id
+    if has_priority:
+        params["has_priority"] = True
+        params["user_id"] = current_user.id
+    if user_major is not None:
+        params["user_major"] = user_major
+
+    courses, total = await service.list_courses(**params)
     return ApiResponse(data=courses, meta={"total": total, "skip": skip, "limit": limit})
 
 
@@ -163,3 +204,121 @@ async def upload_gpa_stats(
     """
     result = await service.upload(file, term, year)
     return ApiResponse(data=result)
+
+
+# ---------------------------------------------------------------------------
+# Requirements upload
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/requirements/upload",
+    response_model=ApiResponse[RequirementsUploadResponse],
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload Course Requirements PDF to update prerequisites/corequisites — admin only",
+)
+async def upload_course_requirements(
+    file: UploadFile = File(...),
+    term: str = Query(..., min_length=1, description="Semester term, e.g. Fall"),
+    year: int = Query(..., ge=2000, description="Semester year, e.g. 2026"),
+    _: User = Depends(get_current_admin_user),
+    service: CourseRequirementsService = Depends(get_course_requirements_service),
+):
+    """
+    Accepts the Course Requirements and Registration Priorities PDF.
+    Parses prerequisite and corequisite columns and upserts them into
+    the courses table.  The course catalog must already be uploaded.
+    """
+    result = await service.upload(file, term, year)
+    return ApiResponse(data=result)
+
+
+# ---------------------------------------------------------------------------
+# Eligibility
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/catalog/{course_id}/eligibility",
+    response_model=ApiResponse[EligibilityResponse],
+    summary="Check if the current user can register for a course",
+)
+async def check_eligibility(
+    course_id: int,
+    current_user: User = Depends(get_current_user),
+    service: CourseEligibilityService = Depends(get_course_eligibility_service),
+):
+    """
+    Returns whether the authenticated user satisfies all prerequisites
+    (must be PASSED with the required grade) and corequisites
+    (must be PASSED or IN_PROGRESS) for the given course.
+    """
+    result = await service.check_eligibility(course_id, current_user.id)
+    return ApiResponse(data=result)
+
+
+# ---------------------------------------------------------------------------
+# Reviews
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/catalog/{course_id}/reviews",
+    response_model=ApiResponse[ReviewsPage],
+    summary="List reviews for a course",
+)
+async def list_reviews(
+    course_id: int,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
+    _: User = Depends(get_current_user),
+    service: CourseReviewService = Depends(get_course_review_service),
+):
+    page = await service.list_reviews(course_id, skip, limit)
+    return ApiResponse(data=page)
+
+
+@router.post(
+    "/catalog/{course_id}/reviews",
+    response_model=ApiResponse[ReviewResponse],
+    status_code=status.HTTP_201_CREATED,
+    summary="Submit a review for a course",
+)
+async def create_review(
+    course_id: int,
+    body: ReviewCreate,
+    current_user: User = Depends(get_current_user),
+    service: CourseReviewService = Depends(get_course_review_service),
+):
+    review = await service.create_review(course_id, current_user.id, body)
+    return ApiResponse(data=review)
+
+
+@router.put(
+    "/catalog/{course_id}/reviews/{review_id}",
+    response_model=ApiResponse[ReviewResponse],
+    summary="Update your review for a course",
+)
+async def update_review(
+    course_id: int,
+    review_id: int,
+    body: ReviewUpdate,
+    current_user: User = Depends(get_current_user),
+    service: CourseReviewService = Depends(get_course_review_service),
+):
+    review = await service.update_review(course_id, review_id, current_user.id, body)
+    return ApiResponse(data=review)
+
+
+@router.delete(
+    "/catalog/{course_id}/reviews/{review_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete your review for a course",
+)
+async def delete_review(
+    course_id: int,
+    review_id: int,
+    current_user: User = Depends(get_current_user),
+    service: CourseReviewService = Depends(get_course_review_service),
+):
+    await service.delete_review(course_id, review_id, current_user.id)

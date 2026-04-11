@@ -1,18 +1,19 @@
 import re
 
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from nutrack.courses.models import Course, CourseGpaStats, CourseOffering
+from nutrack.courses.models import Course, CourseGpaStats, CourseOffering, CourseReview
+from nutrack.database import BaseRepository
 from nutrack.enrollments.models import Enrollment, EnrollmentStatus
-from nutrack.shared.db.base_repository import BaseRepository
 
 # ---------------------------------------------------------------------------
 # Section helpers
 # ---------------------------------------------------------------------------
 
 _RECITATION_TYPES = frozenset({"R", "LAB", "LB", "PLB", "TUT", "T"})
+_TERM_ORDER = {"Spring": 1, "Summer": 2, "Fall": 3}
 
 
 def _section_num(section: str | None) -> str:
@@ -102,6 +103,14 @@ def _apply_catalog_filters(
         # level_prefix is the leading digit: "1" filters 100-level, "2" for 200, etc.
         stmt = stmt.where(Course.level.like(f"{level_prefix}%"))
     return stmt
+
+
+def _term_rank(term: str) -> int:
+    return _TERM_ORDER.get(term, 0)
+
+
+def _rounded(value: float | None) -> float | None:
+    return None if value is None else round(float(value), 2)
 
 
 class CourseRepository(BaseRepository[Course]):
@@ -244,6 +253,25 @@ class CourseRepository(BaseRepository[Course]):
         result = await self.session.execute(stmt)
         return [f"{row.term} {row.year}" for row in result]
 
+    async def get_user_course_history(self, user_id: int) -> list[dict]:
+        stmt = (
+            select(
+                Course.code,
+                Course.level,
+                Enrollment.grade,
+                Enrollment.grade_points,
+                Enrollment.status,
+                Enrollment.term,
+                Enrollment.year,
+            )
+            .select_from(Enrollment)
+            .join(CourseOffering, Enrollment.course_id == CourseOffering.id)
+            .join(Course, CourseOffering.course_id == Course.id)
+            .where(Enrollment.user_id == user_id)
+        )
+        result = await self.session.execute(stmt)
+        return [dict(row) for row in result.mappings().all()]
+
 
 class CourseOfferingRepository(BaseRepository[CourseOffering]):
     def __init__(self, session: AsyncSession):
@@ -299,6 +327,35 @@ class CourseOfferingRepository(BaseRepository[CourseOffering]):
         stmt = stmt.limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    async def get_latest_offerings(self, course_id: int) -> list[CourseOffering]:
+        offerings = await self.get_latest_offerings_batch([course_id])
+        return offerings.get(course_id, [])
+
+    async def get_latest_offerings_batch(
+        self,
+        course_ids: list[int],
+    ) -> dict[int, list[CourseOffering]]:
+        if not course_ids:
+            return {}
+        stmt = select(CourseOffering).where(CourseOffering.course_id.in_(course_ids))
+        stmt = stmt.order_by(
+            CourseOffering.course_id,
+            CourseOffering.year.desc(),
+            CourseOffering.section,
+        )
+        result = await self.session.execute(stmt)
+        latest: dict[int, tuple[int, int, str]] = {}
+        offerings: dict[int, list[CourseOffering]] = {}
+        for offering in result.scalars().all():
+            key = (offering.year, _term_rank(offering.term), offering.term)
+            if offering.course_id not in latest:
+                latest[offering.course_id] = key
+                offerings[offering.course_id] = [offering]
+                continue
+            if key == latest[offering.course_id]:
+                offerings[offering.course_id].append(offering)
+        return offerings
 
 
 class CourseGpaStatsRepository(BaseRepository[CourseGpaStats]):
@@ -433,3 +490,62 @@ class CourseGpaStatsRepository(BaseRepository[CourseGpaStats]):
             row["faculty"] = faculty_lookup.get(key)
 
         return rows
+
+
+class CourseReviewRepository(BaseRepository[CourseReview]):
+    def __init__(self, session: AsyncSession):
+        super().__init__(session, CourseReview)
+
+    async def get_by_course(
+        self,
+        course_id: int,
+        skip: int,
+        limit: int,
+    ) -> list[CourseReview]:
+        stmt = select(CourseReview).options(joinedload(CourseReview.user))
+        stmt = stmt.where(CourseReview.course_id == course_id)
+        stmt = stmt.order_by(CourseReview.created_at.desc())
+        stmt = stmt.offset(skip).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_by_course(self, course_id: int) -> int:
+        stmt = select(func.count()).where(CourseReview.course_id == course_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
+
+    async def get_avg_ratings(self, course_id: int) -> dict[str, float | None]:
+        stmt = select(
+            func.avg(CourseReview.overall_rating),
+            func.avg(CourseReview.difficulty),
+            func.avg(CourseReview.informativeness),
+            func.avg(CourseReview.gpa_boost),
+            func.avg(CourseReview.workload),
+        ).where(CourseReview.course_id == course_id)
+        result = await self.session.execute(stmt)
+        averages = result.one()
+        return {
+            "avg_overall_rating": _rounded(averages[0]),
+            "avg_difficulty": _rounded(averages[1]),
+            "avg_informativeness": _rounded(averages[2]),
+            "avg_gpa_boost": _rounded(averages[3]),
+            "avg_workload": _rounded(averages[4]),
+        }
+
+    async def get_by_user_and_course(
+        self,
+        user_id: int,
+        course_id: int,
+    ) -> CourseReview | None:
+        stmt = select(CourseReview).where(
+            CourseReview.user_id == user_id,
+            CourseReview.course_id == course_id,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_by_id_with_user(self, review_id: int) -> CourseReview | None:
+        stmt = select(CourseReview).options(joinedload(CourseReview.user))
+        stmt = stmt.where(CourseReview.id == review_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()

@@ -6,10 +6,14 @@ from nutrack.courses.repository import (
     CourseGpaStatsRepository,
     CourseOfferingRepository,
     CourseRepository,
+    CourseReviewRepository,
 )
 from nutrack.courses.service import (
     CourseCatalogService,
+    CourseEligibilityService,
     CourseGpaStatsService,
+    CourseRequirementsService,
+    CourseReviewService,
     CourseScheduleService,
     CourseSearchService,
     CourseStatsService,
@@ -40,6 +44,7 @@ async def get_course_catalog_service(
     return CourseCatalogService(
         course_repository=CourseRepository(session),
         gpa_stats_repository=CourseGpaStatsRepository(session),
+        offering_repository=CourseOfferingRepository(session),
     )
 
 
@@ -55,4 +60,25 @@ async def get_course_gpa_stats_service(
     return CourseGpaStatsService(
         course_repository=CourseRepository(session),
         gpa_stats_repository=CourseGpaStatsRepository(session),
+    )
+
+
+async def get_course_requirements_service(
+    session: AsyncSession = Depends(get_async_session),
+) -> CourseRequirementsService:
+    return CourseRequirementsService(course_repository=CourseRepository(session))
+
+
+async def get_course_eligibility_service(
+    session: AsyncSession = Depends(get_async_session),
+) -> CourseEligibilityService:
+    return CourseEligibilityService(course_repository=CourseRepository(session))
+
+
+async def get_course_review_service(
+    session: AsyncSession = Depends(get_async_session),
+) -> CourseReviewService:
+    return CourseReviewService(
+        course_repository=CourseRepository(session),
+        review_repository=CourseReviewRepository(session),
     )

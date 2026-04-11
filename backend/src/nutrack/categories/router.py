@@ -8,7 +8,7 @@ from nutrack.categories.schemas import (
     UpdateCategoryRequest,
 )
 from nutrack.categories.service import CategoryService
-from nutrack.shared.api.response import ApiResponse
+from nutrack.utils import ApiResponse
 from nutrack.users.models import User
 
 router = APIRouter(tags=["categories"])

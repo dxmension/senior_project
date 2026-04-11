@@ -6,7 +6,7 @@ from nutrack.auth.dependencies import get_current_user
 from nutrack.calendar.dependencies import get_calendar_service
 from nutrack.calendar.schemas import CalendarEntry
 from nutrack.calendar.service import CalendarService
-from nutrack.shared.api.response import ApiResponse
+from nutrack.utils import ApiResponse
 from nutrack.users.models import User
 
 router = APIRouter(tags=["calendar"])

@@ -3,8 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, load_only
 
 from nutrack.courses.models import Course, CourseOffering
+from nutrack.database import BaseRepository
 from nutrack.enrollments.models import Enrollment, EnrollmentStatus
-from nutrack.shared.db.base_repository import BaseRepository
 
 
 def course_offering_loader():

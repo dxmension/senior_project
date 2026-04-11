@@ -1,4 +1,6 @@
 from fastapi import APIRouter
+
+from nutrack.config import settings
 from nutrack.assessments.router import router as assessments_router
 from nutrack.dashboard.router import router as dashboard_router
 from nutrack.admin.router import router as admin_router
@@ -15,7 +17,7 @@ from nutrack.study.router import router as study_router
 from nutrack.transcripts.router import router as transcripts_router
 from nutrack.users.router import router as users_router
 
-api_router = APIRouter(prefix="/api/v1")
+api_router = APIRouter(prefix=settings.API_V1_PREFIX)
 
 api_router.include_router(auth_router)
 api_router.include_router(users_router)

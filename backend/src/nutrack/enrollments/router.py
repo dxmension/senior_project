@@ -9,7 +9,7 @@ from nutrack.enrollments.schemas import (
     EnrollmentItemResponse,
 )
 from nutrack.enrollments.service import EnrollmentService
-from nutrack.shared.api.response import ApiResponse
+from nutrack.utils import ApiResponse
 from nutrack.users.models import User
 
 router = APIRouter(prefix="/enrollments", tags=["enrollments"])

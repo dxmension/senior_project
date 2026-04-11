@@ -1,8 +1,9 @@
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
+from nutrack.enrollments.schemas import EnrollmentItemResponse
 
-from nutrack.enrollments.schemas import EnrollmentItemResponse as EnrollmentResponse
+EnrollmentResponse = EnrollmentItemResponse
 
 
 class UserProfileResponse(BaseModel):
@@ -19,7 +20,7 @@ class UserProfileResponse(BaseModel):
     total_credits_earned: int | None = None
     total_credits_enrolled: int | None = None
     is_onboarded: bool
-    is_admin: bool
+    is_admin: bool = False
     created_at: datetime
 
 

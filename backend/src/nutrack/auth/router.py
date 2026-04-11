@@ -10,7 +10,7 @@ from nutrack.auth.schemas import (
 from nutrack.auth.service import AuthService
 from nutrack.auth.dependencies import get_current_user
 from nutrack.auth.dependencies_services import get_auth_service
-from nutrack.shared.api.response import ApiResponse
+from nutrack.utils import ApiResponse
 from nutrack.users.models import User
 
 router = APIRouter(prefix="/auth", tags=["auth"])

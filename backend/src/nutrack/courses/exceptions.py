@@ -12,6 +12,15 @@ class CourseCatalogFileError(AppException):
         )
 
 
+class CourseRequirementsFileError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(
+            message=message,
+            status_code=422,
+            error_code="COURSE_REQUIREMENTS_FILE_ERROR",
+        )
+
+
 class CourseNotFoundError(AppException):
     def __init__(self) -> None:
         super().__init__(
@@ -57,6 +66,15 @@ class CourseGpaStatsParsingError(AppException):
         )
 
 
+class CourseRequirementsParsingError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(
+            message=message,
+            status_code=422,
+            error_code="COURSE_REQUIREMENTS_PARSE_ERROR",
+        )
+
+
 class CourseScheduleParsingError(AppException):
     def __init__(
         self,
@@ -68,4 +86,40 @@ class CourseScheduleParsingError(AppException):
             status_code=422,
             error_code="COURSE_SCHEDULE_PARSE_ERROR",
             details=details,
+        )
+
+
+class ReviewNotFoundError(AppException):
+    def __init__(self) -> None:
+        super().__init__(
+            message="Review not found",
+            status_code=404,
+            error_code="REVIEW_NOT_FOUND",
+        )
+
+
+class ReviewAlreadyExistsError(AppException):
+    def __init__(self) -> None:
+        super().__init__(
+            message="You have already reviewed this course",
+            status_code=409,
+            error_code="REVIEW_ALREADY_EXISTS",
+        )
+
+
+class ReviewForbiddenError(AppException):
+    def __init__(self) -> None:
+        super().__init__(
+            message="You can only modify your own reviews",
+            status_code=403,
+            error_code="REVIEW_FORBIDDEN",
+        )
+
+
+class ReviewInappropriateContentError(AppException):
+    def __init__(self) -> None:
+        super().__init__(
+            message="Your review contains inappropriate language. Please revise your comment.",
+            status_code=422,
+            error_code="REVIEW_INAPPROPRIATE_CONTENT",
         )
