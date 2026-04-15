@@ -13,6 +13,15 @@ from nutrack.admin.schemas import (
 )
 from nutrack.admin.service import AdminService
 from nutrack.auth.dependencies import get_current_admin_user
+from nutrack.study.dependencies import get_study_service
+from nutrack.study.models import MaterialCurationStatus, MaterialUploadStatus
+from nutrack.study.schemas import (
+    AdminMaterialUploadResponse,
+    MaterialUploadResponse,
+    PublishMaterialRequest,
+    SharedMaterialResponse,
+)
+from nutrack.study.service import StudyService
 from nutrack.utils import ApiResponse
 from nutrack.users.models import User
 
@@ -143,3 +152,76 @@ async def update_course(
         description=update_data.description,
     )
     return ApiResponse(data=course)
+
+
+@router.get(
+    "/materials/uploads",
+    response_model=ApiResponse[list[AdminMaterialUploadResponse]],
+)
+async def list_material_uploads(
+    course_id: int | None = Query(default=None, ge=1),
+    user_id: int | None = Query(default=None, ge=1),
+    upload_status: MaterialUploadStatus | None = Query(default=None),
+    curation_status: MaterialCurationStatus | None = Query(default=None),
+    _: User = Depends(get_current_admin_user),
+    service: StudyService = Depends(get_study_service),
+):
+    uploads = await service.list_admin_uploads(
+        course_id=course_id,
+        user_id=user_id,
+        upload_status=upload_status,
+        curation_status=curation_status,
+    )
+    return ApiResponse(data=uploads)
+
+
+@router.post(
+    "/materials/uploads/{upload_id}/publish",
+    response_model=ApiResponse[SharedMaterialResponse],
+)
+async def publish_material_upload(
+    upload_id: int,
+    body: PublishMaterialRequest,
+    admin: User = Depends(get_current_admin_user),
+    service: StudyService = Depends(get_study_service),
+):
+    entry = await service.publish_upload(
+        admin.id,
+        upload_id,
+        body.title,
+        body.week,
+    )
+    return ApiResponse(data=entry)
+
+
+@router.post("/materials/uploads/{upload_id}/reject", response_model=ApiResponse)
+async def reject_material_upload(
+    upload_id: int,
+    _: User = Depends(get_current_admin_user),
+    service: StudyService = Depends(get_study_service),
+):
+    result = await service.reject_upload(upload_id)
+    return ApiResponse(data=result)
+
+
+@router.post(
+    "/materials/uploads/{upload_id}/unpublish",
+    response_model=ApiResponse[MaterialUploadResponse],
+)
+async def unpublish_material_upload(
+    upload_id: int,
+    _: User = Depends(get_current_admin_user),
+    service: StudyService = Depends(get_study_service),
+):
+    upload = await service.unpublish_upload(upload_id)
+    return ApiResponse(data=upload)
+
+
+@router.delete("/materials/uploads/{upload_id}", response_model=ApiResponse)
+async def delete_material_upload(
+    upload_id: int,
+    _: User = Depends(get_current_admin_user),
+    service: StudyService = Depends(get_study_service),
+):
+    result = await service.delete_upload(upload_id)
+    return ApiResponse(data=result)

@@ -1,86 +1,57 @@
+name: nutrack
+
+x-runtime-environment: &runtime-environment
+  PYTHONPATH: /app/src
+  DATABASE_URL: ${DATABASE_URL}
+  SYNC_DATABASE_URL: ${SYNC_DATABASE_URL}
+  REDIS_URL: ${REDIS_URL}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+  GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+  JWT_SECRET: ${JWT_SECRET}
+  AWS_SECRET_KEY: ${AWS_SECRET_KEY}
+  AWS_ACCESS_KEY: ${AWS_ACCESS_KEY}
+  AWS_BUCKET_NAME: ${AWS_BUCKET_NAME}
+  AWS_REGION: ${AWS_REGION}
+  AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL}
+  AWS_PUBLIC_ENDPOINT_URL: ${AWS_PUBLIC_ENDPOINT_URL}
+  AWS_S3_FORCE_PATH_STYLE: ${AWS_S3_FORCE_PATH_STYLE}
+  CELERY_BROKER_URL: ${CELERY_BROKER_URL}
+  CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+  OPENAI_API_KEY: ${OPENAI_API_KEY}
+
+x-migration-environment: &migration-environment
+  <<: *runtime-environment
+
+x-backend-service: &backend-service
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+  working_dir: /app
+  environment: *runtime-environment
+  networks:
+    - app-network
+
 services:
   db:
     image: postgres:15-alpine
     container_name: postgres_db
-    restart: always
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: qwerty12345
-      POSTGRES_DB: senior_project
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - 5434:5432
+      - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - app-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
-
-  backend:
-    container_name: backend_app
-    restart: always
-    build:
-      dockerfile: Dockerfile
-      context: ./backend
-    env_file:
-      - ./backend/.env
-    volumes:
-      - ./backend:/app
-    ports:
-      - 8000:8000
-    depends_on:
-      db:
-        condition: service_healthy  
-      redis:
-        condition: service_healthy
-    networks:
-      - app-network
-    command: sh -c "uv run alembic upgrade head && uv run uvicorn --app-dir src nutrack.main:app --host 0.0.0.0 --port 8000 --reload --loop asyncio"
-
-  # celery_worker:
-  #   container_name: celery_worker
-  #   restart: always
-  #   build:
-  #     dockerfile: Dockerfile
-  #     context: ./backend
-  #   env_file:
-  #     - ./backend/.env
-  #   volumes:
-  #     - ./backend:/app
-  #   depends_on:
-  #     db:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #     backend:
-  #       condition: service_started
-  #   networks:
-  #     - app-network
-  #   command: uv run celery -A nutrack.tasks.celery_app worker -l info -c 2
-
-  # celery_beat:
-  #   container_name: celery_beat
-  #   restart: always
-  #   build:
-  #     dockerfile: Dockerfile
-  #     context: ./backend
-  #   env_file:
-  #     - ./backend/.env
-  #   volumes:
-  #     - ./backend:/app
-  #   depends_on:
-  #     db:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #     backend:
-  #       condition: service_started
-  #   networks:
-  #     - app-network
-  #   command: uv run celery -A nutrack.tasks.celery_app beat -l info
 
   redis:
     image: redis:7-alpine
@@ -98,23 +69,117 @@ services:
       timeout: 3s
       retries: 5
 
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: rustfs_storage
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      RUSTFS_ACCESS_KEY: ${AWS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${AWS_SECRET_KEY}
+      RUSTFS_CONSOLE_ENABLE: "true"
+    volumes:
+      - rustfs_data:/data
+    command: ["/data"]
+    networks:
+      - app-network
+
+  migrate:
+    <<: *backend-service
+    container_name: backend_migrate
+    restart: "no"
+    environment: *migration-environment
+    command: ["uv", "run", "alembic", "upgrade", "head"]
+    volumes:
+      - ./backend:/app
+      - migrate_venv:/app/.venv
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *backend-service
+    container_name: backend_app
+    restart: unless-stopped
+    command:
+      [
+        "uv",
+        "run",
+        "uvicorn",
+        "--app-dir",
+        "src",
+        "nutrack.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload",
+        "--loop",
+        "asyncio",
+      ]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - api_venv:/app/.venv
+      - material_uploads:/tmp/material_uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rustfs:
+        condition: service_started
+
+  worker:
+    <<: *backend-service
+    container_name: celery_worker
+    restart: unless-stopped
+    command:
+      [
+        "uv",
+        "run",
+        "celery",
+        "--workdir",
+        "src",
+        "-A",
+        "nutrack.celery_app:celery_app",
+        "worker",
+        "-l",
+        "info",
+        "-c",
+        "2",
+      ]
+    volumes:
+      - ./backend:/app
+      - worker_venv:/app/.venv
+      - material_uploads:/tmp/material_uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rustfs:
+        condition: service_started
 
   frontend:
     container_name: frontend_app
-    restart: always
+    restart: unless-stopped
     build:
-      dockerfile: Dockerfile
       context: ./frontend
+      dockerfile: Dockerfile
     volumes:
       - ./frontend:/app
       - /app/node_modules
     ports:
-      - 3000:3000
+      - "3000:3000"
     depends_on:
-      - backend
+      api:
+        condition: service_started
     networks:
       - app-network
-
 
 networks:
   app-network:
@@ -123,3 +188,8 @@ networks:
 volumes:
   postgres_data:
   redis_data:
+  rustfs_data:
+  material_uploads:
+  migrate_venv:
+  api_venv:
+  worker_venv:

@@ -27,7 +27,12 @@ class Settings(BaseSettings):
     AWS_SECRET_KEY: str
     AWS_ACCESS_KEY: str
     AWS_BUCKET_NAME: str = ""
-    AWS_REGION: str = ""
+    AWS_REGION: str = "us-east-1"
+    AWS_ENDPOINT_URL: str = ""
+    AWS_PUBLIC_ENDPOINT_URL: str = ""
+    AWS_S3_FORCE_PATH_STYLE: bool = True
+    MATERIAL_UPLOAD_STAGING_DIR: str = "/tmp/material_uploads"
+    MATERIAL_PRESIGNED_URL_TTL_SECONDS: int = 900
 
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"

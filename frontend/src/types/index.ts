@@ -360,7 +360,8 @@ export interface CalendarEntry {
   color: string | null;
   category_name: string | null;
   source_meta: Record<string, unknown>;
-=======
+}
+
 export interface UserListItem {
   id: number;
   email: string;
@@ -413,4 +414,73 @@ export interface CourseListItem {
   ects: number;
   department: string | null;
   school: string | null;
+}
 
+export type MaterialUploadStatus =
+  | "queued"
+  | "uploading"
+  | "completed"
+  | "failed";
+
+export type MaterialCurationStatus =
+  | "not_requested"
+  | "pending"
+  | "published"
+  | "rejected";
+
+export interface StudyMaterialUpload {
+  id: number;
+  course_id: number;
+  course_code: string;
+  course_title: string;
+  week: number;
+  original_filename: string;
+  content_type: string;
+  file_size_bytes: number;
+  upload_status: MaterialUploadStatus;
+  curation_status: MaterialCurationStatus;
+  publish_requested: boolean;
+  error_message: string | null;
+  is_published: boolean;
+  download_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SharedCourseMaterial {
+  id: number;
+  upload_id: number;
+  course_id: number;
+  course_code: string;
+  course_title: string;
+  week: number;
+  title: string;
+  original_filename: string;
+  content_type: string;
+  file_size_bytes: number;
+  download_url: string | null;
+  is_owned_by_current_user: boolean;
+  published_at: string;
+}
+
+export interface AdminMaterialUpload {
+  id: number;
+  course_id: number;
+  course_code: string;
+  course_title: string;
+  uploader_id: number;
+  uploader_name: string;
+  uploader_email: string;
+  user_week: number;
+  shared_week: number | null;
+  shared_title: string | null;
+  original_filename: string;
+  content_type: string;
+  file_size_bytes: number;
+  upload_status: MaterialUploadStatus;
+  curation_status: MaterialCurationStatus;
+  error_message: string | null;
+  download_url: string | null;
+  created_at: string;
+  updated_at: string;
+}

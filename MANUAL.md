@@ -19,6 +19,8 @@ docker compose up --build
 | API docs  | http://localhost:8000/docs |
 | Postgres  | localhost:5434             |
 | Redis     | localhost:6380             |
+| RustFS S3 | http://localhost:9000      |
+| RustFS UI | http://localhost:9001      |
 
 On first start the backend automatically runs `alembic upgrade head` before starting uvicorn.
 
@@ -62,10 +64,15 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 REFRESH_TOKEN_EXPIRE_DAYS=30
 
 # AWS S3 (optional, leave blank to disable file uploads)
-AWS_ACCESS_KEY=
-AWS_SECRET_KEY=
-AWS_BUCKET_NAME=
-AWS_REGION=
+AWS_ACCESS_KEY=rustfsadmin
+AWS_SECRET_KEY=rustfsadmin
+AWS_BUCKET_NAME=course-materials
+AWS_REGION=us-east-1
+AWS_ENDPOINT_URL=http://rustfs:9000
+AWS_PUBLIC_ENDPOINT_URL=http://localhost:9000
+AWS_S3_FORCE_PATH_STYLE=true
+MATERIAL_UPLOAD_STAGING_DIR=/tmp/material_uploads
+MATERIAL_PRESIGNED_URL_TTL_SECONDS=900
 
 # OpenAI (optional)
 OPENAI_API_KEY=
