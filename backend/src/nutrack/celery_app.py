@@ -1,6 +1,7 @@
 from celery import Celery
 
 from nutrack.config import settings
+from nutrack.database import load_model_modules
 
 celery_app = Celery("NU Learning")
 
@@ -19,4 +20,9 @@ celery_app.config_from_object(
     }
 )
 
-celery_app.autodiscover_tasks(["nutrack.tasks"])
+# Worker tasks can touch ORM models without importing the web app, so
+# register all domain models before task execution configures mappers.
+load_model_modules()
+
+# Import task modules explicitly so workers register application tasks on boot.
+from nutrack.tasks import materials, parse_transcript  # noqa: F401,E402

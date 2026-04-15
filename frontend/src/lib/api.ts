@@ -120,10 +120,29 @@ class ApiClient {
   }
 
   async uploadFile<T>(endpoint: string, file: File): Promise<T> {
-    const token = this.getAccessToken();
     const formData = new FormData();
     formData.append("file", file);
+    return this.requestForm<T>(endpoint, formData);
+  }
 
+  async uploadFiles<T>(
+    endpoint: string,
+    files: File[],
+    fields: Record<string, string> = {}
+  ): Promise<T> {
+    const formData = new FormData();
+    Object.entries(fields).forEach(([key, value]) => {
+      formData.append(key, value);
+    });
+    files.forEach((file) => formData.append("files", file));
+    return this.requestForm<T>(endpoint, formData);
+  }
+
+  private async requestForm<T>(
+    endpoint: string,
+    formData: FormData
+  ): Promise<T> {
+    const token = this.getAccessToken();
     const headers: Record<string, string> = {};
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;

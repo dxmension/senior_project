@@ -12,7 +12,6 @@ from nutrack.courses.dependencies import (
     get_course_stats_service,
 )
 from nutrack.courses.schemas import (
-    CourseCatalogUploadResponse,
     CourseDetailResponse,
     CourseScheduleUploadResponse,
     CourseSearchItem,
@@ -80,21 +79,6 @@ async def upload_course_schedule(
 # ---------------------------------------------------------------------------
 # Catalog (persistent course definitions)
 # ---------------------------------------------------------------------------
-
-
-@router.post(
-    "/catalog/upload",
-    response_model=ApiResponse[CourseCatalogUploadResponse],
-    status_code=status.HTTP_201_CREATED,
-    summary="Upload course catalog file",
-)
-async def upload_course_catalog(
-    file: UploadFile = File(...),
-    _: User = Depends(get_current_admin_user),
-    service: CourseCatalogService = Depends(get_course_catalog_service),
-):
-    result = await service.upload(file)
-    return ApiResponse(data=result)
 
 
 @router.get(

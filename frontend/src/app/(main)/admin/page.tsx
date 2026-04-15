@@ -14,9 +14,15 @@ import { UserManagement } from "@/components/admin/user-management";
 import { DatabaseManagement } from "@/components/admin/database-management";
 import { Analytics } from "@/components/admin/analytics";
 import { CourseManagement } from "@/components/admin/course-management";
+import { MaterialsManagement } from "@/components/admin/materials-management";
 import { Shield, AlertCircle } from "lucide-react";
 
-type TabType = "users" | "courses" | "database" | "analytics" | "comments";
+type TabType =
+  | "users"
+  | "courses"
+  | "materials"
+  | "database"
+  | "analytics";
 
 export default function AdminPage() {
   const user = useAuthStore((state) => state.user);
@@ -104,7 +110,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="p-6 max-w-[1600px] mx-auto">
+    <div className="mx-auto max-w-[1600px] overflow-x-hidden p-6">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-text-primary mb-2">
           Admin Panel
@@ -114,7 +120,7 @@ export default function AdminPage() {
         </p>
       </div>
 
-      <div className="mb-6 flex gap-2 border-b border-border-primary">
+      <div className="mb-6 flex flex-wrap gap-x-3 gap-y-2 border-b border-border-primary pb-2">
         <TabButton
           active={activeTab === "users"}
           onClick={() => setActiveTab("users")}
@@ -128,6 +134,12 @@ export default function AdminPage() {
           Course Management
         </TabButton>
         <TabButton
+          active={activeTab === "materials"}
+          onClick={() => setActiveTab("materials")}
+        >
+          Materials
+        </TabButton>
+        <TabButton
           active={activeTab === "database"}
           onClick={() => setActiveTab("database")}
         >
@@ -139,12 +151,6 @@ export default function AdminPage() {
         >
           Analytics & Reporting
         </TabButton>
-        <TabButton
-          active={activeTab === "comments"}
-          onClick={() => setActiveTab("comments")}
-        >
-          Content Management
-        </TabButton>
       </div>
 
       <div className="mt-6">
@@ -154,22 +160,14 @@ export default function AdminPage() {
         {activeTab === "courses" && (
           <CourseManagement onUpdate={loadData} />
         )}
+        {activeTab === "materials" && (
+          <MaterialsManagement refreshKey={0} />
+        )}
         {activeTab === "database" && (
           <DatabaseManagement stats={stats} health={health} />
         )}
         {activeTab === "analytics" && (
           <Analytics analytics={analytics} stats={stats} />
-        )}
-        {activeTab === "comments" && (
-          <div className="glass-card p-8 text-center">
-            <h2 className="text-xl font-semibold text-text-primary mb-2">
-              Coming Soon
-            </h2>
-            <p className="text-text-secondary">
-              Content management features will be available once comments are
-              implemented.
-            </p>
-          </div>
         )}
       </div>
     </div>
@@ -188,7 +186,7 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 font-medium text-sm transition-colors border-b-2 ${
+      className={`border-b-2 px-2 py-2 text-sm font-medium transition-colors ${
         active
           ? "border-accent-green text-accent-green"
           : "border-transparent text-text-secondary hover:text-text-primary"

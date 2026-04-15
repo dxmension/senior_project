@@ -15,6 +15,7 @@ MODEL_MODULES = (
     "nutrack.courses.models",
     "nutrack.enrollments.models",
     "nutrack.events.models",
+    "nutrack.study.models",
     "nutrack.transcripts.models",
     "nutrack.users.models",
 )
@@ -95,10 +96,13 @@ def get_sync_database_url() -> str:
     return settings.SYNC_DATABASE_URL
 
 
-def load_target_metadata() -> MetaData:
+def load_model_modules() -> None:
     for module_name in MODEL_MODULES:
         import_module(module_name)
 
+
+def load_target_metadata() -> MetaData:
+    load_model_modules()
     from nutrack.models import Base
 
     return Base.metadata

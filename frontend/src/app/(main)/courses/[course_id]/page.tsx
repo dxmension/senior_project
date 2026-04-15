@@ -12,6 +12,7 @@ import { Fragment, use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { AddAssessmentModal } from "@/components/courses/add-assessment-modal";
+import { CourseMaterialsPanel } from "@/components/courses/course-materials-panel";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
@@ -62,6 +63,7 @@ function formatDeadline(isoString: string): string {
 }
 
 type FilterTab = "all" | "upcoming" | "completed" | "overdue";
+type CoursePageTab = "deadlines" | "materials";
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -78,6 +80,7 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
 
   const [filter, setFilter] = useState<FilterTab>("all");
   const [modalOpen, setModalOpen] = useState(false);
+  const [pageTab, setPageTab] = useState<CoursePageTab>("deadlines");
   const [editingAssessment, setEditingAssessment] =
     useState<Assessment | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
@@ -208,7 +211,8 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
         </button>
 
         {/* Course header */}
-        <div>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-lg font-bold text-accent-green">
               {enrollment.course_code}
@@ -237,266 +241,270 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
             <span>·</span>
             <span>{enrollment.ects} ECTS</span>
           </div>
+          </div>
         </div>
 
-        {/* Stats row */}
-        <div className="grid grid-cols-3 gap-3">
-          <GlassCard padding={false} className="p-4 text-center">
-            <p className="text-2xl font-bold text-text-primary">{totalCount}</p>
-            <p className="mt-0.5 text-xs text-text-secondary">Total</p>
-          </GlassCard>
-          <GlassCard padding={false} className="p-4 text-center">
-            <p className="text-2xl font-bold text-orange-400">{upcomingCount}</p>
-            <p className="mt-0.5 text-xs text-text-secondary">⏰ Upcoming</p>
-          </GlassCard>
-          <GlassCard padding={false} className="p-4 text-center">
-            <p className="text-2xl font-bold text-red-400">{overdueCount}</p>
-            <p className="mt-0.5 text-xs text-text-secondary">⚠ Overdue</p>
-          </GlassCard>
-        </div>
-
-        {/* Assessments section */}
-        <GlassCard padding={false} className="overflow-hidden">
-          {/* Section header */}
-          <div className="flex items-center justify-between border-b border-[#2a2a2a] px-5 py-4">
-            <h2 className="text-sm font-semibold text-text-primary">
-              Deadlines &amp; Assessments
-            </h2>
+        <div className="flex gap-2 border-b border-border-primary">
+          {(["deadlines", "materials"] as const).map((tab) => (
             <button
+              key={tab}
               type="button"
-              onClick={() => {
-                setEditingAssessment(null);
-                setModalOpen(true);
-              }}
-              className="btn-secondary inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
+              onClick={() => setPageTab(tab)}
+              className={`px-4 py-2 font-medium text-sm transition-colors border-b-2 ${
+                pageTab === tab
+                  ? "border-accent-green text-accent-green"
+                  : "border-transparent text-text-secondary hover:text-text-primary"
+              }`}
             >
-              <Plus size={12} />
-              Add deadline
+              {tab === "deadlines" ? "Deadlines" : "Materials"}
             </button>
-          </div>
+          ))}
+        </div>
 
-          {/* Filter tabs */}
-          <div className="flex border-b border-[#2a2a2a]">
-            {(["all", "upcoming", "completed", "overdue"] as FilterTab[]).map(
-              (t) => (
+        {pageTab === "deadlines" ? (
+          <>
+            <div className="grid grid-cols-3 gap-3">
+              <GlassCard padding={false} className="p-4 text-center">
+                <p className="text-2xl font-bold text-text-primary">{totalCount}</p>
+                <p className="mt-0.5 text-xs text-text-secondary">Total</p>
+              </GlassCard>
+              <GlassCard padding={false} className="p-4 text-center">
+                <p className="text-2xl font-bold text-orange-400">{upcomingCount}</p>
+                <p className="mt-0.5 text-xs text-text-secondary">⏰ Upcoming</p>
+              </GlassCard>
+              <GlassCard padding={false} className="p-4 text-center">
+                <p className="text-2xl font-bold text-red-400">{overdueCount}</p>
+                <p className="mt-0.5 text-xs text-text-secondary">⚠ Overdue</p>
+              </GlassCard>
+            </div>
+
+            <GlassCard padding={false} className="overflow-hidden">
+              <div className="flex items-center justify-between border-b border-[#2a2a2a] px-5 py-4">
+                <h2 className="text-sm font-semibold text-text-primary">
+                  Deadlines &amp; Assessments
+                </h2>
                 <button
-                  key={t}
                   type="button"
-                  onClick={() => setFilter(t)}
-                  className={`px-4 py-2.5 text-xs capitalize transition-colors ${
-                    filter === t
-                      ? "border-b-2 border-accent-green text-text-primary"
-                      : "text-text-secondary hover:text-text-primary"
-                  }`}
+                  onClick={() => {
+                    setEditingAssessment(null);
+                    setModalOpen(true);
+                  }}
+                  className="btn-secondary inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
                 >
-                  {t}
+                  <Plus size={12} />
+                  Add deadline
                 </button>
-              )
-            )}
-          </div>
+              </div>
 
-          {/* Table */}
-          {assessmentsLoading ? (
-            <div className="flex justify-center py-10">
-              <Spinner />
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 py-12 text-center">
-              <p className="text-sm text-text-secondary">
-                No assessments here yet
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingAssessment(null);
-                  setModalOpen(true);
-                }}
-                className="text-xs text-accent-green transition-opacity hover:opacity-75"
-              >
-                + Add your first deadline →
-              </button>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-[#2a2a2a] text-xs text-text-secondary">
-                    <th className="px-5 py-2.5 text-left font-medium">
-                      Status
-                    </th>
-                    <th className="px-3 py-2.5 text-left font-medium">
-                      Title
-                    </th>
-                    <th className="px-3 py-2.5 text-left font-medium">Type</th>
-                    <th className="px-3 py-2.5 text-left font-medium">
-                      Deadline
-                    </th>
-                    <th className="px-3 py-2.5 text-left font-medium">
-                      Weight
-                    </th>
-                    <th className="px-3 py-2.5 text-left font-medium">
-                      Score
-                    </th>
-                    <th className="px-3 py-2.5 text-right font-medium">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((assessment) => {
-                    const isConfirmingDelete = confirmDeleteId === assessment.id;
-                    const badge = BADGE_STYLES[assessment.assessment_type];
-                    const isPast = new Date(assessment.deadline) < now;
+              <div className="flex border-b border-[#2a2a2a]">
+                {(["all", "upcoming", "completed", "overdue"] as FilterTab[]).map(
+                  (t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setFilter(t)}
+                      className={`px-4 py-2.5 text-xs capitalize transition-colors ${
+                        filter === t
+                          ? "border-b-2 border-accent-green text-text-primary"
+                          : "text-text-secondary hover:text-text-primary"
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  )
+                )}
+              </div>
 
-                    return (
-                      <Fragment key={assessment.id}>
-                        <tr
-                          className="border-b border-[#1e1e1e] transition-colors hover:bg-white/[0.02]"
-                        >
-                          {/* Status checkbox */}
-                          <td className="px-5 py-3">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                void toggleComplete(assessment.id, courseId)
-                              }
-                              className="text-text-secondary transition-colors hover:text-accent-green"
-                            >
-                              {assessment.is_completed ? (
-                                <CheckSquare size={16} className="text-accent-green" />
-                              ) : (
-                                <Square size={16} />
-                              )}
-                            </button>
-                          </td>
+              {assessmentsLoading ? (
+                <div className="flex justify-center py-10">
+                  <Spinner />
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 py-12 text-center">
+                  <p className="text-sm text-text-secondary">
+                    No assessments here yet
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingAssessment(null);
+                      setModalOpen(true);
+                    }}
+                    className="text-xs text-accent-green transition-opacity hover:opacity-75"
+                  >
+                    + Add your first deadline →
+                  </button>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-[#2a2a2a] text-xs text-text-secondary">
+                        <th className="px-5 py-2.5 text-left font-medium">
+                          Status
+                        </th>
+                        <th className="px-3 py-2.5 text-left font-medium">
+                          Title
+                        </th>
+                        <th className="px-3 py-2.5 text-left font-medium">Type</th>
+                        <th className="px-3 py-2.5 text-left font-medium">
+                          Deadline
+                        </th>
+                        <th className="px-3 py-2.5 text-left font-medium">
+                          Weight
+                        </th>
+                        <th className="px-3 py-2.5 text-left font-medium">
+                          Score
+                        </th>
+                        <th className="px-3 py-2.5 text-right font-medium">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((assessment) => {
+                        const isConfirmingDelete = confirmDeleteId === assessment.id;
+                        const badge = BADGE_STYLES[assessment.assessment_type];
+                        const isPast = new Date(assessment.deadline) < now;
 
-                          {/* Title */}
-                          <td className="max-w-[180px] px-3 py-3">
-                            <span
-                              className={`font-medium ${
-                                assessment.is_completed
-                                  ? "text-text-secondary line-through"
-                                  : "text-text-primary"
-                              }`}
-                            >
-                              {assessment.title}
-                            </span>
-                          </td>
-
-                          {/* Type badge */}
-                          <td className="px-3 py-3">
-                            <span
-                              className="inline-block rounded-md px-2 py-0.5 text-xs font-medium"
-                              style={{
-                                background: badge.bg,
-                                color: badge.text,
-                              }}
-                            >
-                              {ASSESSMENT_LABELS[assessment.assessment_type]}
-                            </span>
-                          </td>
-
-                          {/* Deadline */}
-                          <td className="px-3 py-3 text-xs">
-                            <span className="text-text-primary">
-                              {formatDeadline(assessment.deadline)}
-                            </span>
-                            <br />
-                            <span
-                              className={
-                                !assessment.is_completed && isPast
-                                  ? "text-accent-red"
-                                  : "text-text-secondary"
-                              }
-                            >
-                              {relativeTime(assessment.deadline)}
-                            </span>
-                          </td>
-
-                          {/* Weight */}
-                          <td className="px-3 py-3 text-xs text-text-secondary">
-                            {assessment.weight != null
-                              ? `${assessment.weight}%`
-                              : "—"}
-                          </td>
-
-                          {/* Score */}
-                          <td className="px-3 py-3 text-xs text-text-secondary">
-                            {assessment.score != null &&
-                            assessment.max_score != null
-                              ? `${assessment.score} / ${assessment.max_score}`
-                              : "—"}
-                          </td>
-
-                          {/* Actions */}
-                          <td className="px-3 py-3">
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingAssessment(assessment);
-                                  setModalOpen(true);
-                                }}
-                                className="rounded p-1.5 text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary"
-                                title="Edit"
-                              >
-                                <Edit2 size={13} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setConfirmDeleteId(
-                                    isConfirmingDelete ? null : assessment.id
-                                  )
-                                }
-                                className="rounded p-1.5 text-text-secondary transition-colors hover:bg-red-950/50 hover:text-red-400"
-                                title="Delete"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-
-                        {/* Inline delete confirmation */}
-                        {isConfirmingDelete && (
-                          <tr
-                            className="bg-red-950/20"
-                          >
-                            <td colSpan={7} className="px-5 py-2">
-                              <div className="flex items-center gap-3 text-xs">
-                                <span className="text-red-400">
-                                  Delete &quot;{assessment.title}&quot;?
+                        return (
+                          <Fragment key={assessment.id}>
+                            <tr className="border-b border-[#1e1e1e] transition-colors hover:bg-white/[0.02]">
+                              <td className="px-5 py-3">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void toggleComplete(assessment.id, courseId)
+                                  }
+                                  className="text-text-secondary transition-colors hover:text-accent-green"
+                                >
+                                  {assessment.is_completed ? (
+                                    <CheckSquare
+                                      size={16}
+                                      className="text-accent-green"
+                                    />
+                                  ) : (
+                                    <Square size={16} />
+                                  )}
+                                </button>
+                              </td>
+                              <td className="max-w-[180px] px-3 py-3">
+                                <span
+                                  className={`font-medium ${
+                                    assessment.is_completed
+                                      ? "text-text-secondary line-through"
+                                      : "text-text-primary"
+                                  }`}
+                                >
+                                  {assessment.title}
                                 </span>
-                                <button
-                                  type="button"
-                                  disabled={deletingId === assessment.id}
-                                  onClick={() => void handleDelete(assessment.id)}
-                                  className="rounded bg-red-600/80 px-3 py-1 text-white transition-opacity hover:opacity-80 disabled:opacity-50"
+                              </td>
+                              <td className="px-3 py-3">
+                                <span
+                                  className="inline-block rounded-md px-2 py-0.5 text-xs font-medium"
+                                  style={{
+                                    background: badge.bg,
+                                    color: badge.text,
+                                  }}
                                 >
-                                  {deletingId === assessment.id
-                                    ? "Deleting..."
-                                    : "Confirm"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setConfirmDeleteId(null)}
-                                  className="text-text-secondary hover:text-text-primary"
+                                  {ASSESSMENT_LABELS[assessment.assessment_type]}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3 text-xs">
+                                <span className="text-text-primary">
+                                  {formatDeadline(assessment.deadline)}
+                                </span>
+                                <br />
+                                <span
+                                  className={
+                                    !assessment.is_completed && isPast
+                                      ? "text-accent-red"
+                                      : "text-text-secondary"
+                                  }
                                 >
-                                  Cancel
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </GlassCard>
+                                  {relativeTime(assessment.deadline)}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3 text-xs text-text-secondary">
+                                {assessment.weight != null
+                                  ? `${assessment.weight}%`
+                                  : "—"}
+                              </td>
+                              <td className="px-3 py-3 text-xs text-text-secondary">
+                                {assessment.score != null &&
+                                assessment.max_score != null
+                                  ? `${assessment.score} / ${assessment.max_score}`
+                                  : "—"}
+                              </td>
+                              <td className="px-3 py-3">
+                                <div className="flex items-center justify-end gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingAssessment(assessment);
+                                      setModalOpen(true);
+                                    }}
+                                    className="rounded p-1.5 text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary"
+                                    title="Edit"
+                                  >
+                                    <Edit2 size={13} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setConfirmDeleteId(
+                                        isConfirmingDelete ? null : assessment.id
+                                      )
+                                    }
+                                    className="rounded p-1.5 text-text-secondary transition-colors hover:bg-red-950/50 hover:text-red-400"
+                                    title="Delete"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+
+                            {isConfirmingDelete ? (
+                              <tr className="bg-red-950/20">
+                                <td colSpan={7} className="px-5 py-2">
+                                  <div className="flex items-center gap-3 text-xs">
+                                    <span className="text-red-400">
+                                      Delete &quot;{assessment.title}&quot;?
+                                    </span>
+                                    <button
+                                      type="button"
+                                      disabled={deletingId === assessment.id}
+                                      onClick={() => void handleDelete(assessment.id)}
+                                      className="rounded bg-red-600/80 px-3 py-1 text-white transition-opacity hover:opacity-80 disabled:opacity-50"
+                                    >
+                                      {deletingId === assessment.id
+                                        ? "Deleting..."
+                                        : "Confirm"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setConfirmDeleteId(null)}
+                                      className="text-text-secondary hover:text-text-primary"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ) : null}
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </GlassCard>
+          </>
+        ) : (
+          <CourseMaterialsPanel enrollment={enrollment} />
+        )}
       </div>
 
       {/* Add / Edit modal */}
@@ -512,6 +520,7 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
           void fetchForCourse(courseId);
         }}
       />
+
     </>
   );
 }

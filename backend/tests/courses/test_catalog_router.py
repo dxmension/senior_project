@@ -1,5 +1,5 @@
 """
-Tests for catalog upload, list, detail, and stats endpoints.
+Tests for catalog list, detail, and stats endpoints.
 
 Strategy:
   - dependency_overrides replaces auth + service deps — no DB, no filesystem.
@@ -7,7 +7,6 @@ Strategy:
     stubs backed by AsyncMock.
   - Tests verify HTTP contract: status codes, response shape, field values.
 """
-import io
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -55,16 +54,6 @@ STATS = SimpleNamespace(
     terms_offered=["Spring 2024", "Fall 2024"],
 )
 
-UPLOAD_RESULT = SimpleNamespace(
-    processed_rows=50,
-    inserted_count=30,
-    updated_count=15,
-    skipped_count=5,
-    invalid_rows_count=0,
-    invalid_rows=[],
-)
-
-
 @pytest.fixture
 def admin_user():
     return SimpleNamespace(id=99, email="admin@nu.edu.kz", is_admin=True)
@@ -78,7 +67,6 @@ def regular_user():
 @pytest.fixture
 def catalog_stub():
     return SimpleNamespace(
-        upload=AsyncMock(return_value=UPLOAD_RESULT),
         list_courses=AsyncMock(return_value=([COURSE_DETAIL], 1)),
         get_course=AsyncMock(return_value=COURSE_DETAIL),
     )
@@ -89,46 +77,6 @@ def stats_stub():
     return SimpleNamespace(
         get_stats=AsyncMock(return_value=STATS),
     )
-
-
-# ---------------------------------------------------------------------------
-# Catalog upload
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_catalog_upload_returns_201(
-    client, test_app, admin_user, catalog_stub
-):
-    test_app.dependency_overrides[get_current_admin_user] = lambda: admin_user
-    test_app.dependency_overrides[get_course_catalog_service] = lambda: catalog_stub
-
-    fake_file = io.BytesIO(b"code,level,title,ects\nCSCI,151,Intro,6")
-    response = await client.post(
-        "/v1/courses/catalog/upload",
-        files={"file": ("catalog.csv", fake_file, "text/csv")},
-    )
-
-    assert response.status_code == 201
-    body = response.json()
-    assert body["ok"] is True
-    assert body["data"]["inserted_count"] == 30
-    assert body["data"]["updated_count"] == 15
-    assert body["data"]["skipped_count"] == 5
-    catalog_stub.upload.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_catalog_upload_no_auth_returns_401(client, test_app, catalog_stub):
-    test_app.dependency_overrides[get_course_catalog_service] = lambda: catalog_stub
-
-    fake_file = io.BytesIO(b"data")
-    response = await client.post(
-        "/v1/courses/catalog/upload",
-        files={"file": ("catalog.csv", fake_file, "text/csv")},
-    )
-
-    assert response.status_code == 401
 
 
 # ---------------------------------------------------------------------------
