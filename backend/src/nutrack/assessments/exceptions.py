@@ -17,3 +17,12 @@ class AssessmentNotEnrolledError(AppException):
             status_code=403,
             error_code="ASSESSMENT_NOT_ENROLLED",
         )
+
+
+class AssessmentConflictError(AppException):
+    def __init__(self) -> None:
+        super().__init__(
+            message="Assessment number already exists for this type",
+            status_code=409,
+            error_code="ASSESSMENT_CONFLICT",
+        )

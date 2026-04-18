@@ -6,6 +6,7 @@ from sqlalchemy.orm import joinedload
 
 from nutrack.assessments.models import Assessment
 from nutrack.assessments.repository import AssessmentRepository
+from nutrack.assessments.utils import assessment_label
 from nutrack.calendar.schemas import CalendarEntry, CalendarEventType
 from nutrack.courses.models import CourseOffering
 from nutrack.enrollments.models import Enrollment, EnrollmentStatus
@@ -147,7 +148,10 @@ def _entry_from_assessment(assessment: Assessment) -> CalendarEntry:
     return CalendarEntry(
         id=assessment.id,
         event_type=CalendarEventType.ASSESSMENT_DEADLINE,
-        title=assessment.title,
+        title=assessment_label(
+            assessment.assessment_type,
+            assessment.assessment_number,
+        ),
         description=None,
         start_at=assessment.deadline,
         end_at=assessment.deadline,

@@ -18,6 +18,7 @@ def make_enrollment(
     status: EnrollmentStatus = EnrollmentStatus.IN_PROGRESS,
 ):
     course = SimpleNamespace(
+        id=4,
         code="CSCI",
         level="151",
         title="Programming",
@@ -74,6 +75,7 @@ async def test_create_manual_enrollment_sets_defaults() -> None:
     assert response.grade_points is None
     assert response.term == "Fall"
     assert response.year == 2026
+    assert response.catalog_course_id == 4
     assert response.section == "2"
     assert response.meeting_time == "10:00-10:50"
     assert response.room == "6.310"

@@ -2,6 +2,7 @@
 
 import {
   ArrowLeft,
+  Brain,
   CheckSquare,
   Edit2,
   Plus,
@@ -16,8 +17,16 @@ import { CourseMaterialsPanel } from "@/components/courses/course-materials-pane
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
+import { predictedGradeBadge } from "@/lib/predicted-grade";
 import { useAssessmentsStore } from "@/stores/assessments";
-import type { ApiResponse, Assessment, AssessmentType, EnrollmentItem, UpdateAssessmentPayload } from "@/types";
+import type {
+  ApiResponse,
+  Assessment,
+  AssessmentType,
+  EnrollmentItem,
+  MockExamCourseGroup,
+  UpdateAssessmentPayload 
+} from "@/types";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -182,6 +191,14 @@ function ScoreInput({
 type FilterTab = "all" | "upcoming" | "completed" | "overdue";
 type CoursePageTab = "deadlines" | "materials";
 
+function findStudyGroup(
+  groups: MockExamCourseGroup[],
+  catalogCourseId: number | null,
+) {
+  if (catalogCourseId == null) return null;
+  return groups.find((item) => item.course_id === catalogCourseId) ?? null;
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 type PageParams = Promise<{ course_id: string }>;
@@ -202,12 +219,14 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
     useState<Assessment | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [studyGroup, setStudyGroup] = useState<MockExamCourseGroup | null>(null);
 
   const { byCourse, loadingCourseIds, fetchForCourse, toggleComplete, deleteAssessment } =
     useAssessmentsStore();
 
   const assessments = byCourse[courseId] ?? [];
   const assessmentsLoading = loadingCourseIds.has(courseId);
+  const catalogCourseId = enrollment?.catalog_course_id ?? null;
 
   // Load enrollment
   useEffect(() => {
@@ -237,6 +256,25 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
       void fetchForCourse(courseId);
     }
   }, [courseId, byCourse, fetchForCourse]);
+
+  useEffect(() => {
+    async function loadStudyGroup() {
+      if (catalogCourseId == null) {
+        setStudyGroup(null);
+        return;
+      }
+      try {
+        const response = await api.get<ApiResponse<MockExamCourseGroup[]>>(
+          "/study/mock-exams",
+        );
+        setStudyGroup(findStudyGroup(response.data ?? [], catalogCourseId));
+      } catch {
+        setStudyGroup(null);
+      }
+    }
+
+    void loadStudyGroup();
+  }, [catalogCourseId]);
 
   const now = new Date();
 
@@ -461,7 +499,7 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
                           Status
                         </th>
                         <th className="px-3 py-2.5 text-left font-medium">
-                          Title
+                          Assessment
                         </th>
                         <th className="px-3 py-2.5 text-left font-medium">Type</th>
                         <th className="px-3 py-2.5 text-left font-medium">
@@ -483,6 +521,20 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
                         const isConfirmingDelete = confirmDeleteId === assessment.id;
                         const badge = BADGE_STYLES[assessment.assessment_type];
                         const isPast = new Date(assessment.deadline) < now;
+                        const prediction = assessmentPrediction(
+                          studyGroup,
+                          assessment.assessment_type,
+                        );
+                        const predicted = predictedGradeBadge(
+                          prediction?.predicted_grade_letter ?? null,
+                          prediction?.predicted_score_pct ?? null,
+                        );
+                        const hasMockExam =
+                          ["quiz", "midterm", "final"].includes(
+                            assessment.assessment_type
+                          ) &&
+                          !assessment.is_completed &&
+                          !isPast;
 
                         return (
                           <Fragment key={assessment.id}>
@@ -562,6 +614,28 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
                               </td>
                               <td className="px-3 py-3">
                                 <div className="flex items-center justify-end gap-1">
+                                  {hasMockExam ? (
+                                    <>
+                                      <span
+                                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${predicted.badgeClass}`}
+                                      >
+                                        Predicted {predicted.letter}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => router.push(`/study/${courseId}`)}
+                                        className="inline-flex items-center gap-1 rounded-md
+                                          border border-border-primary px-2 py-1 text-[11px]
+                                          text-text-secondary transition-colors
+                                          hover:border-accent-green hover:bg-[#243111]
+                                          hover:text-accent-green"
+                                        title="Open AI mock exams"
+                                      >
+                                        <Brain size={12} />
+                                        AI Mock Exam
+                                      </button>
+                                    </>
+                                  ) : null}
                                   <button
                                     type="button"
                                     onClick={() => {

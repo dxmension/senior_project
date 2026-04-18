@@ -112,24 +112,32 @@ function splitToDisplay(iso: string): { dateText: string; timeText: string } {
 }
 
 interface FormState {
-  title: string;
   assessment_type: AssessmentType;
-  dateText: string; // DD.MM.YYYY display
-  timeText: string; // HH:MM display
+  assessment_number: string;
+  deadline: string;
   weight: string;
   max_score: string;
   description: string;
 }
 
 const EMPTY_FORM: FormState = {
-  title: "",
   assessment_type: "other",
-  dateText: "",
-  timeText: "23:59",
+  assessment_number: "",
+  deadline: "",
   weight: "",
   max_score: "",
   description: "",
 };
+
+function nextAssessmentNumber(
+  assessments: Assessment[],
+  assessmentType: AssessmentType,
+) {
+  const numbers = assessments
+    .filter((item) => item.assessment_type === assessmentType)
+    .map((item) => item.assessment_number);
+  return String(Math.max(0, ...numbers) + 1);
+}
 
 interface AddAssessmentModalProps {
   open: boolean;
@@ -150,8 +158,10 @@ export function AddAssessmentModal({
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const titleRef = useRef<HTMLInputElement>(null);
-  const { addAssessment, updateAssessment } = useAssessmentsStore();
+
+  const { addAssessment, updateAssessment, byCourse } = useAssessmentsStore();
+  const courseAssessments = byCourse[enrollment.course_id] ?? [];
+
   const isEdit = !!initialData;
 
   useEffect(() => {
@@ -159,21 +169,22 @@ export function AddAssessmentModal({
     if (initialData) {
       const { dateText, timeText } = splitToDisplay(toDatetimeLocal(initialData.deadline));
       setForm({
-        title: initialData.title,
         assessment_type: initialData.assessment_type,
-        dateText,
-        timeText,
+        assessment_number: String(initialData.assessment_number),
+        deadline: toDatetimeLocal(initialData.deadline),
         weight: initialData.weight != null ? String(initialData.weight) : "",
         max_score: initialData.max_score != null ? String(initialData.max_score) : "",
         description: initialData.description ?? "",
       });
     } else {
-      setForm(EMPTY_FORM);
+      setForm({
+        ...EMPTY_FORM,
+        assessment_number: nextAssessmentNumber(courseAssessments, "other"),
+      });
     }
     setTab("manual");
     setError(null);
-    setTimeout(() => titleRef.current?.focus(), 60);
-  }, [open, initialData]);
+  }, [courseAssessments, initialData, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -186,7 +197,7 @@ export function AddAssessmentModal({
     setForm((f) => ({
       ...f,
       assessment_type: preset.type,
-      title: preset.label,
+      assessment_number: nextAssessmentNumber(courseAssessments, preset.type),
       weight: String(preset.weight),
     }));
     setTab("manual");
@@ -216,8 +227,8 @@ export function AddAssessmentModal({
       let result: Assessment;
       if (isEdit && initialData) {
         result = await updateAssessment(initialData.id, {
-          title: form.title.trim(),
           assessment_type: form.assessment_type,
+          assessment_number: Number(form.assessment_number),
           deadline: deadlineIso,
           weight,
           max_score: maxScore,
@@ -227,7 +238,7 @@ export function AddAssessmentModal({
         result = await addAssessment({
           course_id: enrollment.course_id,
           assessment_type: form.assessment_type,
-          title: form.title.trim(),
+          assessment_number: Number(form.assessment_number),
           deadline: deadlineIso,
           weight,
           max_score: maxScore,

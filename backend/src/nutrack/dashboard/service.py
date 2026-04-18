@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from nutrack.assessments.models import Assessment
+from nutrack.assessments.utils import assessment_label
 from nutrack.courses.models import Course, CourseOffering
 from nutrack.dashboard.exceptions import AISummaryUnavailableError
 from nutrack.dashboard.schemas import (
@@ -26,6 +27,13 @@ from nutrack.users.models import User
 def _course_code(course: Course) -> str:
     level = (course.level or "").strip()
     return f"{course.code} {level}" if level and level != "0" else course.code
+
+
+def _assessment_title(assessment: Assessment) -> str:
+    return assessment_label(
+        assessment.assessment_type,
+        assessment.assessment_number,
+    )
 
 
 def _compute_gpa(
@@ -187,7 +195,7 @@ class DashboardService:
         upcoming_deadlines = [
             UpcomingDeadlineItem(
                 assessment_id=a.id,
-                title=a.title,
+                title=_assessment_title(a),
                 assessment_type=a.assessment_type.value,
                 deadline=a.deadline,
                 course_code=_course_code(a.course_offering.course),
@@ -224,7 +232,7 @@ class DashboardService:
                     assessments=[
                         WorkloadAssessmentItem(
                             assessment_id=a.id,
-                            title=a.title,
+                            title=_assessment_title(a),
                             assessment_type=a.assessment_type.value,
                             deadline=a.deadline,
                             course_code=_course_code(a.course_offering.course),
@@ -307,7 +315,7 @@ class DashboardService:
         )[:5]
         upcoming_ctx = [
             {
-                "title": a.title,
+                "title": _assessment_title(a),
                 "type": a.assessment_type.value,
                 "course": _course_code(a.course_offering.course),
                 "deadline": a.deadline.isoformat(),

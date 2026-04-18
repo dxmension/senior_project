@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Check, FileText, ShieldAlert, Trash2, Undo2, X } from "lucide-react";
 
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { api } from "@/lib/api";
 import type { AdminMaterialUpload, ApiResponse } from "@/types";
 
@@ -34,6 +35,7 @@ export function MaterialsManagement({
   const [error, setError] = useState<string | null>(null);
   const [publishForm, setPublishForm] = useState(defaultForm());
   const [submittingId, setSubmittingId] = useState<number | null>(null);
+  const [unpublishTarget, setUnpublishTarget] = useState<AdminMaterialUpload | null>(null);
 
   async function loadMaterials() {
     setLoading(true);
@@ -224,7 +226,7 @@ export function MaterialsManagement({
                             <button
                               type="button"
                               disabled={submittingId === item.id}
-                              onClick={() => void unpublish(item)}
+                              onClick={() => setUnpublishTarget(item)}
                               className="btn-secondary px-3 py-2 text-xs"
                             >
                               <span className="inline-flex items-center gap-1">
@@ -324,6 +326,25 @@ export function MaterialsManagement({
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={unpublishTarget !== null}
+        title="Unpublish Material?"
+        message={
+          unpublishTarget
+            ? `This will remove "${unpublishTarget.shared_title ?? unpublishTarget.original_filename}" from the shared library.`
+            : ""
+        }
+        confirmLabel="Unpublish"
+        cancelLabel="Cancel"
+        variant="danger"
+        onCancel={() => setUnpublishTarget(null)}
+        onConfirm={() => {
+          if (!unpublishTarget) return;
+          void unpublish(unpublishTarget);
+          setUnpublishTarget(null);
+        }}
+      />
     </div>
   );
 }
