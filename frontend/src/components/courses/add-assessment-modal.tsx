@@ -42,8 +42,8 @@ function toDatetimeLocal(isoString: string): string {
 }
 
 interface FormState {
-  title: string;
   assessment_type: AssessmentType;
+  assessment_number: string;
   deadline: string;
   weight: string;
   max_score: string;
@@ -51,13 +51,23 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
-  title: "",
   assessment_type: "other",
+  assessment_number: "",
   deadline: "",
   weight: "",
   max_score: "",
   description: "",
 };
+
+function nextAssessmentNumber(
+  assessments: Assessment[],
+  assessmentType: AssessmentType,
+) {
+  const numbers = assessments
+    .filter((item) => item.assessment_type === assessmentType)
+    .map((item) => item.assessment_number);
+  return String(Math.max(0, ...numbers) + 1);
+}
 
 interface AddAssessmentModalProps {
   open: boolean;
@@ -79,7 +89,8 @@ export function AddAssessmentModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { addAssessment, updateAssessment } = useAssessmentsStore();
+  const { addAssessment, updateAssessment, byCourse } = useAssessmentsStore();
+  const courseAssessments = byCourse[enrollment.course_id] ?? [];
 
   const isEdit = !!initialData;
 
@@ -88,8 +99,8 @@ export function AddAssessmentModal({
     if (!open) return;
     if (initialData) {
       setForm({
-        title: initialData.title,
         assessment_type: initialData.assessment_type,
+        assessment_number: String(initialData.assessment_number),
         deadline: toDatetimeLocal(initialData.deadline),
         weight: initialData.weight != null ? String(initialData.weight) : "",
         max_score:
@@ -97,17 +108,20 @@ export function AddAssessmentModal({
         description: initialData.description ?? "",
       });
     } else {
-      setForm(EMPTY_FORM);
+      setForm({
+        ...EMPTY_FORM,
+        assessment_number: nextAssessmentNumber(courseAssessments, "other"),
+      });
     }
     setTab("manual");
     setError(null);
-  }, [open, initialData]);
+  }, [courseAssessments, initialData, open]);
 
   function applyPreset(preset: (typeof PRESETS)[number]) {
     setForm((f) => ({
       ...f,
       assessment_type: preset.type,
-      title: preset.label,
+      assessment_number: nextAssessmentNumber(courseAssessments, preset.type),
       weight: String(preset.weight),
     }));
     setTab("manual");
@@ -121,8 +135,8 @@ export function AddAssessmentModal({
     e.preventDefault();
     setError(null);
 
-    if (!form.title.trim()) {
-      setError("Title is required.");
+    if (!form.assessment_number || Number(form.assessment_number) < 1) {
+      setError("Assessment number is required.");
       return;
     }
     if (!form.deadline) {
@@ -141,8 +155,8 @@ export function AddAssessmentModal({
       let result: Assessment;
       if (isEdit && initialData) {
         result = await updateAssessment(initialData.id, {
-          title: form.title.trim(),
           assessment_type: form.assessment_type,
+          assessment_number: Number(form.assessment_number),
           deadline: deadlineIso,
           weight,
           max_score: maxScore,
@@ -152,7 +166,7 @@ export function AddAssessmentModal({
         result = await addAssessment({
           course_id: enrollment.course_id,
           assessment_type: form.assessment_type,
-          title: form.title.trim(),
+          assessment_number: Number(form.assessment_number),
           deadline: deadlineIso,
           weight,
           max_score: maxScore,
@@ -233,17 +247,17 @@ export function AddAssessmentModal({
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-              {/* Title */}
+              {/* Number */}
               <div>
                 <label className="mb-1 block text-xs text-text-secondary">
-                  Title <span className="text-accent-red">*</span>
+                  Assessment Number <span className="text-accent-red">*</span>
                 </label>
                 <input
-                  type="text"
-                  maxLength={255}
-                  placeholder="e.g. Midterm Exam"
-                  value={form.title}
-                  onChange={(e) => setField("title", e.target.value)}
+                  type="number"
+                  min={1}
+                  placeholder="e.g. 1"
+                  value={form.assessment_number}
+                  onChange={(e) => setField("assessment_number", e.target.value)}
                   className="glass-input w-full text-sm"
                   required
                 />
@@ -256,9 +270,16 @@ export function AddAssessmentModal({
                 </label>
                 <select
                   value={form.assessment_type}
-                  onChange={(e) =>
-                    setField("assessment_type", e.target.value as AssessmentType)
-                  }
+                  onChange={(e) => {
+                    const assessmentType = e.target.value as AssessmentType;
+                    setForm((current) => ({
+                      ...current,
+                      assessment_type: assessmentType,
+                      assessment_number: initialData
+                        ? current.assessment_number
+                        : nextAssessmentNumber(courseAssessments, assessmentType),
+                    }));
+                  }}
                   className="glass-input w-full text-sm"
                   required
                 >

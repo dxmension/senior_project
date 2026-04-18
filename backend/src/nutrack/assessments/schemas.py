@@ -8,7 +8,7 @@ from nutrack.assessments.models import AssessmentType
 class CreateAssessmentRequest(BaseModel):
     course_id: int
     assessment_type: AssessmentType
-    title: str = Field(min_length=1, max_length=255)
+    assessment_number: int = Field(ge=1)
     description: str | None = None
     deadline: datetime
     weight: float | None = Field(default=None, ge=0.0, le=100.0)
@@ -24,7 +24,7 @@ class CreateAssessmentRequest(BaseModel):
 
 class UpdateAssessmentRequest(BaseModel):
     assessment_type: AssessmentType | None = None
-    title: str | None = Field(default=None, min_length=1, max_length=255)
+    assessment_number: int | None = Field(default=None, ge=1)
     description: str | None = None
     deadline: datetime | None = None
     weight: float | None = None
@@ -39,6 +39,7 @@ class AssessmentResponse(BaseModel):
     course_code: str
     course_title: str
     assessment_type: AssessmentType
+    assessment_number: int
     title: str
     description: str | None
     deadline: datetime

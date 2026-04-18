@@ -54,6 +54,7 @@ export interface TranscriptStatus {
 export interface EnrollmentItem {
   user_id: number;
   course_id: number;
+  catalog_course_id: number;
   course_code: string;
   section: string | null;
   course_title: string;
@@ -250,6 +251,7 @@ export interface Assessment {
   course_code: string;
   course_title: string;
   assessment_type: AssessmentType;
+  assessment_number: number;
   title: string;
   description: string | null;
   deadline: string;
@@ -264,7 +266,7 @@ export interface Assessment {
 export interface CreateAssessmentPayload {
   course_id: number;
   assessment_type: AssessmentType;
-  title: string;
+  assessment_number: number;
   description?: string;
   deadline: string;
   weight?: number;
@@ -334,7 +336,7 @@ export interface AISummaryData {
 
 export interface UpdateAssessmentPayload {
   assessment_type?: AssessmentType;
-  title?: string;
+  assessment_number?: number;
   description?: string;
   deadline?: string;
   weight?: number;
@@ -483,4 +485,239 @@ export interface AdminMaterialUpload {
   download_url: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface MockExamListItem {
+  id: number;
+  assessment_number: number;
+  title: string;
+  assessment_type: AssessmentType;
+  version: number;
+  question_count: number;
+  time_limit_minutes: number | null;
+  created_at: string;
+  sources: MockExamSourceSummary[];
+  best_score_pct: number | null;
+  average_score_pct: number | null;
+  latest_score_pct: number | null;
+  predicted_score_pct: number | null;
+  predicted_grade_letter: string | null;
+  attempts_count: number;
+  completed_attempts: number;
+  has_active_attempt: boolean;
+}
+
+export interface MockExamAssessmentPrediction {
+  assessment_type: AssessmentType;
+  predicted_score_pct: number | null;
+  predicted_grade_letter: string | null;
+}
+
+export interface MockExamCourseGroup {
+  course_id: number;
+  course_code: string;
+  course_title: string;
+  predicted_score_pct: number | null;
+  predicted_grade_letter: string | null;
+  assessment_predictions: MockExamAssessmentPrediction[];
+  exams: MockExamListItem[];
+}
+
+export interface MockExamAttempt {
+  id: number;
+  status: "in_progress" | "completed" | "abandoned";
+  started_at: string;
+  submitted_at: string | null;
+  last_active_at: string;
+  current_position: number;
+  answered_count: number;
+  correct_count: number;
+  score_pct: number | null;
+}
+
+export interface MockExamAttemptAnswer {
+  id: number;
+  mock_exam_question_link_id: number;
+  selected_option_index: number | null;
+  is_correct: boolean | null;
+  answered_at: string | null;
+}
+
+export interface MockExamTrendPoint {
+  date_label: string;
+  best_score_pct: number;
+}
+
+export type MockExamQuestionSource =
+  | "ai"
+  | "historic"
+  | "rumored"
+  | "tutor_made";
+
+export interface MockExamSourceSummary {
+  source: MockExamQuestionSource;
+  label: string;
+}
+
+export interface MockExamQuestionItem {
+  id: number;
+  course_id: number;
+  source: MockExamQuestionSource;
+  source_label: string;
+  historical_course_offering_id: number | null;
+  historical_course_offering_label: string | null;
+  question_text: string;
+  answer_variant_1: string;
+  answer_variant_2: string;
+  answer_variant_3: string | null;
+  answer_variant_4: string | null;
+  answer_variant_5: string | null;
+  answer_variant_6: string | null;
+  correct_option_index: number;
+  explanation: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MockExamQuestionLink {
+  id: number;
+  position: number;
+  points: number;
+  question: MockExamQuestionItem;
+}
+
+export interface MockExamQuestionStudentItem {
+  id: number;
+  course_id: number;
+  source: MockExamQuestionSource;
+  source_label: string;
+  historical_course_offering_id: number | null;
+  historical_course_offering_label: string | null;
+  question_text: string;
+  answer_variant_1: string;
+  answer_variant_2: string;
+  answer_variant_3: string | null;
+  answer_variant_4: string | null;
+  answer_variant_5: string | null;
+  answer_variant_6: string | null;
+}
+
+export interface MockExamQuestionStudentLink {
+  id: number;
+  position: number;
+  points: number;
+  question: MockExamQuestionStudentItem;
+}
+
+export interface MockExamReviewQuestion {
+  id: number;
+  position: number;
+  points: number;
+  selected_option_index: number | null;
+  is_correct: boolean | null;
+  question: MockExamQuestionItem;
+}
+
+export interface MockExamAttemptSummary {
+  id: number;
+  status: "in_progress" | "completed" | "abandoned";
+  score_pct: number | null;
+  started_at: string;
+  submitted_at: string | null;
+}
+
+export interface MockExamDashboard {
+  id: number;
+  course_id: number;
+  course_code: string;
+  course_title: string;
+  assessment_type: AssessmentType;
+  assessment_number: number;
+  title: string;
+  version: number;
+  question_count: number;
+  time_limit_minutes: number | null;
+  instructions: string | null;
+  created_at: string;
+  sources: MockExamSourceSummary[];
+  attempts_count: number;
+  best_score_pct: number | null;
+  average_score_pct: number | null;
+  latest_score_pct: number | null;
+  predicted_score_pct: number | null;
+  predicted_grade_letter: string | null;
+  improvement_pct: number | null;
+  active_attempt: MockExamAttempt | null;
+  attempts: MockExamAttemptSummary[];
+  trend: MockExamTrendPoint[];
+}
+
+export interface MockExamAttemptSession extends MockExamAttempt {
+  mock_exam_id: number;
+  course_id: number;
+  course_code: string;
+  course_title: string;
+  assessment_type: AssessmentType;
+  assessment_number: number;
+  title: string;
+  question_count: number;
+  time_limit_minutes: number | null;
+  instructions: string | null;
+  questions: MockExamQuestionStudentLink[];
+  answers: MockExamAttemptAnswer[];
+}
+
+export interface MockExamAttemptReview extends MockExamAttempt {
+  mock_exam_id: number;
+  course_id: number;
+  course_code: string;
+  course_title: string;
+  assessment_type: AssessmentType;
+  assessment_number: number;
+  title: string;
+  question_count: number;
+  time_limit_minutes: number | null;
+  instructions: string | null;
+  review_questions: MockExamReviewQuestion[];
+}
+
+export interface AdminCourseOffering {
+  id: number;
+  course_id: number;
+  term: string;
+  year: number;
+  section: string | null;
+  meeting_time: string | null;
+  room: string | null;
+}
+
+export interface AdminMockExamItem {
+  id: number;
+  course_id: number;
+  course_code: string;
+  course_title: string;
+  assessment_type: AssessmentType;
+  assessment_number: number;
+  title: string;
+  version: number;
+  is_active: boolean;
+  question_count: number;
+  time_limit_minutes: number | null;
+  instructions: string | null;
+  total_attempts: number;
+  completed_attempts: number;
+  average_score_pct: number | null;
+  best_score_pct: number | null;
+  active_attempts: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MockExamAdminDetail {
+  exam: AdminMockExamItem;
+  questions: MockExamQuestionLink[];
+}
+
+export interface AdminMockExamQuestion extends MockExamQuestionItem {
+  usage_count: number;
 }

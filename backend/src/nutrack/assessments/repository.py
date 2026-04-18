@@ -37,7 +37,11 @@ class AssessmentRepository(BaseRepository[Assessment]):
             stmt = stmt.where(Assessment.deadline >= now)
         if completed is not None:
             stmt = stmt.where(Assessment.is_completed == completed)
-        stmt = stmt.order_by(Assessment.deadline.asc())
+        stmt = stmt.order_by(
+            Assessment.deadline.asc(),
+            Assessment.assessment_type.asc(),
+            Assessment.assessment_number.asc(),
+        )
         result = await self.session.execute(stmt)
         return list(result.scalars().unique().all())
 
@@ -53,6 +57,26 @@ class AssessmentRepository(BaseRepository[Assessment]):
                 Assessment.id == assessment_id,
                 Assessment.user_id == user_id,
             )
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_by_identity(
+        self,
+        user_id: int,
+        course_id: int,
+        assessment_type: str,
+        assessment_number: int,
+    ) -> Assessment | None:
+        stmt = (
+            select(Assessment)
+            .where(
+                Assessment.user_id == user_id,
+                Assessment.course_id == course_id,
+                Assessment.assessment_type == assessment_type,
+                Assessment.assessment_number == assessment_number,
+            )
+            .limit(1)
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
