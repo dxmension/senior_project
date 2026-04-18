@@ -16,7 +16,7 @@ export function CalendarLegend() {
       {LEGEND_ITEMS.map((item) => (
         <div key={item.label} className="flex items-center gap-1.5">
           <span
-            className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
+            className="block h-2.5 w-2.5 shrink-0 rounded-full"
             style={{ backgroundColor: item.color }}
           />
           <span className="text-xs text-text-secondary">{item.label}</span>

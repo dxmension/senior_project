@@ -14,6 +14,7 @@ from nutrack.dashboard.exceptions import AISummaryUnavailableError
 from nutrack.dashboard.schemas import (
     AISummaryResponse,
     CourseProgressItem,
+    DeadlineDotItem,
     DashboardResponse,
     UpcomingDeadlineItem,
     WeeklyWorkloadItem,
@@ -103,10 +104,8 @@ class DashboardService:
         today = now.date()
 
         # GPA
+        current_gpa = user.cgpa if user else None
         gpa_statuses = {EnrollmentStatus.PASSED, EnrollmentStatus.IN_PROGRESS}
-        current_gpa = _compute_gpa(enrollments, gpa_statuses)
-        if current_gpa is None and user and user.cgpa is not None:
-            current_gpa = user.cgpa
         semester_gpa = _compute_gpa(
             enrollments, gpa_statuses, current_term, current_year
         )
@@ -161,6 +160,17 @@ class DashboardService:
                 ),
                 default=None,
             )
+            dots_sorted = sorted(course_assessments, key=lambda a: a.deadline)[:4]
+            deadline_dots = [
+                DeadlineDotItem(
+                    assessment_id=a.id,
+                    title=a.title,
+                    assessment_type=a.assessment_type.value,
+                    deadline=a.deadline,
+                    is_completed=a.is_completed,
+                )
+                for a in dots_sorted
+            ]
             course_progress.append(
                 CourseProgressItem(
                     course_id=e.course_id,
@@ -173,6 +183,7 @@ class DashboardService:
                     completed_assessments=completed,
                     progress_pct=round(progress_pct, 1),
                     upcoming_deadline=upcoming_dl,
+                    deadline_dots=deadline_dots,
                 )
             )
 
@@ -261,10 +272,7 @@ class DashboardService:
         )
 
         now = datetime.now(tz=timezone.utc)
-        gpa_statuses = {EnrollmentStatus.PASSED, EnrollmentStatus.IN_PROGRESS}
-        current_gpa = _compute_gpa(enrollments, gpa_statuses)
-        if current_gpa is None and user and user.cgpa is not None:
-            current_gpa = user.cgpa
+        current_gpa = user.cgpa if user else None
 
         active_enrollments = [
             e

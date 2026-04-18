@@ -203,3 +203,59 @@ body {
 .fc-theme-standard th {
   border-color: #2a2a2a;
 }
+
+/* ── Week-view cleanliness ──────────────────────────────── */
+
+/* Soften the horizontal slot lines to near-invisible */
+.fc .fc-timegrid-slot {
+  border-color: #1e1e1e !important;
+  height: 3.5rem;
+}
+
+/* Remove the minor (30-min) divider lines entirely */
+.fc .fc-timegrid-slot-minor {
+  border-top: none !important;
+}
+
+/* Dim the vertical column separators */
+.fc .fc-timegrid-col + .fc-timegrid-col {
+  border-left-color: #222222;
+}
+
+/* Slot time labels — smaller, muted */
+.fc .fc-timegrid-slot-label-cushion {
+  font-size: 0.7rem;
+  color: #555555 !important;
+  padding-right: 8px;
+}
+
+/* Header day labels in week view */
+.fc .fc-col-header-cell {
+  border-color: #2a2a2a;
+  padding: 6px 0;
+}
+
+.fc .fc-col-header-cell-cushion {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Events in week/time view — taller, more readable */
+.fc .fc-timegrid-event {
+  border-radius: 6px !important;
+  border-left-width: 3px !important;
+  padding: 3px 6px !important;
+  font-size: 0.72rem !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+
+/* Now indicator line */
+.fc .fc-timegrid-now-indicator-line {
+  border-color: #a3e635;
+  border-width: 1px;
+}
+.fc .fc-timegrid-now-indicator-arrow {
+  border-color: #a3e635;
+}

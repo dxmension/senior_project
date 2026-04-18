@@ -38,17 +38,16 @@ export function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
       onClick={(e) => e.target === e.currentTarget && onCancel()}
     >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-
       <div className="relative glass-card p-6 w-full max-w-sm shadow-2xl">
         <button
           onClick={onCancel}
-          className="absolute top-4 right-4 text-text-secondary hover:text-text-primary transition-colors"
+          aria-label="Close"
+          className="absolute top-4 right-4 rounded-lg p-1.5 text-text-secondary hover:bg-white/5 hover:text-text-primary transition-colors"
         >
-          <X size={18} />
+          <X size={16} />
         </button>
 
         <div className="flex items-start gap-4 mb-5">

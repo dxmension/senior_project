@@ -273,6 +273,14 @@ export interface CreateAssessmentPayload {
   max_score?: number;
 }
 
+export interface DeadlineDotItem {
+  assessment_id: number;
+  title: string;
+  assessment_type: string;
+  deadline: string;
+  is_completed: boolean;
+}
+
 export interface CourseProgressItem {
   course_id: number;
   course_code: string;
@@ -284,6 +292,7 @@ export interface CourseProgressItem {
   completed_assessments: number;
   progress_pct: number;
   upcoming_deadline: string | null;
+  deadline_dots: DeadlineDotItem[];
 }
 
 export interface UpcomingDeadlineItem {
