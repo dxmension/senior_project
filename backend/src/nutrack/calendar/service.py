@@ -55,6 +55,9 @@ def _parse_compact_days(s: str) -> set[int]:
         elif s[i] == "w":
             result.add(2)
             i += 1
+        elif s[i] == "r":  # "R" = Thursday in US academic notation (avoids conflict with "T"=Tuesday)
+            result.add(3)
+            i += 1
         elif s[i] == "f":
             result.add(4)
             i += 1

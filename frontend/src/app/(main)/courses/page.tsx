@@ -24,6 +24,7 @@ export default function CoursesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedEnrollment, setSelectedEnrollment] =
     useState<EnrollmentItem | null>(null);
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
 
   const { byCourse, loadingCourseIds, fetchForCourse } = useAssessmentsStore();
 
@@ -50,6 +51,22 @@ export default function CoursesPage() {
     }
     void load();
   }, [fetchForCourse]);
+
+  async function handleRemove(item: EnrollmentItem) {
+    const key = `${item.course_id}:${item.term}:${item.year}`;
+    setDeletingKey(key);
+    try {
+      await api.delete(
+        `/enrollments/${item.course_id}?term=${encodeURIComponent(item.term)}&year=${item.year}`
+      );
+      setEnrollments((prev) => prev.filter((e) => e.course_id !== item.course_id || e.term !== item.term || e.year !== item.year));
+      setErrorMessage(null);
+    } catch {
+      setErrorMessage("Failed to remove course. Please try again.");
+    } finally {
+      setDeletingKey(null);
+    }
+  }
 
   function handleCreated(item: EnrollmentItem) {
     if (item.term === CURRENT_TERM && item.year === CURRENT_YEAR) {
@@ -109,12 +126,16 @@ export default function CoursesPage() {
                 enrollment={enrollment}
                 assessments={byCourse[enrollment.course_id] ?? []}
                 assessmentsLoading={loadingCourseIds.has(enrollment.course_id)}
-                onAddAssessment={() => {
+                onAddAssessment={(e) => {
+                  e.stopPropagation();
                   setSelectedEnrollment(enrollment);
                   setModalOpen(true);
                 }}
-                onOpenDetail={() =>
-                  router.push(`/courses/${enrollment.course_id}`)
+                onClick={() => router.push(`/courses/${enrollment.course_id}`)}
+                onRemove={() => void handleRemove(enrollment)}
+                isRemoving={
+                  deletingKey ===
+                  `${enrollment.course_id}:${enrollment.term}:${enrollment.year}`
                 }
               />
             ))}

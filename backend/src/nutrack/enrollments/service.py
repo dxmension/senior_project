@@ -1,6 +1,7 @@
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from nutrack.assessments.repository import AssessmentRepository
 from nutrack.courses.repository import CourseOfferingRepository
 from nutrack.enrollments.exceptions import (
     EnrollmentConflictError,
@@ -50,6 +51,7 @@ class EnrollmentService:
     def __init__(self, session: AsyncSession) -> None:
         self.course_offering_repo = CourseOfferingRepository(session)
         self.enrollment_repo = EnrollmentRepository(session)
+        self.assessment_repo = AssessmentRepository(session)
 
     async def list_enrollments(
         self,
@@ -102,6 +104,7 @@ class EnrollmentService:
         )
         if not enrollment:
             raise EnrollmentNotFoundError()
+        await self.assessment_repo.delete_by_user_and_course(user_id, course_id)
         await self.enrollment_repo.delete(enrollment)
 
     async def _create(

@@ -68,3 +68,15 @@ class AssessmentRepository(BaseRepository[Assessment]):
         await self.session.delete(assessment)
         await self.session.flush()
         return True
+
+    async def delete_by_user_and_course(
+        self,
+        user_id: int,
+        course_id: int,
+    ) -> int:
+        assessments = await self.get_by_user(user_id, course_id=course_id)
+        for a in assessments:
+            await self.session.delete(a)
+        if assessments:
+            await self.session.flush()
+        return len(assessments)

@@ -1,28 +1,44 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
-import type { EventInput, DatesSetArg, EventClickArg } from "@fullcalendar/core";
+import type { EventInput, DatesSetArg, EventHoveringArg, EventSourceFuncArg } from "@fullcalendar/core";
 import { AlertCircle } from "lucide-react";
 
-import { useCalendarStore } from "@/stores/calendar";
+import { api } from "@/lib/api";
 import { resolveEventColor } from "@/lib/calendar-colors";
-import type { CalendarEntry } from "@/types";
+import type { CalendarEntry, ApiResponse } from "@/types";
 import { CalendarToolbar } from "@/components/calendar/calendar-toolbar";
 import { CalendarLegend } from "@/components/calendar/calendar-legend";
 import { EventPopup } from "@/components/calendar/event-popup";
 import { Spinner } from "@/components/ui/spinner";
 
+function clampToSixPm(isoString: string): string {
+  const d = new Date(isoString);
+  const h = d.getHours();
+  const m = d.getMinutes();
+  if (h > 18 || (h === 18 && m > 0)) {
+    d.setHours(18, 0, 0, 0);
+  }
+  return d.toISOString();
+}
+
 function toFullCalendarEvent(entry: CalendarEntry): EventInput {
   const colors = resolveEventColor(entry);
   const isCompleted = entry.source_meta.is_completed === true;
+
+  let start = entry.start_at;
+  if (entry.event_type === "assessment_deadline") {
+    start = clampToSixPm(entry.start_at);
+  }
+
   return {
-    id: String(entry.id) + "_" + entry.event_type,
+    id: `${entry.id}_${entry.event_type}_${entry.start_at}`,
     title: entry.title,
-    start: entry.start_at,
+    start,
     end: entry.end_at ?? undefined,
     allDay: entry.is_all_day,
     backgroundColor: colors.bg,
@@ -34,52 +50,80 @@ function toFullCalendarEvent(entry: CalendarEntry): EventInput {
 }
 
 export default function CalendarPage() {
-  const { entries, isLoading, error, fetchEntries } = useCalendarStore();
   const calendarRef = useRef<FullCalendar>(null);
+  const currentViewRef = useRef<"dayGridMonth" | "timeGridWeek">("dayGridMonth");
   const lastRangeRef = useRef<{ start: Date; end: Date } | null>(null);
 
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<CalendarEntry | null>(null);
   const [popupPos, setPopupPos] = useState<{ x: number; y: number } | null>(null);
   const [currentView, setCurrentView] = useState<"dayGridMonth" | "timeGridWeek">("dayGridMonth");
   const [calendarTitle, setCalendarTitle] = useState("");
 
-  const handleDatesSet = useCallback(
-    (dateInfo: DatesSetArg) => {
-      lastRangeRef.current = { start: dateInfo.start, end: dateInfo.end };
-      fetchEntries(dateInfo.start, dateInfo.end);
-      setCalendarTitle(
-        calendarRef.current?.getApi().view.title ?? ""
-      );
+  const eventSource = useCallback(
+    async (
+      fetchInfo: EventSourceFuncArg,
+      successCallback: (events: EventInput[]) => void,
+      failureCallback: (error: Error) => void
+    ) => {
+      try {
+        const res = await api.get<ApiResponse<CalendarEntry[]>>(
+          `/calendar?from_dt=${fetchInfo.start.toISOString()}&to_dt=${fetchInfo.end.toISOString()}`
+        );
+        const entries = res.data ?? [];
+        const view = currentViewRef.current;
+        const filtered = entries.filter((e) =>
+          view === "timeGridWeek"
+            ? e.event_type !== "personal_event"
+            : e.event_type === "assessment_deadline"
+        );
+        successCallback(filtered.map(toFullCalendarEvent));
+        setError(null);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to load calendar data";
+        setError(msg);
+        failureCallback(err instanceof Error ? err : new Error(msg));
+      }
     },
-    [fetchEntries]
+    []
   );
 
-  const handleEventClick = (info: EventClickArg) => {
+  const handleDatesSet = useCallback((dateInfo: DatesSetArg) => {
+    lastRangeRef.current = { start: dateInfo.start, end: dateInfo.end };
+    setCalendarTitle(calendarRef.current?.getApi().view.title ?? "");
+  }, []);
+
+  const handleViewChange = useCallback((view: "dayGridMonth" | "timeGridWeek") => {
+    currentViewRef.current = view;
+    setCurrentView(view);
+    // Refetch events so the new view's filter is applied
+    calendarRef.current?.getApi().refetchEvents();
+  }, []);
+
+  const handleEventMouseEnter = (info: EventHoveringArg) => {
     const entry = info.event.extendedProps.entry as CalendarEntry;
     const rect = info.el.getBoundingClientRect();
+    const POPUP_W = 320;
+    const GAP = 10;
+    const x =
+      rect.right + GAP + POPUP_W <= window.innerWidth
+        ? rect.right + GAP
+        : rect.left - POPUP_W - GAP;
+    const y = Math.min(rect.top, window.innerHeight - 320);
     setSelectedEntry(entry);
-    setPopupPos({ x: rect.left, y: rect.bottom + window.scrollY + 8 });
-    info.jsEvent.stopPropagation();
+    setPopupPos({ x, y });
+  };
+
+  const handleEventMouseLeave = () => {
+    setSelectedEntry(null);
+    setPopupPos(null);
   };
 
   const handleRetry = () => {
-    if (lastRangeRef.current) {
-      fetchEntries(lastRangeRef.current.start, lastRangeRef.current.end);
-    }
+    setError(null);
+    calendarRef.current?.getApi().refetchEvents();
   };
-
-  useEffect(() => {
-    function handleClick() {
-      setSelectedEntry(null);
-      setPopupPos(null);
-    }
-    document.addEventListener("click", handleClick);
-    return () => document.removeEventListener("click", handleClick);
-  }, []);
-
-  const clampedX = popupPos
-    ? Math.min(popupPos.x, typeof window !== "undefined" ? window.innerWidth - 336 : popupPos.x)
-    : 0;
 
   return (
     <div className="flex flex-col gap-6 relative">
@@ -106,7 +150,7 @@ export default function CalendarPage() {
         <CalendarToolbar
           calendarRef={calendarRef}
           currentView={currentView}
-          onViewChange={setCurrentView}
+          onViewChange={handleViewChange}
           title={calendarTitle}
         />
 
@@ -122,14 +166,29 @@ export default function CalendarPage() {
               plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
               initialView={currentView}
               headerToolbar={false}
-              events={entries.map(toFullCalendarEvent)}
-              eventClick={handleEventClick}
+              events={eventSource}
+              loading={(loading) => setIsLoading(loading)}
+              dayHeaderContent={(args) => {
+                const d = args.date;
+                const weekday = d.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
+                if (args.view.type === "dayGridMonth") return weekday;
+                const day = String(d.getDate()).padStart(2, "0");
+                const month = String(d.getMonth() + 1).padStart(2, "0");
+                return `${weekday} ${day}.${month}`;
+              }}
+              eventMouseEnter={handleEventMouseEnter}
+              eventMouseLeave={handleEventMouseLeave}
               datesSet={handleDatesSet}
               height="auto"
               dayMaxEvents={4}
               nowIndicator={true}
               eventDisplay="block"
               firstDay={1}
+              slotMinTime="09:00:00"
+              slotMaxTime="18:00:00"
+              allDaySlot={false}
+              slotDuration="01:00:00"
+              slotLabelInterval="01:00:00"
             />
           </div>
         </div>
@@ -137,14 +196,7 @@ export default function CalendarPage() {
 
       {/* Event popup */}
       {selectedEntry && popupPos && (
-        <EventPopup
-          entry={selectedEntry}
-          position={{ x: clampedX, y: popupPos.y }}
-          onClose={() => {
-            setSelectedEntry(null);
-            setPopupPos(null);
-          }}
-        />
+        <EventPopup entry={selectedEntry} position={popupPos} />
       )}
     </div>
   );

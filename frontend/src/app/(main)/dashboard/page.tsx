@@ -12,6 +12,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
@@ -20,7 +21,9 @@ import { useAuthStore } from "@/stores/auth";
 import type {
   AISummaryData,
   ApiResponse,
+  CourseProgressItem,
   DashboardData,
+  DeadlineDotItem,
   UpcomingDeadlineItem,
   WeeklyWorkloadItem,
 } from "@/types";
@@ -29,9 +32,15 @@ import type {
 
 function formatDeadline(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) +
+  return (
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) +
     ", " +
-    d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+    d.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    })
+  );
 }
 
 function daysLabel(days: number): string {
@@ -54,7 +63,7 @@ function StatCard({
   accent?: string;
 }) {
   return (
-    <GlassCard padding={false} className="p-5">
+    <GlassCard padding={false} className="flex flex-col justify-between p-5">
       <p className="text-xs text-text-secondary">{label}</p>
       <p
         className="mt-1 text-2xl font-bold"
@@ -64,17 +73,6 @@ function StatCard({
       </p>
       {sub && <p className="mt-0.5 text-xs text-text-secondary">{sub}</p>}
     </GlassCard>
-  );
-}
-
-function ProgressBar({ pct }: { pct: number }) {
-  return (
-    <div className="h-1.5 w-full rounded-full" style={{ background: "#2a2a2a" }}>
-      <div
-        className="h-1.5 rounded-full transition-all"
-        style={{ width: `${Math.min(100, pct)}%`, background: "#a3e635" }}
-      />
-    </div>
   );
 }
 
@@ -89,7 +87,10 @@ function DeadlinesList({ items }: { items: UpcomingDeadlineItem[] }) {
   return (
     <ul className="divide-y divide-[#1e1e1e]">
       {items.map((item) => (
-        <li key={item.assessment_id} className="flex items-start justify-between gap-3 py-3">
+        <li
+          key={item.assessment_id}
+          className="flex items-start justify-between gap-3 py-3"
+        >
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-text-primary">
               {item.title}
@@ -103,8 +104,8 @@ function DeadlinesList({ items }: { items: UpcomingDeadlineItem[] }) {
               item.days_until === 0
                 ? "bg-red-950/60 text-red-400"
                 : item.days_until <= 2
-                ? "bg-orange-950/60 text-orange-400"
-                : "bg-[#1e2a1e] text-accent-green"
+                  ? "bg-orange-950/60 text-orange-400"
+                  : "bg-[#1e2a1e] text-accent-green"
             }`}
           >
             {daysLabel(item.days_until)}
@@ -129,7 +130,8 @@ function WorkloadWeek({ week }: { week: WeeklyWorkloadItem }) {
             {week.week_label}
           </p>
           <p className="text-xs text-text-secondary">
-            {week.assessment_count} assessment{week.assessment_count !== 1 ? "s" : ""}
+            {week.assessment_count} assessment
+            {week.assessment_count !== 1 ? "s" : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -138,7 +140,9 @@ function WorkloadWeek({ week }: { week: WeeklyWorkloadItem }) {
               {week.assessment_count}
             </span>
           )}
-          <span className="text-xs text-text-secondary">{open ? "▲" : "▼"}</span>
+          <span className="text-xs text-text-secondary">
+            {open ? "▲" : "▼"}
+          </span>
         </div>
       </button>
       {open && week.assessments.length > 0 && (
@@ -150,18 +154,121 @@ function WorkloadWeek({ week }: { week: WeeklyWorkloadItem }) {
             >
               <span
                 className={`flex-1 truncate ${
-                  a.is_completed ? "text-text-secondary line-through" : "text-text-primary"
+                  a.is_completed
+                    ? "text-text-secondary line-through"
+                    : "text-text-primary"
                 }`}
               >
                 {a.title}
               </span>
               <span className="text-text-secondary">{a.course_code}</span>
-              <span className="text-text-secondary">{formatDeadline(a.deadline)}</span>
+              <span className="text-text-secondary">
+                {formatDeadline(a.deadline)}
+              </span>
             </li>
           ))}
         </ul>
       )}
     </div>
+  );
+}
+
+function DeadlineDot({
+  dot,
+  now,
+  onClick,
+}: {
+  dot: DeadlineDotItem;
+  now: Date;
+  onClick: () => void;
+}) {
+  const isOverdue = !dot.is_completed && new Date(dot.deadline) < now;
+  const tooltip = `${dot.title}\n${formatDeadline(dot.deadline)}`;
+
+  let dotClass =
+    "relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-transform hover:scale-125 cursor-pointer";
+
+  if (dot.is_completed) {
+    dotClass += " border-accent-green bg-accent-green";
+  } else if (isOverdue) {
+    dotClass += " border-red-400 bg-transparent";
+  } else {
+    dotClass += " border-accent-green bg-transparent";
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <button type="button" className={dotClass} title={tooltip} onClick={onClick}>
+        {dot.is_completed && (
+          <svg
+            className="h-2.5 w-2.5 text-bg-primary"
+            fill="none"
+            viewBox="0 0 10 8"
+          >
+            <path
+              d="M1 4l3 3 5-6"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+        {isOverdue && (
+          <span className="text-[8px] font-bold leading-none text-red-400">
+            !
+          </span>
+        )}
+      </button>
+      <span className="max-w-[56px] truncate text-center text-[10px] leading-tight text-text-secondary">
+        {dot.assessment_type.charAt(0).toUpperCase() +
+          dot.assessment_type.slice(1)}
+      </span>
+    </div>
+  );
+}
+
+function CourseRoadmapRow({
+  course,
+  now,
+}: {
+  course: CourseProgressItem;
+  now: Date;
+}) {
+  const router = useRouter();
+  const dots = course.deadline_dots.slice(0, 4);
+  const toDetail = () => router.push(`/courses/${course.course_id}`);
+
+  return (
+    <li className="px-5 py-4">
+      <button
+        type="button"
+        onClick={toDetail}
+        className="mb-3 flex items-baseline gap-2 hover:opacity-80 transition-opacity"
+      >
+        <span className="font-mono text-xs font-semibold text-accent-green">
+          {course.course_code}
+        </span>
+        <span className="truncate text-xs text-text-secondary">
+          {course.course_title}
+        </span>
+      </button>
+
+      {dots.length === 0 ? (
+        <p className="text-xs text-text-secondary">No deadlines</p>
+      ) : (
+        <div className="flex items-start gap-0">
+          {dots.map((dot, idx) => (
+            <div key={dot.assessment_id} className="flex items-center">
+              <DeadlineDot dot={dot} now={now} onClick={toDetail} />
+              {idx < dots.length - 1 && (
+                <div className="mx-1 h-px w-8 shrink-0 self-start mt-2.5 bg-[#3a3a3a]" />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </li>
   );
 }
 
@@ -174,10 +281,14 @@ function AISummaryCard() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.post<ApiResponse<AISummaryData>>("/dashboard/ai-summary");
+      const res = await api.post<ApiResponse<AISummaryData>>(
+        "/dashboard/ai-summary"
+      );
       setData(res.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to generate summary.");
+      setError(
+        err instanceof Error ? err.message : "Failed to generate summary."
+      );
     } finally {
       setLoading(false);
     }
@@ -188,7 +299,9 @@ function AISummaryCard() {
       <div className="flex items-center justify-between border-b border-[#2a2a2a] px-5 py-4">
         <div className="flex items-center gap-2">
           <Sparkles size={16} className="text-accent-green" />
-          <h2 className="text-sm font-semibold text-text-primary">AI Academic Summary</h2>
+          <h2 className="text-sm font-semibold text-text-primary">
+            AI Academic Summary
+          </h2>
         </div>
         <button
           type="button"
@@ -211,25 +324,32 @@ function AISummaryCard() {
             <Spinner text="Generating your academic summary..." />
           </div>
         )}
-        {error && (
-          <p className="text-sm text-accent-red">{error}</p>
-        )}
+        {error && <p className="text-sm text-accent-red">{error}</p>}
         {!loading && !error && !data && (
           <p className="text-sm text-text-secondary">
-            Click &ldquo;Generate&rdquo; to get a personalized AI summary of your academic progress and recommendations.
+            Click &ldquo;Generate&rdquo; to get a personalized AI summary of
+            your academic progress and recommendations.
           </p>
         )}
         {!loading && data && (
           <div className="space-y-4">
-            <p className="text-sm leading-relaxed text-text-primary">{data.summary}</p>
+            <p className="text-sm leading-relaxed text-text-primary">
+              {data.summary}
+            </p>
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">
                 Recommendations
               </p>
               <ul className="space-y-1.5">
                 {data.recommendations.map((rec, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-text-primary">
-                    <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-accent-green" />
+                  <li
+                    key={i}
+                    className="flex items-start gap-2 text-sm text-text-primary"
+                  >
+                    <CheckCircle2
+                      size={14}
+                      className="mt-0.5 shrink-0 text-accent-green"
+                    />
                     {rec}
                   </li>
                 ))}
@@ -252,6 +372,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const now = new Date();
 
   useEffect(() => {
     async function load() {
@@ -259,7 +380,9 @@ export default function DashboardPage() {
         const res = await api.get<ApiResponse<DashboardData>>("/dashboard");
         setData(res.data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load dashboard.");
+        setError(
+          err instanceof Error ? err.message : "Failed to load dashboard."
+        );
       } finally {
         setLoading(false);
       }
@@ -285,24 +408,19 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {error && (
-        <p className="text-sm text-accent-red">{error}</p>
-      )}
+      {error && <p className="text-sm text-accent-red">{error}</p>}
 
       {data && (
         <>
-          {/* Stats row */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {/* Stats row — 3 cards */}
+          <div className="grid grid-cols-3 items-stretch gap-3">
             <StatCard
               label="Current GPA"
-              value={data.current_gpa != null ? data.current_gpa.toFixed(2) : "—"}
+              value={
+                data.current_gpa != null ? data.current_gpa.toFixed(2) : "—"
+              }
               sub="All time"
               accent="#a3e635"
-            />
-            <StatCard
-              label="Semester GPA"
-              value={data.semester_gpa != null ? data.semester_gpa.toFixed(2) : "—"}
-              sub="This term"
             />
             <StatCard
               label="Credits Earned"
@@ -341,14 +459,14 @@ export default function DashboardPage() {
 
           {/* Main grid */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            {/* Left col — course progress + upcoming */}
+            {/* Left col — course roadmap + weekly workload */}
             <div className="space-y-4 lg:col-span-2">
-              {/* Course progress */}
+              {/* Course roadmap */}
               <GlassCard padding={false} className="overflow-hidden">
                 <div className="flex items-center gap-2 border-b border-[#2a2a2a] px-5 py-4">
                   <BookOpen size={15} className="text-accent-green" />
                   <h2 className="text-sm font-semibold text-text-primary">
-                    Course Progress
+                    Course Deadlines
                   </h2>
                 </div>
                 {data.course_progress.length === 0 ? (
@@ -358,27 +476,7 @@ export default function DashboardPage() {
                 ) : (
                   <ul className="divide-y divide-[#1e1e1e]">
                     {data.course_progress.map((c) => (
-                      <li key={c.course_id} className="px-5 py-3">
-                        <div className="mb-1.5 flex items-center justify-between gap-2">
-                          <div className="min-w-0">
-                            <span className="font-mono text-xs font-semibold text-accent-green">
-                              {c.course_code}
-                            </span>
-                            <span className="ml-2 truncate text-xs text-text-secondary">
-                              {c.course_title}
-                            </span>
-                          </div>
-                          <span className="shrink-0 text-xs text-text-secondary">
-                            {c.completed_assessments}/{c.total_assessments}
-                          </span>
-                        </div>
-                        <ProgressBar pct={c.progress_pct} />
-                        {c.upcoming_deadline && (
-                          <p className="mt-1 text-xs text-text-secondary">
-                            Next: {formatDeadline(c.upcoming_deadline)}
-                          </p>
-                        )}
-                      </li>
+                      <CourseRoadmapRow key={c.course_id} course={c} now={now} />
                     ))}
                   </ul>
                 )}
@@ -401,7 +499,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Right col — upcoming deadlines + AI */}
-            <div className="space-y-4">
+            <div className="flex flex-col gap-4">
               {/* Upcoming deadlines */}
               <GlassCard padding={false} className="overflow-hidden">
                 <div className="flex items-center gap-2 border-b border-[#2a2a2a] px-5 py-4">
