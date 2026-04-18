@@ -189,6 +189,8 @@ export default function CalendarPage() {
               allDaySlot={false}
               slotDuration="01:00:00"
               slotLabelInterval="01:00:00"
+              slotLabelFormat={{ hour: "2-digit", minute: "2-digit", hour12: false }}
+              eventTimeFormat={{ hour: "2-digit", minute: "2-digit", hour12: false }}
             />
           </div>
         </div>

@@ -180,11 +180,11 @@ export function CourseSearchDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-30 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
       <button
         type="button"
         onClick={onClose}
-        className="absolute inset-0 bg-black/60"
+        className="absolute inset-0"
         aria-label="Close add course dialog"
       />
       <div className="glass-card relative z-10 w-full max-w-xl p-5">
@@ -227,15 +227,25 @@ export function CourseSearchDialog({
 
         <div className="mt-4 max-h-72 overflow-y-auto">
           {isLoading ? (
-            <p className="text-sm text-text-secondary">Searching...</p>
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="rounded-[var(--radius-md)] border border-white/[0.06] bg-white/[0.02] p-3 animate-pulse">
+                  <div className="h-3 w-24 rounded bg-white/10 mb-2" />
+                  <div className="h-3.5 w-48 rounded bg-white/[0.06]" />
+                </div>
+              ))}
+            </div>
           ) : null}
 
           {error ? (
-            <p className="text-sm text-accent-red">{error}</p>
+            <div className="flex items-center gap-2 rounded-lg bg-accent-red/10 px-3 py-2.5 text-xs text-accent-red">
+              <span className="flex-shrink-0">⚠</span>
+              {error}
+            </div>
           ) : null}
 
           {showEmpty ? (
-            <p className="text-sm text-text-muted">No matching course</p>
+            <p className="py-4 text-center text-sm text-text-secondary">No courses found for &quot;{query.trim()}&quot;</p>
           ) : null}
 
           {!isLoading && !error && results.length ? (

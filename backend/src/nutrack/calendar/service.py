@@ -171,7 +171,7 @@ def _entry_from_course_session(
     start_time: time | None,
     end_time: time | None,
 ) -> CalendarEntry:
-    tz = timezone.utc
+    tz = timezone(timedelta(hours=5))  # Astana time — meeting times are stored in local time
     if start_time:
         start_at = datetime.combine(session_date, start_time, tzinfo=tz)
         end_at = datetime.combine(session_date, end_time, tzinfo=tz) if end_time else None

@@ -96,10 +96,8 @@ class DashboardService:
         today = now.date()
 
         # GPA
+        current_gpa = user.cgpa if user else None
         gpa_statuses = {EnrollmentStatus.PASSED, EnrollmentStatus.IN_PROGRESS}
-        current_gpa = _compute_gpa(enrollments, gpa_statuses)
-        if current_gpa is None and user and user.cgpa is not None:
-            current_gpa = user.cgpa
         semester_gpa = _compute_gpa(
             enrollments, gpa_statuses, current_term, current_year
         )
@@ -266,10 +264,7 @@ class DashboardService:
         )
 
         now = datetime.now(tz=timezone.utc)
-        gpa_statuses = {EnrollmentStatus.PASSED, EnrollmentStatus.IN_PROGRESS}
-        current_gpa = _compute_gpa(enrollments, gpa_statuses)
-        if current_gpa is None and user and user.cgpa is not None:
-            current_gpa = user.cgpa
+        current_gpa = user.cgpa if user else None
 
         active_enrollments = [
             e
