@@ -29,6 +29,45 @@ def _upload_payload() -> dict:
     }
 
 
+def _mock_exam_dashboard() -> dict:
+    return {
+        "id": 4,
+        "course_id": 2,
+        "course_code": "CSCI 151",
+        "course_title": "Programming",
+        "assessment_type": "midterm",
+        "assessment_number": 1,
+        "title": "Midterm 1 Mock 2",
+        "version": 2,
+        "question_count": 3,
+        "time_limit_minutes": 40,
+        "instructions": "Choose the best answer.",
+        "created_at": "2026-04-15T09:00:00Z",
+        "sources": [
+            {"source": "historic", "label": "Historic"},
+            {"source": "ai", "label": "AI"},
+        ],
+        "attempts_count": 2,
+        "best_score_pct": 88.5,
+        "average_score_pct": 79.2,
+        "latest_score_pct": 88.5,
+        "predicted_score_pct": 84.3,
+        "predicted_grade_letter": "B",
+        "improvement_pct": 12.0,
+        "active_attempt": None,
+        "attempts": [
+            {
+                "id": 11,
+                "status": "completed",
+                "score_pct": 88.5,
+                "started_at": "2026-04-16T09:00:00Z",
+                "submitted_at": "2026-04-16T09:30:00Z",
+            }
+        ],
+        "trend": [{"date_label": "Apr 16", "best_score_pct": 88.5}],
+    }
+
+
 def test_study_router_keeps_prefix_and_tags() -> None:
     assert router.prefix == "/study"
     assert router.tags == ["study"]
@@ -193,3 +232,227 @@ async def test_admin_delete_material_upload_returns_deleted(
     assert response.status_code == 200
     assert response.json()["data"]["deleted"] is True
     service.delete_upload.assert_awaited_once_with(8)
+
+
+@pytest.mark.asyncio
+async def test_list_mock_exams_returns_groups(
+    client,
+    current_user,
+    test_app,
+) -> None:
+    payload = [
+        {
+            "course_id": 2,
+            "course_code": "CSCI 151",
+            "course_title": "Programming",
+            "predicted_score_pct": 86.7,
+            "predicted_grade_letter": "B+",
+            "assessment_predictions": [
+                {
+                    "assessment_type": "midterm",
+                    "predicted_score_pct": 86.7,
+                    "predicted_grade_letter": "B+",
+                }
+            ],
+            "exams": [
+                {
+                    "id": 4,
+                    "assessment_number": 1,
+                    "title": "Midterm 1 Mock 1",
+                    "assessment_type": "midterm",
+                    "version": 1,
+                    "question_count": 20,
+                    "time_limit_minutes": 40,
+                    "created_at": "2026-04-16T09:00:00Z",
+                    "sources": [{"source": "historic", "label": "Historic"}],
+                    "best_score_pct": 88.5,
+                    "average_score_pct": 82.0,
+                    "latest_score_pct": 88.5,
+                    "predicted_score_pct": 86.7,
+                    "predicted_grade_letter": "B+",
+                    "attempts_count": 2,
+                    "completed_attempts": 2,
+                    "has_active_attempt": False,
+                }
+            ],
+        }
+    ]
+    service = SimpleNamespace(list_mock_exams=AsyncMock(return_value=payload))
+    test_app.dependency_overrides[get_current_user] = lambda: current_user
+    test_app.dependency_overrides[get_study_service] = lambda: service
+
+    response = await client.get("/v1/study/mock-exams")
+
+    assert response.status_code == 200
+    assert response.json()["data"][0]["course_code"] == "CSCI 151"
+    service.list_mock_exams.assert_awaited_once_with(current_user.id)
+
+
+@pytest.mark.asyncio
+async def test_get_mock_exam_dashboard_returns_stats(
+    client,
+    current_user,
+    test_app,
+) -> None:
+    service = SimpleNamespace(
+        get_mock_exam_dashboard=AsyncMock(return_value=_mock_exam_dashboard())
+    )
+    test_app.dependency_overrides[get_current_user] = lambda: current_user
+    test_app.dependency_overrides[get_study_service] = lambda: service
+
+    response = await client.get("/v1/study/mock-exams/4")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["title"] == "Midterm 1 Mock 2"
+    service.get_mock_exam_dashboard.assert_awaited_once_with(current_user.id, 4)
+
+
+@pytest.mark.asyncio
+async def test_get_mock_exam_attempt_returns_session(
+    client,
+    current_user,
+    test_app,
+) -> None:
+    payload = {
+        "id": 21,
+        "mock_exam_id": 4,
+        "course_id": 2,
+        "course_code": "CSCI 151",
+        "course_title": "Programming",
+        "assessment_type": "midterm",
+        "assessment_number": 1,
+        "title": "Midterm 1 Mock 2",
+        "status": "in_progress",
+        "started_at": "2026-04-16T09:00:00Z",
+        "submitted_at": None,
+        "last_active_at": "2026-04-16T09:00:00Z",
+        "current_position": 1,
+        "answered_count": 0,
+        "correct_count": 0,
+        "score_pct": None,
+        "question_count": 2,
+        "time_limit_minutes": 40,
+        "instructions": "Choose the best answer.",
+        "questions": [],
+        "answers": [],
+    }
+    service = SimpleNamespace(get_mock_exam_attempt=AsyncMock(return_value=payload))
+    test_app.dependency_overrides[get_current_user] = lambda: current_user
+    test_app.dependency_overrides[get_study_service] = lambda: service
+
+    response = await client.get("/v1/study/mock-exams/attempts/21")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["mock_exam_id"] == 4
+    service.get_mock_exam_attempt.assert_awaited_once_with(current_user.id, 21)
+
+
+@pytest.mark.asyncio
+async def test_get_mock_exam_attempt_review_returns_review(
+    client,
+    current_user,
+    test_app,
+) -> None:
+    payload = {
+        "id": 21,
+        "mock_exam_id": 4,
+        "course_id": 2,
+        "course_code": "CSCI 151",
+        "course_title": "Programming",
+        "assessment_type": "midterm",
+        "assessment_number": 1,
+        "title": "Midterm 1 Mock 2",
+        "status": "completed",
+        "started_at": "2026-04-16T09:00:00Z",
+        "submitted_at": "2026-04-16T09:30:00Z",
+        "last_active_at": "2026-04-16T09:30:00Z",
+        "current_position": 2,
+        "answered_count": 2,
+        "correct_count": 1,
+        "score_pct": 50.0,
+        "question_count": 2,
+        "time_limit_minutes": 40,
+        "instructions": "Choose the best answer.",
+        "review_questions": [],
+    }
+    service = SimpleNamespace(
+        get_mock_exam_attempt_review=AsyncMock(return_value=payload)
+    )
+    test_app.dependency_overrides[get_current_user] = lambda: current_user
+    test_app.dependency_overrides[get_study_service] = lambda: service
+
+    response = await client.get("/v1/study/mock-exams/attempts/21/review")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "completed"
+    service.get_mock_exam_attempt_review.assert_awaited_once_with(
+        current_user.id,
+        21,
+    )
+
+
+@pytest.mark.asyncio
+async def test_start_mock_exam_attempt_returns_attempt(
+    client,
+    current_user,
+    test_app,
+) -> None:
+    payload = {
+        "id": 21,
+        "status": "in_progress",
+        "started_at": "2026-04-16T09:00:00Z",
+        "submitted_at": None,
+        "last_active_at": "2026-04-16T09:00:00Z",
+        "current_position": 1,
+        "answered_count": 0,
+        "correct_count": 0,
+        "score_pct": None,
+    }
+    service = SimpleNamespace(
+        start_mock_exam_attempt=AsyncMock(return_value=payload)
+    )
+    test_app.dependency_overrides[get_current_user] = lambda: current_user
+    test_app.dependency_overrides[get_study_service] = lambda: service
+
+    response = await client.post("/v1/study/mock-exams/4/attempts")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "in_progress"
+    service.start_mock_exam_attempt.assert_awaited_once_with(current_user.id, 4)
+
+
+@pytest.mark.asyncio
+async def test_admin_list_mock_exams_returns_items(client, test_app) -> None:
+    admin = SimpleNamespace(id=99, is_admin=True, email="admin@nu.edu.kz")
+    payload = [
+        {
+            "id": 4,
+            "course_id": 2,
+            "course_code": "CSCI 151",
+            "course_title": "Programming",
+            "assessment_type": "midterm",
+            "assessment_number": 1,
+            "title": "Midterm 1 Mock 2",
+            "version": 2,
+            "is_active": True,
+            "question_count": 20,
+            "time_limit_minutes": 40,
+            "instructions": "Choose the best answer.",
+            "total_attempts": 12,
+            "completed_attempts": 10,
+            "average_score_pct": 76.1,
+            "best_score_pct": 91.0,
+            "active_attempts": 2,
+            "created_at": "2026-04-16T09:00:00Z",
+            "updated_at": "2026-04-16T09:00:00Z",
+        }
+    ]
+    service = SimpleNamespace(list_admin_mock_exams=AsyncMock(return_value=payload))
+    test_app.dependency_overrides[get_current_admin_user] = lambda: admin
+    test_app.dependency_overrides[get_study_service] = lambda: service
+
+    response = await client.get("/v1/admin/mock-exams?course_id=2")
+
+    assert response.status_code == 200
+    assert response.json()["data"][0]["version"] == 2
+    service.list_admin_mock_exams.assert_awaited_once_with(2)

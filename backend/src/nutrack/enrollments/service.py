@@ -29,6 +29,7 @@ def build_enrollment_response(
     return EnrollmentItemResponse(
         user_id=enrollment.user_id,
         course_id=enrollment.course_id,
+        catalog_course_id=course.id,
         course_code=format_course_code(
             course.code,
             course.level,

@@ -4,6 +4,7 @@ from pydantic import BaseModel
 class EnrollmentItemResponse(BaseModel):
     user_id: int
     course_id: int
+    catalog_course_id: int
     course_code: str
     section: str | None = None
     course_title: str

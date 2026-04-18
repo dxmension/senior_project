@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, literal, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -210,13 +210,31 @@ class AdminRepository:
         limit: int = 50,
     ) -> list[Course]:
         search_pattern = f"%{query.lower()}%"
+        code_with_space = func.lower(Course.code + literal(" ") + Course.level)
+        code_without_space = func.lower(Course.code + Course.level)
         stmt = (
             select(Course)
             .where(
                 (func.lower(Course.code).like(search_pattern))
                 | (func.lower(Course.title).like(search_pattern))
+                | (code_with_space.like(search_pattern))
+                | (code_without_space.like(search_pattern))
             )
+            .order_by(Course.code, Course.level, Course.title)
             .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_course_offerings(self, course_id: int) -> list[CourseOffering]:
+        stmt = (
+            select(CourseOffering)
+            .where(CourseOffering.course_id == course_id)
+            .order_by(
+                CourseOffering.year.desc(),
+                CourseOffering.term.desc(),
+                CourseOffering.section.asc(),
+            )
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())

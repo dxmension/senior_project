@@ -185,6 +185,23 @@ class AdminService:
         updated = await self.repository.update_course(course, **update_data)
         return CourseListItem.model_validate(updated)
 
+    async def list_course_offerings(self, course_id: int) -> list[dict]:
+        offerings = await self.repository.list_course_offerings(course_id)
+        payload = []
+        for offering in offerings:
+            payload.append(
+                {
+                    "id": offering.id,
+                    "course_id": offering.course_id,
+                    "term": offering.term,
+                    "year": offering.year,
+                    "section": offering.section,
+                    "meeting_time": offering.meeting_time,
+                    "room": offering.room,
+                }
+            )
+        return payload
+
     async def _check_db_connection(self) -> bool:
         try:
             await self.repository.get_total_users_count()
