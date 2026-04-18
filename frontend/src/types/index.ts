@@ -463,6 +463,22 @@ export interface SharedCourseMaterial {
   published_at: string;
 }
 
+export interface MindmapNode {
+  id: string;
+  label: string;
+  description?: string;
+  children: MindmapNode[];
+}
+
+export interface SavedMindmap {
+  id: number;
+  course_id: number;
+  week: number;
+  topic: string;
+  root: MindmapNode;
+  created_at: string;
+}
+
 export interface AdminMaterialUpload {
   id: number;
   course_id: number;

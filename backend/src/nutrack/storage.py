@@ -102,3 +102,10 @@ class ObjectStorage:
             Params={"Bucket": self.bucket_name, "Key": key},
             ExpiresIn=settings.MATERIAL_PRESIGNED_URL_TTL_SECONDS,
         )
+
+    async def download_file_bytes(self, key: str) -> bytes:
+        def _get() -> bytes:
+            response = self.client.get_object(Bucket=self.bucket_name, Key=key)
+            return response["Body"].read()
+
+        return await asyncio.to_thread(_get)

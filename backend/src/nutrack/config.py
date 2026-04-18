@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
 
-    OPENAI_API_KEY: str = ""
+    OPENAI_API_KEY: str
     CURRENT_TERM: str = "Spring"
     CURRENT_YEAR: int = 2026
 
