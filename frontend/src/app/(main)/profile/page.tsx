@@ -82,7 +82,7 @@ export default function ProfilePage() {
 
         {activeTab === "audit" && (
           audit
-            ? <AuditSection audit={audit} />
+            ? <AuditSection audit={audit} studyYear={user?.study_year} />
             : (
               <p className="text-sm text-text-muted text-center py-10">
                 No audit data available. Upload your transcript to get started.

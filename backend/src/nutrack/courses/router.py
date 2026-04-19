@@ -16,6 +16,7 @@ from nutrack.courses.schemas import (
     CourseScheduleUploadResponse,
     CourseSearchItem,
     CourseStatsResponse,
+    DescriptionsUploadResponse,
     EligibilityResponse,
     GpaStatsUploadResponse,
     RequirementsUploadResponse,
@@ -97,6 +98,8 @@ async def list_catalog(
     level_prefix: str | None = Query(default=None, description="Filter by course level prefix: '1' for 100-level, '2' for 200-level, etc."),
     eligible_only: bool = Query(default=False, description="Only return courses the user is eligible for"),
     has_priority: bool = Query(default=False, description="Only return courses where the user has a registration priority"),
+    min_gpa: float | None = Query(default=None, ge=0.0, le=4.0, description="Minimum average GPA (e.g. 2.5)"),
+    min_rating: float | None = Query(default=None, ge=1.0, le=5.0, description="Minimum average review rating (1–5)"),
     current_user: User = Depends(get_current_user),
     service: CourseCatalogService = Depends(get_course_catalog_service),
 ):
@@ -126,6 +129,10 @@ async def list_catalog(
         params["eligible_only"] = True
     if has_priority:
         params["has_priority"] = True
+    if min_gpa is not None:
+        params["min_gpa"] = min_gpa
+    if min_rating is not None:
+        params["min_rating"] = min_rating
 
     courses, total = await service.list_courses(**params)
     return ApiResponse(data=courses, meta={"total": total, "skip": skip, "limit": limit})
@@ -165,6 +172,31 @@ async def get_course_stats(
     """
     stats = await service.get_stats(course_id)
     return ApiResponse(data=stats)
+
+
+# ---------------------------------------------------------------------------
+# Descriptions upload
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/catalog/descriptions/upload",
+    response_model=ApiResponse[DescriptionsUploadResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Bulk-update course descriptions from a JSON file — admin only",
+)
+async def upload_descriptions(
+    file: UploadFile = File(...),
+    _: User = Depends(get_current_admin_user),
+    service: CourseCatalogService = Depends(get_course_catalog_service),
+):
+    """
+    Accepts the JSON file produced by export_courses.py (or any JSON array of
+    {code, level, description} objects).  Only entries with a non-empty
+    description are applied; entries not found in the catalog are skipped.
+    """
+    result = await service.upload_descriptions(file)
+    return ApiResponse(data=result)
 
 
 # ---------------------------------------------------------------------------

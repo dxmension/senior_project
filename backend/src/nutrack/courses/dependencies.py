@@ -45,6 +45,7 @@ async def get_course_catalog_service(
         course_repository=CourseRepository(session),
         gpa_stats_repository=CourseGpaStatsRepository(session),
         offering_repository=CourseOfferingRepository(session),
+        review_repository=CourseReviewRepository(session),
     )
 
 

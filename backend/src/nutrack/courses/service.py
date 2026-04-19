@@ -13,6 +13,7 @@ from nutrack.courses.catalog_parser import parse_catalog
 from nutrack.courses.domain import CourseEntity
 from nutrack.courses.exceptions import (
     CourseCatalogFileError,
+    CourseDescriptionsFileError,
     CourseGpaStatsFileError,
     CourseGpaStatsParsingError,
     CourseNotFoundError,
@@ -30,7 +31,12 @@ from nutrack.courses.gpa_stats_parser import GpaStatEntry, parse_gpa_stats
 from nutrack.courses.parser import parse_pdf_courses
 from nutrack.courses.requirements_parser import parse_requirements
 from nutrack.courses.profanity import contains_profanity
-from nutrack.courses.repository import CourseGpaStatsRepository, CourseOfferingRepository, CourseRepository, CourseReviewRepository
+from nutrack.courses.repository import (
+    CourseGpaStatsRepository,
+    CourseOfferingRepository,
+    CourseRepository,
+    CourseReviewRepository,
+)
 from nutrack.courses.schemas import (
     AntirequisiteCheck,
     CourseCatalogUploadResponse,
@@ -39,6 +45,7 @@ from nutrack.courses.schemas import (
     CourseOfferingInfo,
     CourseSearchItem,
     CourseStatsResponse,
+    DescriptionsUploadResponse,
     EligibilityResponse,
     GpaStatsUploadResponse,
     GradeCount,
@@ -490,10 +497,12 @@ class CourseCatalogService:
         course_repository: CourseRepository,
         gpa_stats_repository: CourseGpaStatsRepository,
         offering_repository: CourseOfferingRepository,
+        review_repository: CourseReviewRepository,
     ) -> None:
         self.course_repository = course_repository
         self.gpa_stats_repository = gpa_stats_repository
         self.offering_repository = offering_repository
+        self.review_repository = review_repository
 
     async def upload(self, file: UploadFile) -> CourseCatalogUploadResponse:
         payload, filename = await self._read_payload(file)
@@ -538,14 +547,17 @@ class CourseCatalogService:
         level_prefix: str | None = None,
         eligible_only: bool = False,
         has_priority: bool = False,
+        min_gpa: float | None = None,
+        min_rating: float | None = None,
         user_id: int | None = None,
         user_major: str | None = None,
         kazakh_level: str | None = None,
     ) -> tuple[list[CourseDetailResponse], int]:
-        # When filtering by eligibility or priority (user-computed fields), we
-        # must fetch all matching rows from the DB, apply the filters in Python,
-        # then paginate manually — the DB cannot compute these values.
-        needs_post_filter = (eligible_only or has_priority) and user_id is not None
+        # When filtering by eligibility, priority, GPA, or rating (all Python-computed),
+        # fetch all matching rows from DB, apply filters, then paginate manually.
+        needs_post_filter = (
+            (eligible_only or has_priority) and user_id is not None
+        ) or min_gpa is not None or min_rating is not None
         if needs_post_filter:
             courses = await self.course_repository.list_catalog(
                 0, 10_000, search, department, school, academic_level, term, level_prefix
@@ -564,11 +576,12 @@ class CourseCatalogService:
         )
 
         course_ids = [c.id for c in courses]
-        gpa_map, enrolled_map, terms_map, offerings_map = await asyncio.gather(
+        gpa_map, enrolled_map, terms_map, offerings_map, rating_map = await asyncio.gather(
             self.gpa_stats_repository.get_avg_gpa_by_course_ids(course_ids),
             self.gpa_stats_repository.get_total_enrolled_by_course_ids(course_ids),
             self.course_repository.get_terms_available_by_ids(course_ids),
             self.offering_repository.get_latest_offerings_batch(course_ids),
+            self.review_repository.get_avg_overall_rating_by_course_ids(course_ids),
         )
 
         # Fetch user enrollment history once for eligibility computation
@@ -600,6 +613,7 @@ class CourseCatalogService:
             resp.avg_gpa = gpa_map.get(c.id)
             resp.total_enrolled = enrolled_map.get(c.id)
             resp.terms_available = terms_map.get(c.id, [])
+            resp.avg_review_rating = rating_map.get(c.id)
             resp.offerings = [
                 CourseOfferingInfo(
                     section=o.section,
@@ -648,6 +662,10 @@ class CourseCatalogService:
                 result = [r for r in result if r.is_eligible is True]
             if has_priority:
                 result = [r for r in result if r.user_priority is not None]
+            if min_gpa is not None:
+                result = [r for r in result if r.avg_gpa is not None and r.avg_gpa >= min_gpa]
+            if min_rating is not None:
+                result = [r for r in result if r.avg_review_rating is not None and r.avg_review_rating >= min_rating]
             total = len(result)
             result = result[skip : skip + limit]
         else:
@@ -660,16 +678,18 @@ class CourseCatalogService:
         if not course:
             raise CourseNotFoundError()
         resp = CourseDetailResponse.model_validate(_course_cols(course))
-        gpa_map, enrolled_map, terms_map, section_rows, latest_offerings = await asyncio.gather(
+        gpa_map, enrolled_map, terms_map, section_rows, latest_offerings, rating_map = await asyncio.gather(
             self.gpa_stats_repository.get_avg_gpa_by_course_ids([course_id]),
             self.gpa_stats_repository.get_total_enrolled_by_course_ids([course_id]),
             self.course_repository.get_terms_available_by_ids([course_id]),
             self.gpa_stats_repository.get_sections_with_faculty(course_id),
             self.offering_repository.get_latest_offerings(course_id),
+            self.review_repository.get_avg_overall_rating_by_course_ids([course_id]),
         )
         resp.avg_gpa = gpa_map.get(course_id)
         resp.total_enrolled = enrolled_map.get(course_id)
         resp.terms_available = terms_map.get(course_id, [])
+        resp.avg_review_rating = rating_map.get(course_id)
         resp.sections = [
             SectionGpaStats(
                 section=row["section"],
@@ -700,6 +720,75 @@ class CourseCatalogService:
         return resp
 
     # ------------------------------------------------------------------
+
+    async def upload_descriptions(self, file: UploadFile) -> DescriptionsUploadResponse:
+        """
+        Accept a JSON file (array of {code, level, description}) and bulk-update
+        course descriptions.  Rows with empty description are skipped.
+        Only courses already in the catalog are updated.
+        """
+        import json as _json
+
+        filename = file.filename or ""
+        if not filename.lower().endswith(".json"):
+            raise CourseDescriptionsFileError("Only .json files are accepted.")
+
+        payload = await file.read()
+        if not payload:
+            raise CourseDescriptionsFileError("Uploaded file is empty.")
+        if len(payload) > 10 * 1024 * 1024:
+            raise CourseDescriptionsFileError("File exceeds 10 MB limit.")
+
+        try:
+            entries = _json.loads(payload)
+        except _json.JSONDecodeError as exc:
+            raise CourseDescriptionsFileError(f"Invalid JSON: {exc}") from exc
+
+        if not isinstance(entries, list):
+            raise CourseDescriptionsFileError("JSON must be an array of course objects.")
+
+        updated = skipped_empty = skipped_unchanged = not_found = 0
+
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            code = str(entry.get("code") or "").strip()
+            level = str(entry.get("level") or "").strip()
+            description = str(entry.get("description") or "").strip()
+
+            if not description:
+                skipped_empty += 1
+                continue
+
+            course = await self.course_repository.get_by_code_and_level(code, level)
+            if not course:
+                not_found += 1
+                continue
+
+            if course.description == description:
+                skipped_unchanged += 1
+                continue
+
+            await self.course_repository.update(course, description=description)
+            updated += 1
+
+        logger.info(
+            "Descriptions upload completed.",
+            extra={
+                "filename": filename,
+                "updated": updated,
+                "skipped_empty": skipped_empty,
+                "skipped_unchanged": skipped_unchanged,
+                "not_found": not_found,
+            },
+        )
+        return DescriptionsUploadResponse(
+            processed_rows=len(entries),
+            updated_count=updated,
+            skipped_empty=skipped_empty,
+            skipped_unchanged=skipped_unchanged,
+            not_found_count=not_found,
+        )
 
     async def _read_payload(self, file: UploadFile) -> tuple[bytes, str]:
         filename = file.filename or ""

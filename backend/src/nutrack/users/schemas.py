@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from nutrack.enrollments.schemas import EnrollmentItemResponse
 
 EnrollmentResponse = EnrollmentItemResponse
@@ -64,6 +64,7 @@ class RequirementResultResponse(BaseModel):
     matched_courses: list[MatchedCourseResponse]
     ects_per_course: int
     note: str
+    terms_available: list[str] = Field(default_factory=list)
 
 
 class CategoryResultResponse(BaseModel):

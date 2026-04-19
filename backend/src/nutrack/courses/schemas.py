@@ -112,6 +112,8 @@ class CourseDetailResponse(BaseModel):
     professors: list[ProfessorStats] = Field(default_factory=list)
     # Schedule offerings from the most recent term (list in catalog, detail in course page)
     offerings: list[CourseOfferingInfo] = Field(default_factory=list)
+    # Aggregated review rating (average overall_rating across all reviews)
+    avg_review_rating: float | None = None
     # Computed for authenticated user: eligibility and registration priority
     is_eligible: bool | None = None
     ineligibility_reason: str | None = None
@@ -239,6 +241,19 @@ class ReviewStats(BaseModel):
 class ReviewsPage(BaseModel):
     stats: ReviewStats
     reviews: list[ReviewResponse]
+
+
+# ---------------------------------------------------------------------------
+# Descriptions upload
+# ---------------------------------------------------------------------------
+
+
+class DescriptionsUploadResponse(BaseModel):
+    processed_rows: int
+    updated_count: int
+    skipped_empty: int
+    skipped_unchanged: int
+    not_found_count: int
 
 
 # ---------------------------------------------------------------------------
