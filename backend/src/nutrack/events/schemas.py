@@ -1,9 +1,47 @@
+import re
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from nutrack.categories.schemas import CategoryResponse
 from nutrack.events.models import RecurrenceType
+
+HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+
+def _validate_hex_color(value: str) -> str:
+    if not HEX_COLOR_RE.match(value):
+        raise ValueError("color must be a valid hex color, e.g. '#FF5733'")
+    return value
+
+
+class CreateCategoryRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    color: str
+
+    @field_validator("color")
+    @classmethod
+    def color_must_be_hex(cls, value: str) -> str:
+        return _validate_hex_color(value)
+
+
+class UpdateCategoryRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    color: str | None = None
+
+    @field_validator("color")
+    @classmethod
+    def color_must_be_hex(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return _validate_hex_color(value)
+
+
+class CategoryResponse(BaseModel):
+    id: int
+    name: str
+    color: str
+    created_at: datetime
+    updated_at: datetime
 
 
 class CreateEventRequest(BaseModel):

@@ -302,7 +302,7 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
       }
       try {
         const response = await api.get<ApiResponse<MockExamCourseGroup[]>>(
-          "/study/mock-exams",
+          "/mock-exams",
         );
         setStudyGroup(findStudyGroup(response.data ?? [], catalogCourseId));
       } catch {

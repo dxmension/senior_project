@@ -42,7 +42,7 @@ export function MaterialsManagement({
     setError(null);
     try {
       const response = await api.get<ApiResponse<AdminMaterialUpload[]>>(
-        "/admin/materials/uploads"
+        "/admin/course-materials/uploads"
       );
       setMaterials(response.data ?? []);
     } catch (err) {
@@ -60,7 +60,7 @@ export function MaterialsManagement({
     setSubmittingId(item.id);
     try {
       await api.post<ApiResponse>(
-        `/admin/materials/uploads/${item.id}/publish`,
+        `/admin/course-materials/uploads/${item.id}/publish`,
         {
           title: publishForm.title.trim() || item.original_filename,
           week: Number(publishForm.week),
@@ -78,7 +78,7 @@ export function MaterialsManagement({
   async function reject(item: AdminMaterialUpload) {
     setSubmittingId(item.id);
     try {
-      await api.post<ApiResponse>(`/admin/materials/uploads/${item.id}/reject`);
+      await api.post<ApiResponse>(`/admin/course-materials/uploads/${item.id}/reject`);
       await loadMaterials();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to reject");
@@ -91,7 +91,7 @@ export function MaterialsManagement({
     setSubmittingId(item.id);
     try {
       await api.post<ApiResponse>(
-        `/admin/materials/uploads/${item.id}/unpublish`
+        `/admin/course-materials/uploads/${item.id}/unpublish`
       );
       await loadMaterials();
     } catch (err) {
@@ -104,7 +104,7 @@ export function MaterialsManagement({
   async function remove(item: AdminMaterialUpload) {
     setSubmittingId(item.id);
     try {
-      await api.delete<ApiResponse>(`/admin/materials/uploads/${item.id}`);
+      await api.delete<ApiResponse>(`/admin/course-materials/uploads/${item.id}`);
       await loadMaterials();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete");

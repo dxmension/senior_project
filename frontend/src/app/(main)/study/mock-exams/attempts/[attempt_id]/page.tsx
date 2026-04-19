@@ -1,9 +1,10 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ChevronRight, Send } from "lucide-react";
 
+import { MockExamCountdown } from "@/components/study/mock-exam-countdown";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
@@ -15,6 +16,7 @@ import type {
 } from "@/types";
 
 type PageParams = Promise<{ attempt_id: string }>;
+const EXPIRED_MESSAGE = "Mock exam time limit has expired";
 
 function answerOptions(question: MockExamQuestionStudentItem) {
   return [1, 2, 3, 4, 5, 6]
@@ -36,6 +38,7 @@ export default function MockExamAttemptPage({ params }: { params: PageParams }) 
   const { attempt_id } = use(params);
   const router = useRouter();
   const attemptId = Number(attempt_id);
+  const autoSubmitRef = useRef(false);
   const [attempt, setAttempt] = useState<MockExamAttemptSession | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selected, setSelected] = useState<Record<number, number | null>>({});
@@ -60,7 +63,7 @@ export default function MockExamAttemptPage({ params }: { params: PageParams }) 
     setError(null);
     try {
       const response = await api.get<ApiResponse<MockExamAttemptSession>>(
-        `/study/mock-exams/attempts/${attemptId}`,
+        `/mock-exams/attempts/${attemptId}`,
       );
       const next = response.data;
       setAttempt(next);
@@ -73,11 +76,20 @@ export default function MockExamAttemptPage({ params }: { params: PageParams }) 
           ]),
         ),
       );
+      return next;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load attempt";
       setError(message);
+      return null;
     } finally {
       if (!silent) setLoading(false);
+    }
+  }
+
+  async function syncExpiredAttempt() {
+    const next = await loadAttempt(true);
+    if (next?.status === "completed") {
+      router.push(`/study/mock-exams/attempts/${attemptId}/review`);
     }
   }
 
@@ -90,7 +102,7 @@ export default function MockExamAttemptPage({ params }: { params: PageParams }) 
     try {
       const previous = selected[link.id] ?? null;
       await api.put<ApiResponse>(
-        `/study/mock-exams/attempts/${attemptId}/answers/${link.id}`,
+        `/mock-exams/attempts/${attemptId}/answers/${link.id}`,
         { selected_option_index: option },
       );
       setSelected((currentSelected) => ({ ...currentSelected, [link.id]: option }));
@@ -108,6 +120,10 @@ export default function MockExamAttemptPage({ params }: { params: PageParams }) 
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to save answer";
+      if (message === EXPIRED_MESSAGE) {
+        await syncExpiredAttempt();
+        return;
+      }
       setError(message);
     } finally {
       setSaving(false);
@@ -128,10 +144,14 @@ export default function MockExamAttemptPage({ params }: { params: PageParams }) 
     setSubmitting(true);
     setError(null);
     try {
-      await api.post<ApiResponse>(`/study/mock-exams/attempts/${attemptId}/submit`);
+      await api.post<ApiResponse>(`/mock-exams/attempts/${attemptId}/submit`);
       router.push(`/study/mock-exams/attempts/${attemptId}/review`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to submit attempt";
+      if (message === EXPIRED_MESSAGE || message === "Only active attempts can be changed") {
+        router.push(`/study/mock-exams/attempts/${attemptId}/review`);
+        return;
+      }
       setError(message);
     } finally {
       setSubmitting(false);
@@ -199,15 +219,27 @@ export default function MockExamAttemptPage({ params }: { params: PageParams }) 
             Attempt #{attempt.id} · {progressLabel}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void submitAttempt()}
-          disabled={submitting}
-          className="inline-flex items-center justify-center gap-2 rounded-full bg-accent-green px-5 py-3 text-sm font-semibold text-bg-primary disabled:opacity-60"
-        >
-          <Send size={15} />
-          {submitting ? "Submitting..." : "Submit Mock Exam"}
-        </button>
+        <div className="flex flex-col items-start gap-3 lg:items-end">
+          <MockExamCountdown
+            expiresAt={attempt.expires_at}
+            label="Time left"
+            onExpire={() => {
+              if (autoSubmitRef.current) return;
+              autoSubmitRef.current = true;
+              void submitAttempt();
+            }}
+            className="rounded-full border border-accent-orange/30 bg-accent-orange/10 px-4 py-2 text-sm font-semibold text-accent-orange"
+          />
+          <button
+            type="button"
+            onClick={() => void submitAttempt()}
+            disabled={submitting}
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-accent-green px-5 py-3 text-sm font-semibold text-bg-primary disabled:opacity-60"
+          >
+            <Send size={15} />
+            {submitting ? "Submitting..." : "Submit Mock Exam"}
+          </button>
+        </div>
       </div>
 
       <GlassCard className="space-y-5 p-6">

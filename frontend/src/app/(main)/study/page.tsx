@@ -24,7 +24,7 @@ export default function StudyPage() {
       setError(null);
       try {
         const [studyResponse, enrollmentResponse] = await Promise.all([
-          api.get<ApiResponse<MockExamCourseGroup[]>>("/study/mock-exams"),
+          api.get<ApiResponse<MockExamCourseGroup[]>>("/mock-exams"),
           api.get<ApiResponse<EnrollmentItem[]>>("/enrollments?status=in_progress"),
         ]);
         setGroups(

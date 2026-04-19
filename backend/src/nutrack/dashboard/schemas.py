@@ -64,10 +64,3 @@ class DashboardResponse(BaseModel):
     course_progress: list[CourseProgressItem]
     upcoming_deadlines: list[UpcomingDeadlineItem]
     weekly_workload: list[WeeklyWorkloadItem]
-
-
-class AISummaryResponse(BaseModel):
-    summary: str
-    recommendations: list[str]
-    motivation: str
-    generated_at: datetime

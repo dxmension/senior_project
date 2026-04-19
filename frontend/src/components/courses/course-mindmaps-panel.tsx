@@ -79,7 +79,7 @@ export function CourseMindmapsPanel({ enrollment }: Props) {
   async function fetchUploadedWeeks() {
     try {
       const res = await api.get<ApiResponse<StudyMaterialUpload[]>>(
-        `/study/${courseId}/materials/uploads`
+        `/course-materials/${courseId}/uploads`
       );
       const weeks = new Set(
         (res.data ?? [])

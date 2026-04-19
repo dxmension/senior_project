@@ -9,7 +9,20 @@ class MindmapNode(BaseModel):
     id: str
     label: str
     description: str = ""
-    children: list[MindmapNode] = []
+    children: list["MindmapNode"] = Field(default_factory=list)
+
+
+class MindmapLLMNode(BaseModel):
+    id: str = Field(..., min_length=1, max_length=64)
+    label: str = Field(..., min_length=1, max_length=80)
+    description: str = ""
+    parent_id: str | None = None
+    child_ids: list[str] = Field(default_factory=list)
+
+
+class MindmapLLMResponse(BaseModel):
+    root_id: str = Field(..., min_length=1, max_length=64)
+    nodes: list[MindmapLLMNode] = Field(default_factory=list)
 
 
 # Kept for the standalone /generate endpoint (no persistence)
@@ -36,3 +49,6 @@ class SavedMindmapResponse(BaseModel):
     topic: str
     root: MindmapNode
     created_at: datetime
+
+
+MindmapNode.model_rebuild()

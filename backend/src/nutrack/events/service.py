@@ -1,15 +1,20 @@
 import calendar
 from datetime import datetime, timedelta
 
-from nutrack.categories.models import Category
-from nutrack.categories.repository import CategoryRepository
-from nutrack.categories.schemas import CategoryResponse
-from nutrack.events.exceptions import EventCategoryNotFoundError, EventNotFoundError
-from nutrack.events.models import Event, RecurrenceType
-from nutrack.events.repository import EventRepository
+from nutrack.events.exceptions import (
+    CategoryNameConflictError,
+    CategoryNotFoundError,
+    EventCategoryNotFoundError,
+    EventNotFoundError,
+)
+from nutrack.events.models import Category, Event, RecurrenceType
+from nutrack.events.repository import CategoryRepository, EventRepository
 from nutrack.events.schemas import (
+    CategoryResponse,
+    CreateCategoryRequest,
     CreateEventRequest,
     EventResponse,
+    UpdateCategoryRequest,
     UpdateEventRequest,
 )
 
@@ -44,6 +49,53 @@ def _category_response(category: Category | None) -> CategoryResponse | None:
         created_at=category.created_at,
         updated_at=category.updated_at,
     )
+
+
+class EventCategoryService:
+    def __init__(self, repo: CategoryRepository) -> None:
+        self.repo = repo
+
+    async def list_categories(self, user_id: int) -> list[CategoryResponse]:
+        categories = await self.repo.get_all_by_user(user_id)
+        return [_category_response(category) for category in categories]
+
+    async def create_category(
+        self,
+        user_id: int,
+        data: CreateCategoryRequest,
+    ) -> CategoryResponse:
+        existing = await self.repo.get_by_name_and_user(data.name, user_id)
+        if existing:
+            raise CategoryNameConflictError()
+        category = await self.repo.create(
+            user_id=user_id,
+            name=data.name,
+            color=data.color,
+        )
+        return _category_response(category)
+
+    async def update_category(
+        self,
+        user_id: int,
+        category_id: int,
+        data: UpdateCategoryRequest,
+    ) -> CategoryResponse:
+        category = await self.repo.get_by_id_and_user(category_id, user_id)
+        if not category:
+            raise CategoryNotFoundError()
+        if data.name is not None and data.name != category.name:
+            conflict = await self.repo.get_by_name_and_user(data.name, user_id)
+            if conflict:
+                raise CategoryNameConflictError()
+        updates = {field: getattr(data, field) for field in data.model_fields_set}
+        if updates:
+            await self.repo.update(category, **updates)
+        return _category_response(category)
+
+    async def delete_category(self, user_id: int, category_id: int) -> None:
+        deleted = await self.repo.delete_by_id_and_user(category_id, user_id)
+        if not deleted:
+            raise CategoryNotFoundError()
 
 
 def _build_response(

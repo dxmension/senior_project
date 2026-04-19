@@ -3,10 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutrack.assessments.repository import AssessmentRepository
 from nutrack.calendar.service import CalendarService
-from nutrack.categories.repository import CategoryRepository
 from nutrack.database import get_async_session
 from nutrack.enrollments.repository import EnrollmentRepository
-from nutrack.events.repository import EventRepository
+from nutrack.events.repository import CategoryRepository, EventRepository
 from nutrack.events.service import EventService
 
 

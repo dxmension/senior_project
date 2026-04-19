@@ -336,13 +336,6 @@ export interface DashboardData {
   weekly_workload: WeeklyWorkloadItem[];
 }
 
-export interface AISummaryData {
-  summary: string;
-  recommendations: string[];
-  motivation: string;
-  generated_at: string;
-}
-
 export interface UpdateAssessmentPayload {
   assessment_type?: AssessmentType;
   assessment_number?: number;
@@ -530,6 +523,7 @@ export interface MockExamListItem {
   attempts_count: number;
   completed_attempts: number;
   has_active_attempt: boolean;
+  active_attempt: MockExamAttemptSummary | null;
 }
 
 export interface MockExamAssessmentPrediction {
@@ -553,6 +547,8 @@ export interface MockExamAttempt {
   status: "in_progress" | "completed" | "abandoned";
   started_at: string;
   submitted_at: string | null;
+  expires_at: string | null;
+  remaining_seconds: number | null;
   last_active_at: string;
   current_position: number;
   answered_count: number;
@@ -649,6 +645,8 @@ export interface MockExamAttemptSummary {
   score_pct: number | null;
   started_at: string;
   submitted_at: string | null;
+  expires_at: string | null;
+  remaining_seconds: number | null;
 }
 
 export interface MockExamDashboard {
