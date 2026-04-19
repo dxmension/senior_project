@@ -24,4 +24,5 @@ class ManualCourseRecord(BaseModel):
 
 class ManualTranscriptRequest(BaseModel):
     major: str | None = None
+    kazakh_level: str | None = None
     courses: list[ManualCourseRecord]

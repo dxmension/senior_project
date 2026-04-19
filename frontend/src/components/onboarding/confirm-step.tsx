@@ -23,9 +23,12 @@ const emptyCourse: CourseRecord = {
   ects: 6,
 };
 
+const KLL_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"];
+
 export function ConfirmStep({ parsedData, isManual, onDone }: ConfirmStepProps) {
   const { fetchUser } = useAuthStore();
   const [major, setMajor] = useState(parsedData?.major || "");
+  const [kazakhLevel, setKazakhLevel] = useState<string>("");
   const [courses, setCourses] = useState<CourseRecord[]>(
     parsedData?.courses?.length ? parsedData.courses : []
   );
@@ -51,7 +54,11 @@ export function ConfirmStep({ parsedData, isManual, onDone }: ConfirmStepProps) 
     setError(null);
 
     const endpoint = isManual ? "/transcripts/manual" : "/transcripts/confirm";
-    const payload = { major: major || null, courses };
+    const payload = {
+      major: major || null,
+      kazakh_level: kazakhLevel || null,
+      courses,
+    };
 
     try {
       await api.post<ApiResponse>(endpoint, payload);
@@ -76,15 +83,35 @@ export function ConfirmStep({ parsedData, isManual, onDone }: ConfirmStepProps) 
         </p>
       </div>
 
-      <div>
-        <label className="block text-sm text-text-secondary mb-1.5">Major</label>
-        <input
-          type="text"
-          value={major}
-          onChange={(e) => setMajor(e.target.value)}
-          placeholder="e.g. Computer Science"
-          className="glass-input w-full px-3 py-2 text-sm"
-        />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm text-text-secondary mb-1.5">Major</label>
+          <input
+            type="text"
+            value={major}
+            onChange={(e) => setMajor(e.target.value)}
+            placeholder="e.g. Computer Science"
+            className="glass-input w-full px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-sm text-text-secondary mb-1.5">
+            Kazakh Language Level
+          </label>
+          <select
+            value={kazakhLevel}
+            onChange={(e) => setKazakhLevel(e.target.value)}
+            className="glass-input w-full px-3 py-2 text-sm"
+          >
+            <option value="">Not set</option>
+            {KLL_LEVELS.map((lvl) => (
+              <option key={lvl} value={lvl}>KLL {lvl}</option>
+            ))}
+          </select>
+          <p className="text-xs text-text-muted mt-1">
+            Required for some Kazakh-language courses
+          </p>
+        </div>
       </div>
 
       <CourseTable

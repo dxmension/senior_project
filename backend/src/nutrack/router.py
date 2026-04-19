@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from nutrack.admin.router import router as admin_router
 from nutrack.assessments.router import router as assessments_router
 from nutrack.auth.router import router as auth_router
+from nutrack.handbook.router import router as handbook_router
 from nutrack.calendar.router import router as calendar_router
 from nutrack.config import settings
 from nutrack.course_materials.router import router as course_materials_router
@@ -34,3 +35,4 @@ api_router.include_router(mock_exams_router)
 api_router.include_router(flashcards_router)
 api_router.include_router(notifications_router)
 api_router.include_router(admin_router)
+api_router.include_router(handbook_router)
