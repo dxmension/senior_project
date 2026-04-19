@@ -5,7 +5,9 @@ export interface User {
   last_name: string;
   avatar_url: string | null;
   major: string | null;
+  kazakh_level: string | null;
   study_year: number | null;
+  enrollment_year: number | null;
   cgpa: number | null;
   total_credits_earned: number | null;
   total_credits_enrolled: number | null;
@@ -143,6 +145,7 @@ export interface CatalogCourse {
   priority_3: string | null;
   priority_4: string | null;
   is_eligible: boolean | null;
+  ineligibility_reason: string | null;
   user_priority: number | null;
   credits_us: number | null;
   pass_grade: string | null;
@@ -218,6 +221,58 @@ export interface ReviewStats {
 export interface ReviewsPage {
   stats: ReviewStats;
   reviews: CourseReview[];
+}
+
+export interface HandbookUploadResult {
+  id: number;
+  enrollment_year: number;
+  filename: string;
+  status: "processing" | "completed" | "failed";
+  created_at: string;
+}
+
+export interface HandbookStatus {
+  id: number;
+  enrollment_year: number;
+  filename: string;
+  status: "processing" | "completed" | "failed";
+  majors_parsed: string[];
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MatchedCourse {
+  code: string;
+  status: "passed" | "in_progress";
+}
+
+export interface AuditRequirement {
+  name: string;
+  required_count: number;
+  completed_count: number;
+  in_progress_count: number;
+  status: "completed" | "in_progress" | "missing";
+  matched_courses: MatchedCourse[];
+  ects_per_course: number;
+  note: string;
+}
+
+export interface AuditCategory {
+  name: string;
+  requirements: AuditRequirement[];
+  total_ects: number;
+  completed_ects: number;
+}
+
+export interface AuditResult {
+  major: string;
+  supported: boolean;
+  total_ects: number;
+  completed_ects: number;
+  in_progress_ects: number;
+  actual_credits_earned: number;
+  categories: AuditCategory[];
 }
 
 export interface ApiResponse<T = null> {
@@ -334,13 +389,6 @@ export interface DashboardData {
   course_progress: CourseProgressItem[];
   upcoming_deadlines: UpcomingDeadlineItem[];
   weekly_workload: WeeklyWorkloadItem[];
-}
-
-export interface AISummaryData {
-  summary: string;
-  recommendations: string[];
-  motivation: string;
-  generated_at: string;
 }
 
 export interface UpdateAssessmentPayload {
@@ -490,6 +538,18 @@ export interface SavedMindmap {
   created_at: string;
 }
 
+export interface MindmapGenerationQueued {
+  task_id: string;
+  status: "queued";
+}
+
+export interface MindmapGenerationStatus {
+  task_id: string;
+  status: "queued" | "processing" | "completed" | "failed";
+  mindmap: SavedMindmap | null;
+  error_message: string | null;
+}
+
 export interface AdminMaterialUpload {
   id: number;
   course_id: number;
@@ -530,6 +590,7 @@ export interface MockExamListItem {
   attempts_count: number;
   completed_attempts: number;
   has_active_attempt: boolean;
+  active_attempt: MockExamAttemptSummary | null;
 }
 
 export interface MockExamAssessmentPrediction {
@@ -553,6 +614,8 @@ export interface MockExamAttempt {
   status: "in_progress" | "completed" | "abandoned";
   started_at: string;
   submitted_at: string | null;
+  expires_at: string | null;
+  remaining_seconds: number | null;
   last_active_at: string;
   current_position: number;
   answered_count: number;
@@ -649,6 +712,8 @@ export interface MockExamAttemptSummary {
   score_pct: number | null;
   started_at: string;
   submitted_at: string | null;
+  expires_at: string | null;
+  remaining_seconds: number | null;
 }
 
 export interface MockExamDashboard {

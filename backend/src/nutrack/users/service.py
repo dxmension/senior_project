@@ -1,16 +1,24 @@
 from sqlalchemy import select
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, load_only
 
 from nutrack.courses.models import Course, CourseOffering
 from nutrack.enrollments.models import Enrollment, EnrollmentStatus
-from nutrack.enrollments.service import EnrollmentService
+from nutrack.enrollments.service import EnrollmentService, format_course_code
+from nutrack.config import settings
+from nutrack.handbook.service import HandbookService
 from nutrack.semester import format_term_year
+from nutrack.users.audit import compute_audit
 from nutrack.users.exceptions import NotFoundError
 from nutrack.users.repository import UserRepository
 from nutrack.users.schemas import (
+    AuditResultResponse,
+    CategoryResultResponse,
     CreditsBySemester,
     EnrollmentResponse,
+    MatchedCourseResponse,
+    RequirementResultResponse,
     UserProfileResponse,
     UserProfileUpdate,
     UserStatsResponse,
@@ -29,6 +37,10 @@ def course_loader():
             Course.ects,
         ),
     )
+
+
+def _is_missing_handbook_table(error: ProgrammingError) -> bool:
+    return 'relation "handbook_plans" does not exist' in str(error)
 
 
 class UserService:
@@ -107,4 +119,86 @@ class UserService:
             current_gpa=user.cgpa,
             semesters_completed=len(semesters),
             credits_by_semester=credits_by_semester,
+        )
+
+    async def get_audit(self, user_id: int) -> AuditResultResponse:
+        user = await self.user_repo.get_by_id(user_id)
+        if not user:
+            raise NotFoundError("User")
+
+        major = (user.major or "").strip()
+
+        stmt = (
+            select(Enrollment)
+            .options(course_loader())
+            .where(Enrollment.user_id == user_id)
+            .where(
+                Enrollment.status.in_(
+                    [EnrollmentStatus.PASSED, EnrollmentStatus.IN_PROGRESS]
+                )
+            )
+        )
+        result = await self.session.execute(stmt)
+        enrollments = list(result.scalars().unique().all())
+
+        courses: list[tuple[str, str]] = []
+        for e in enrollments:
+            code = format_course_code(
+                e.course_offering.course.code,
+                e.course_offering.course.level,
+            )
+            courses.append((code, e.status.value))
+
+        # Derive enrollment year from study_year: e.g. 4th year in 2026 → enrolled 2022
+        enrollment_year = (
+            settings.CURRENT_YEAR - user.study_year
+            if user.study_year
+            else None
+        )
+
+        # Load handbook plans for this enrollment year if available
+        handbook_plans = None
+        if enrollment_year:
+            handbook_svc = HandbookService(self.session)
+            try:
+                handbook_plans = await handbook_svc.get_plans_for_year(
+                    enrollment_year
+                )
+            except ProgrammingError as exc:
+                if not _is_missing_handbook_table(exc):
+                    raise
+
+        audit = compute_audit(major, courses, user.total_credits_earned or 0, handbook_plans)
+
+        return AuditResultResponse(
+            major=audit.major,
+            supported=audit.supported,
+            total_ects=audit.total_ects,
+            completed_ects=audit.completed_ects,
+            in_progress_ects=audit.in_progress_ects,
+            actual_credits_earned=audit.actual_credits_earned,
+            categories=[
+                CategoryResultResponse(
+                    name=cat.name,
+                    total_ects=cat.total_ects,
+                    completed_ects=cat.completed_ects,
+                    requirements=[
+                        RequirementResultResponse(
+                            name=req.name,
+                            required_count=req.required_count,
+                            completed_count=req.completed_count,
+                            in_progress_count=req.in_progress_count,
+                            status=req.status,
+                            matched_courses=[
+                                MatchedCourseResponse(code=m.code, status=m.status)
+                                for m in req.matched_courses
+                            ],
+                            ects_per_course=req.ects_per_course,
+                            note=req.note,
+                        )
+                        for req in cat.requirements
+                    ],
+                )
+                for cat in audit.categories
+            ],
         )

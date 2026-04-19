@@ -23,7 +23,9 @@ class User(Base, IDMixin, TimestampMixin):
     last_name: Mapped[str] = mapped_column(String(64))
 
     major: Mapped[str | None] = mapped_column(String(64))
+    kazakh_level: Mapped[str | None] = mapped_column(String(8), nullable=True)
     study_year: Mapped[int | None] = mapped_column(Integer)
+    enrollment_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cgpa: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     total_credits_earned: Mapped[int | None] = mapped_column(Integer)

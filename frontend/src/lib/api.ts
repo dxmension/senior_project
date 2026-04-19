@@ -1,5 +1,13 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/v1";
 
+type ApiErrorPayload = {
+  data?: {
+    error?: {
+      message?: string;
+    };
+  };
+};
+
 class ApiClient {
   private getAccessToken(): string | null {
     if (typeof window === "undefined") return null;
@@ -86,12 +94,19 @@ class ApiClient {
       }
     }
 
+    // 204 No Content — no body to parse
+    if (res.status === 204) {
+      return undefined as T;
+    }
+
     const payload = await res
       .json()
       .catch(() => ({ ok: false, error: { message: "Request failed" } }));
 
     if (!res.ok || payload.ok === false) {
-      throw new Error(payload.error?.message || `HTTP ${res.status}`);
+      const err = new Error(payload.error?.message || `HTTP ${res.status}`) as Error & { response?: unknown };
+      err.response = { data: payload };
+      throw err;
     }
 
     return payload;
@@ -108,13 +123,6 @@ class ApiClient {
     });
   }
 
-  async patch<T>(endpoint: string, body?: unknown): Promise<T> {
-    return this.request<T>(endpoint, {
-      method: "PATCH",
-      body: body ? JSON.stringify(body) : undefined,
-    });
-  }
-
   async put<T>(endpoint: string, body?: unknown): Promise<T> {
     return this.request<T>(endpoint, {
       method: "PUT",
@@ -122,8 +130,19 @@ class ApiClient {
     });
   }
 
+  async patch<T>(endpoint: string, body?: unknown): Promise<T> {
+    return this.request<T>(endpoint, {
+      method: "PATCH",
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  }
+
   async delete<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: "DELETE" });
+  }
+
+  async postForm<T>(endpoint: string, formData: FormData): Promise<T> {
+    return this.requestForm<T>(endpoint, formData);
   }
 
   async uploadFile<T>(endpoint: string, file: File): Promise<T> {
@@ -191,3 +210,21 @@ class ApiClient {
 }
 
 export const api = new ApiClient();
+
+
+export function getApiErrorMessage(
+  error: unknown,
+  fallback: string
+): string {
+  if (error instanceof Error) {
+    const response = (error as Error & { response?: ApiErrorPayload }).response;
+    const message = response?.data?.error?.message;
+    if (message) {
+      return message;
+    }
+    if (error.message) {
+      return error.message;
+    }
+  }
+  return fallback;
+}

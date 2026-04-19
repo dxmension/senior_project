@@ -4,8 +4,10 @@ from unittest.mock import AsyncMock
 import pytest
 
 from nutrack.auth.dependencies import get_current_admin_user, get_current_user
-from nutrack.study.dependencies import get_study_service
-from nutrack.study.router import router
+from nutrack.course_materials.dependencies import get_course_material_service
+from nutrack.course_materials.router import router as course_materials_router
+from nutrack.mock_exams.dependencies import get_mock_exam_service
+from nutrack.mock_exams.router import router as mock_exams_router
 
 
 def _upload_payload() -> dict:
@@ -68,9 +70,14 @@ def _mock_exam_dashboard() -> dict:
     }
 
 
-def test_study_router_keeps_prefix_and_tags() -> None:
-    assert router.prefix == "/study"
-    assert router.tags == ["study"]
+def test_course_materials_router_keeps_prefix_and_tags() -> None:
+    assert course_materials_router.prefix == "/course-materials"
+    assert course_materials_router.tags == ["course_materials"]
+
+
+def test_mock_exams_router_keeps_prefix_and_tags() -> None:
+    assert mock_exams_router.prefix == "/mock-exams"
+    assert mock_exams_router.tags == ["mock_exams"]
 
 
 @pytest.mark.asyncio
@@ -83,9 +90,9 @@ async def test_list_user_materials_returns_data(
         list_user_uploads=AsyncMock(return_value=[_upload_payload()]),
     )
     test_app.dependency_overrides[get_current_user] = lambda: current_user
-    test_app.dependency_overrides[get_study_service] = lambda: service
+    test_app.dependency_overrides[get_course_material_service] = lambda: service
 
-    response = await client.get("/v1/study/7/materials/uploads")
+    response = await client.get("/v1/course-materials/7/uploads")
 
     assert response.status_code == 200
     assert response.json()["data"][0]["id"] == 1
@@ -104,10 +111,10 @@ async def test_upload_materials_queues_batch(
         ),
     )
     test_app.dependency_overrides[get_current_user] = lambda: current_user
-    test_app.dependency_overrides[get_study_service] = lambda: service
+    test_app.dependency_overrides[get_course_material_service] = lambda: service
 
     response = await client.post(
-        "/v1/study/7/materials/uploads",
+        "/v1/course-materials/7/uploads",
         data={"week": "4"},
         files=[("files", ("notes.pdf", b"pdf", "application/pdf"))],
     )
@@ -144,10 +151,10 @@ async def test_admin_publish_material_upload_returns_entry(
         )
     )
     test_app.dependency_overrides[get_current_admin_user] = lambda: admin
-    test_app.dependency_overrides[get_study_service] = lambda: service
+    test_app.dependency_overrides[get_course_material_service] = lambda: service
 
     response = await client.post(
-        "/v1/admin/materials/uploads/8/publish",
+        "/v1/admin/course-materials/uploads/8/publish",
         json={"title": "Week 5 slides", "week": 5},
     )
 
@@ -166,9 +173,9 @@ async def test_delete_user_material_calls_service(
         delete_user_upload=AsyncMock(return_value={"deleted": True}),
     )
     test_app.dependency_overrides[get_current_user] = lambda: current_user
-    test_app.dependency_overrides[get_study_service] = lambda: service
+    test_app.dependency_overrides[get_course_material_service] = lambda: service
 
-    response = await client.delete("/v1/study/7/materials/uploads/9")
+    response = await client.delete("/v1/course-materials/7/uploads/9")
 
     assert response.status_code == 200
     assert response.json()["data"]["deleted"] is True
@@ -186,9 +193,9 @@ async def test_cancel_publish_returns_upload_payload(
         cancel_user_publish=AsyncMock(return_value=payload),
     )
     test_app.dependency_overrides[get_current_user] = lambda: current_user
-    test_app.dependency_overrides[get_study_service] = lambda: service
+    test_app.dependency_overrides[get_course_material_service] = lambda: service
 
-    response = await client.post("/v1/study/7/materials/uploads/9/cancel-publish")
+    response = await client.post("/v1/course-materials/7/uploads/9/cancel-publish")
 
     assert response.status_code == 200
     assert response.json()["data"]["curation_status"] == "not_requested"
@@ -206,9 +213,9 @@ async def test_admin_unpublish_material_upload_returns_private_upload(
         unpublish_upload=AsyncMock(return_value=payload),
     )
     test_app.dependency_overrides[get_current_admin_user] = lambda: admin
-    test_app.dependency_overrides[get_study_service] = lambda: service
+    test_app.dependency_overrides[get_course_material_service] = lambda: service
 
-    response = await client.post("/v1/admin/materials/uploads/8/unpublish")
+    response = await client.post("/v1/admin/course-materials/uploads/8/unpublish")
 
     assert response.status_code == 200
     assert response.json()["data"]["publish_requested"] is False
@@ -225,9 +232,9 @@ async def test_admin_delete_material_upload_returns_deleted(
         delete_upload=AsyncMock(return_value={"deleted": True}),
     )
     test_app.dependency_overrides[get_current_admin_user] = lambda: admin
-    test_app.dependency_overrides[get_study_service] = lambda: service
+    test_app.dependency_overrides[get_course_material_service] = lambda: service
 
-    response = await client.delete("/v1/admin/materials/uploads/8")
+    response = await client.delete("/v1/admin/course-materials/uploads/8")
 
     assert response.status_code == 200
     assert response.json()["data"]["deleted"] is True
@@ -279,9 +286,9 @@ async def test_list_mock_exams_returns_groups(
     ]
     service = SimpleNamespace(list_mock_exams=AsyncMock(return_value=payload))
     test_app.dependency_overrides[get_current_user] = lambda: current_user
-    test_app.dependency_overrides[get_study_service] = lambda: service
+    test_app.dependency_overrides[get_mock_exam_service] = lambda: service
 
-    response = await client.get("/v1/study/mock-exams")
+    response = await client.get("/v1/mock-exams")
 
     assert response.status_code == 200
     assert response.json()["data"][0]["course_code"] == "CSCI 151"
@@ -298,9 +305,9 @@ async def test_get_mock_exam_dashboard_returns_stats(
         get_mock_exam_dashboard=AsyncMock(return_value=_mock_exam_dashboard())
     )
     test_app.dependency_overrides[get_current_user] = lambda: current_user
-    test_app.dependency_overrides[get_study_service] = lambda: service
+    test_app.dependency_overrides[get_mock_exam_service] = lambda: service
 
-    response = await client.get("/v1/study/mock-exams/4")
+    response = await client.get("/v1/mock-exams/4")
 
     assert response.status_code == 200
     assert response.json()["data"]["title"] == "Midterm 1 Mock 2"
@@ -338,9 +345,9 @@ async def test_get_mock_exam_attempt_returns_session(
     }
     service = SimpleNamespace(get_mock_exam_attempt=AsyncMock(return_value=payload))
     test_app.dependency_overrides[get_current_user] = lambda: current_user
-    test_app.dependency_overrides[get_study_service] = lambda: service
+    test_app.dependency_overrides[get_mock_exam_service] = lambda: service
 
-    response = await client.get("/v1/study/mock-exams/attempts/21")
+    response = await client.get("/v1/mock-exams/attempts/21")
 
     assert response.status_code == 200
     assert response.json()["data"]["mock_exam_id"] == 4
@@ -379,9 +386,9 @@ async def test_get_mock_exam_attempt_review_returns_review(
         get_mock_exam_attempt_review=AsyncMock(return_value=payload)
     )
     test_app.dependency_overrides[get_current_user] = lambda: current_user
-    test_app.dependency_overrides[get_study_service] = lambda: service
+    test_app.dependency_overrides[get_mock_exam_service] = lambda: service
 
-    response = await client.get("/v1/study/mock-exams/attempts/21/review")
+    response = await client.get("/v1/mock-exams/attempts/21/review")
 
     assert response.status_code == 200
     assert response.json()["data"]["status"] == "completed"
@@ -412,9 +419,9 @@ async def test_start_mock_exam_attempt_returns_attempt(
         start_mock_exam_attempt=AsyncMock(return_value=payload)
     )
     test_app.dependency_overrides[get_current_user] = lambda: current_user
-    test_app.dependency_overrides[get_study_service] = lambda: service
+    test_app.dependency_overrides[get_mock_exam_service] = lambda: service
 
-    response = await client.post("/v1/study/mock-exams/4/attempts")
+    response = await client.post("/v1/mock-exams/4/attempts")
 
     assert response.status_code == 200
     assert response.json()["data"]["status"] == "in_progress"
@@ -449,7 +456,7 @@ async def test_admin_list_mock_exams_returns_items(client, test_app) -> None:
     ]
     service = SimpleNamespace(list_admin_mock_exams=AsyncMock(return_value=payload))
     test_app.dependency_overrides[get_current_admin_user] = lambda: admin
-    test_app.dependency_overrides[get_study_service] = lambda: service
+    test_app.dependency_overrides[get_mock_exam_service] = lambda: service
 
     response = await client.get("/v1/admin/mock-exams?course_id=2")
 

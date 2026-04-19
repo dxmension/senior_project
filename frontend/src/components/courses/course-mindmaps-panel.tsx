@@ -6,12 +6,24 @@ import { useEffect, useRef, useState } from "react";
 import { MindmapTree } from "@/components/courses/mindmap-tree";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
-import { api } from "@/lib/api";
-import type { ApiResponse, EnrollmentItem, SavedMindmap, StudyMaterialUpload } from "@/types";
+import { api, getApiErrorMessage } from "@/lib/api";
+import type {
+  ApiResponse,
+  EnrollmentItem,
+  MindmapGenerationQueued,
+  MindmapGenerationStatus,
+  SavedMindmap,
+  StudyMaterialUpload,
+} from "@/types";
 
 // ─── Week label helper ────────────────────────────────────────────────────────
 
 const WEEKS = Array.from({ length: 15 }, (_, i) => i + 1);
+
+
+function generationStorageKey(courseId: number): string {
+  return `mindmap-generation:${courseId}`;
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -25,6 +37,7 @@ export function CourseMindmapsPanel({ enrollment }: Props) {
   const [mindmaps, setMindmaps] = useState<SavedMindmap[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [generationTaskId, setGenerationTaskId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Generate form
@@ -43,12 +56,38 @@ export function CourseMindmapsPanel({ enrollment }: Props) {
 
   // No-material warning modal
   const [showNoMaterialWarning, setShowNoMaterialWarning] = useState(false);
+  const isGenerating = generating || generationTaskId !== null;
 
   useEffect(() => {
     void fetchMindmaps();
     void fetchUploadedWeeks();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
+
+  useEffect(() => {
+    const taskId = readGenerationTaskId(courseId);
+    if (!taskId) {
+      setGenerationTaskId(null);
+      setGenerating(false);
+      return;
+    }
+    setGenerationTaskId(taskId);
+    setGenerating(true);
+  }, [courseId]);
+
+  useEffect(() => {
+    if (!generationTaskId) return;
+    writeGenerationTaskId(courseId, generationTaskId);
+    setGenerating(true);
+    const timer = window.setInterval(() => {
+      void pollGenerationStatus(generationTaskId);
+    }, 2000);
+    void pollGenerationStatus(generationTaskId);
+    return () => {
+      window.clearInterval(timer);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generationTaskId, courseId]);
 
   // Escape key handler to close viewer modal
   useEffect(() => {
@@ -79,7 +118,7 @@ export function CourseMindmapsPanel({ enrollment }: Props) {
   async function fetchUploadedWeeks() {
     try {
       const res = await api.get<ApiResponse<StudyMaterialUpload[]>>(
-        `/study/${courseId}/materials/uploads`
+        `/course-materials/${courseId}/uploads`
       );
       const weeks = new Set(
         (res.data ?? [])
@@ -104,17 +143,49 @@ export function CourseMindmapsPanel({ enrollment }: Props) {
     setGenerating(true);
     setError(null);
     try {
-      const res = await api.post<ApiResponse<SavedMindmap>>(
+      const res = await api.post<ApiResponse<MindmapGenerationQueued>>(
         `/mindmaps/${courseId}/generate`,
         { week, depth: 3 }
       );
       if (res.data) {
-        setMindmaps((prev) => [res.data!, ...prev]);
+        setGenerationTaskId(res.data.task_id);
+        writeGenerationTaskId(courseId, res.data.task_id);
       }
-    } catch {
-      setError("Generation failed. Check your OpenAI API key or try again.");
-    } finally {
+    } catch (error) {
+      setError(
+        getApiErrorMessage(
+          error,
+          "Generation failed. Check your OpenAI API key or try again."
+        )
+      );
       setGenerating(false);
+      return;
+    }
+  }
+
+  async function pollGenerationStatus(taskId: string) {
+    try {
+      const res = await api.get<ApiResponse<MindmapGenerationStatus>>(
+        `/mindmaps/${courseId}/tasks/${taskId}`
+      );
+      const payload = res.data;
+      if (!payload) return;
+      if (payload.status === "completed" && payload.mindmap) {
+        setMindmaps((prev) => [payload.mindmap!, ...prev]);
+        clearGenerationTaskId(courseId);
+        setGenerationTaskId(null);
+        setGenerating(false);
+        return;
+      }
+      if (payload.status === "failed") {
+        setError(payload.error_message || "Generation failed.");
+        clearGenerationTaskId(courseId);
+        setGenerationTaskId(null);
+        setGenerating(false);
+        return;
+      }
+    } catch (error) {
+      setError(getApiErrorMessage(error, "Failed to check generation status."));
     }
   }
 
@@ -158,6 +229,7 @@ export function CourseMindmapsPanel({ enrollment }: Props) {
               <select
                 value={week}
                 onChange={(e) => setWeek(Number(e.target.value))}
+                disabled={isGenerating}
                 className="rounded-lg border border-border-primary bg-surface-secondary
                            px-3 py-2 text-sm text-text-primary focus:outline-none
                            focus:ring-1 focus:ring-accent-green"
@@ -172,18 +244,18 @@ export function CourseMindmapsPanel({ enrollment }: Props) {
 
             <button
               type="button"
-              disabled={generating}
+              disabled={isGenerating}
               onClick={handleGenerateClick}
               className="inline-flex items-center gap-1.5 rounded-lg bg-accent-green px-4 py-2
                          text-sm font-medium text-black transition-opacity
                          hover:opacity-90 disabled:opacity-40"
             >
-              {generating ? (
+              {isGenerating ? (
                 <Spinner />
               ) : (
                 <Plus size={14} />
               )}
-              {generating ? "Generating…" : "Generate"}
+              {isGenerating ? "Generating…" : "Generate"}
             </button>
           </div>
           <p className="mt-2 text-xs text-text-secondary">
@@ -311,7 +383,7 @@ export function CourseMindmapsPanel({ enrollment }: Props) {
             </div>
 
             {/* Scrollable mindmap */}
-            <div className="rounded-lg overflow-hidden">
+            <div className="rounded-lg overflow-hidden max-h-[85vh] overflow-y-auto">
               <MindmapTree
                 root={viewing.root}
                 filename={`mindmap-week${viewing.week}`}
@@ -404,4 +476,28 @@ function MindmapCard({
       )}
     </div>
   );
+}
+
+
+function readGenerationTaskId(courseId: number): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return window.localStorage.getItem(generationStorageKey(courseId));
+}
+
+
+function writeGenerationTaskId(courseId: number, taskId: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(generationStorageKey(courseId), taskId);
+}
+
+
+function clearGenerationTaskId(courseId: number): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.removeItem(generationStorageKey(courseId));
 }

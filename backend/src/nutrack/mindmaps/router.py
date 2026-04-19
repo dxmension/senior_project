@@ -2,7 +2,12 @@ from fastapi import APIRouter, Depends, status
 
 from nutrack.auth.dependencies import get_current_user
 from nutrack.mindmaps.dependencies import get_mindmap_service
-from nutrack.mindmaps.schemas import GenerateMindmapRequest, SavedMindmapResponse
+from nutrack.mindmaps.schemas import (
+    GenerateMindmapRequest,
+    MindmapGenerationQueuedResponse,
+    MindmapGenerationStatusResponse,
+    SavedMindmapResponse,
+)
 from nutrack.mindmaps.service import MindmapService
 from nutrack.users.models import User
 from nutrack.utils import ApiResponse
@@ -22,7 +27,7 @@ async def list_mindmaps(
 
 @router.post(
     "/{course_id}/generate",
-    response_model=ApiResponse[SavedMindmapResponse],
+    response_model=ApiResponse[MindmapGenerationQueuedResponse],
     status_code=status.HTTP_201_CREATED,
 )
 async def generate_mindmap(
@@ -31,8 +36,22 @@ async def generate_mindmap(
     user: User = Depends(get_current_user),
     service: MindmapService = Depends(get_mindmap_service),
 ) -> ApiResponse[SavedMindmapResponse]:
-    mindmap = await service.generate_and_save(user.id, course_id, body)
-    return ApiResponse(data=mindmap)
+    task = service.queue_generation(user.id, course_id, body)
+    return ApiResponse(data=task)
+
+
+@router.get(
+    "/{course_id}/tasks/{task_id}",
+    response_model=ApiResponse[MindmapGenerationStatusResponse],
+)
+async def get_mindmap_generation_status(
+    course_id: int,
+    task_id: str,
+    user: User = Depends(get_current_user),
+    service: MindmapService = Depends(get_mindmap_service),
+) -> ApiResponse[MindmapGenerationStatusResponse]:
+    result = await service.get_generation_status(user.id, course_id, task_id)
+    return ApiResponse(data=result)
 
 
 @router.delete(

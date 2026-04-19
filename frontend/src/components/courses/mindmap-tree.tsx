@@ -6,8 +6,8 @@ import type { MindmapNode } from "@/types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const NW = 148; const NH = 38; const HGAP = 144; const UNIT = 56; const PAD = 32;
-const CONTAINER_H = 700; const DESC_W = 300; const DESC_GAP = 10;
+const NW = 160; const NH = 44; const HGAP = 144; const PAD = 32;
+const CONTAINER_H = 800; const DESC_W = 300; const DESC_GAP = 10;
 const NODE_GAP = 8; // minimum gap between node edges
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -24,6 +24,10 @@ type DragState =
 
 function off(id: string, offsets: Map<string, Offset>): Offset {
   return offsets.get(id) ?? { dx: 0, dy: 0 };
+}
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max - 1) + "…" : s;
 }
 
 function estimateDescH(label: string, description: string): number {
@@ -48,21 +52,27 @@ function palette(depth: number) { return PALETTE[Math.min(depth, PALETTE.length 
 
 // ─── Layout ──────────────────────────────────────────────────────────────────
 //
-// Children are distributed using a flat UNIT spacing based only on the direct
-// child count — NOT on recursive leaf counts. This keeps children clustered
-// near the parent's y. Grandchildren expanding do not cause ancestors to shift.
+// subtreeH computes the total vertical space a subtree needs so that children
+// are spaced based on their recursive sizes — preventing overlap when multiple
+// levels are expanded simultaneously (e.g. on initial load).
+
+function subtreeH(node: MindmapNode, expanded: Set<string>): number {
+  if (!node.children.length || !expanded.has(node.id)) return NH + NODE_GAP;
+  return Math.max(NH + NODE_GAP, node.children.reduce((sum, c) => sum + subtreeH(c, expanded), 0));
+}
 
 function place(
   node: MindmapNode, depth: number, x: number, yMid: number, expanded: Set<string>,
 ): Placed {
   const result: Placed = { node, depth, x, y: yMid, children: [] };
   if (!node.children.length || !expanded.has(node.id)) return result;
-  const n = node.children.length;
-  for (let i = 0; i < n; i++) {
-    const yOffset = i === 0 ? 0 : i * UNIT;
-    result.children.push(
-      place(node.children[i], depth + 1, x + NW + HGAP, yMid + yOffset, expanded),
-    );
+  const childHeights = node.children.map(c => subtreeH(c, expanded));
+  const totalH = childHeights.reduce((a, b) => a + b, 0);
+  let yTop = yMid - totalH / 2;
+  for (let i = 0; i < node.children.length; i++) {
+    const childMid = yTop + childHeights[i] / 2;
+    result.children.push(place(node.children[i], depth + 1, x + NW + HGAP, childMid, expanded));
+    yTop += childHeights[i];
   }
   return result;
 }
@@ -236,7 +246,7 @@ function renderEdges(p: Placed, offsets: Map<string, Offset>): React.ReactNode[]
     edges.push(
       <path key={`e-${c.node.id}`}
         d={`M${px},${py} C${mx},${py} ${mx},${cy} ${cx},${cy}`}
-        stroke="#2a2a2a" strokeWidth={1.5} fill="none" />,
+        stroke="#404040" strokeWidth={2} fill="none" />,
     );
     edges.push(...renderEdges(c, offsets));
   }
@@ -269,26 +279,24 @@ function renderNodes(p: Placed, opts: NodeOpts): React.ReactNode[] {
       <rect x={nx} y={ny} width={NW} height={NH} rx={6} ry={6}
         fill={isOpen ? col.stroke : col.fill} stroke={col.stroke} strokeWidth={isOpen ? 2 : 1} />
       {hasChildren && (
-        <text x={nx + NW - 10} y={cy + 4} fontSize={11}
+        <text x={nx + NW - 10} y={cy + 4} fontSize={12}
           fill={isOpen ? col.fill : col.text}
           style={{ userSelect: "none", pointerEvents: "none" }}>
           {isExpanded ? "−" : "+"}
         </text>
       )}
-      <foreignObject x={nx + 6} y={ny + 2} width={hasChildren ? NW - 22 : NW - 12} height={NH - 4}>
-        {/* @ts-expect-error: xmlns required for SVG foreignObject */}
-        <div xmlns="http://www.w3.org/1999/xhtml" style={{
-          width: "100%", height: "100%",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: p.depth === 0 ? "12px" : "11px",
-          fontWeight: p.depth === 0 ? 700 : 500,
-          color: isOpen ? col.fill : col.text,
-          textAlign: "center", lineHeight: 1.2,
-          overflow: "hidden", fontFamily: "sans-serif", pointerEvents: "none",
-        }}>
-          {p.node.label}
-        </div>
-      </foreignObject>
+      <text
+        x={nx + (hasChildren ? (NW - 16) / 2 : NW / 2)}
+        y={cy + (p.depth === 0 ? 5 : 4)}
+        textAnchor="middle"
+        fontSize={p.depth === 0 ? 13 : 12}
+        fontWeight={p.depth === 0 ? "700" : "500"}
+        fontFamily="system-ui,-apple-system,sans-serif"
+        fill={isOpen ? col.fill : col.text}
+        style={{ pointerEvents: "none", userSelect: "none" }}
+      >
+        {truncate(p.node.label, hasChildren ? 18 : 20)}
+      </text>
     </g>,
   );
 
@@ -321,7 +329,7 @@ function downloadAsPng(
       const cx2 = c.x + co.dx + ox; const cy2 = c.y + co.dy + oy; const mx = (px + cx2) / 2;
       const path = document.createElementNS(ns, "path");
       path.setAttribute("d", `M${px},${py} C${mx},${py} ${mx},${cy2} ${cx2},${cy2}`);
-      path.setAttribute("stroke", "#2a2a2a"); path.setAttribute("stroke-width", "1.5");
+      path.setAttribute("stroke", "#404040"); path.setAttribute("stroke-width", "2");
       path.setAttribute("fill", "none");
       svg.appendChild(path); appendEdges(c);
     }
@@ -377,13 +385,71 @@ export function MindmapTree({ root, filename = "mindmap", downloadRef }: Mindmap
   const svgRef = useRef<SVGSVGElement>(null);
   const layoutRef = useRef<Placed | null>(null);
 
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set([root.id]));
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    const initial = new Set<string>([root.id]);
+    for (const child of root.children) initial.add(child.id);
+    return initial;
+  });
   const [openNodes, setOpenNodes] = useState<MindmapNode[]>([]);
   const [nodeOffsets, setNodeOffsets] = useState<Map<string, Offset>>(() => new Map());
   const [vp, setVp] = useState<Viewport>({ zoom: 1, panX: 64, panY: CONTAINER_H / 2 });
+  const [svgW, setSvgW] = useState(1100);
 
   const dragState = useRef<DragState | null>(null);
   const didDrag = useRef(false);
+
+  // ── Fit to view ────────────────────────────────────────────────────────────
+
+  const fitToView = () => {
+    const el = svgRef.current;
+    if (!el) return;
+    const { width: svgW, height: svgH } = el.getBoundingClientRect();
+    if (!svgW || !svgH || !layoutRef.current) return;
+    const b = bounds(layoutRef.current, nodeOffsets);
+    const treeW = b.x2 - b.x1;
+    const treeH = b.y2 - b.y1;
+    if (!treeW || !treeH) return;
+    const padX = svgW * 0.10;
+    const padY = svgH * 0.10;
+    const zoom = Math.min((svgW - padX * 2) / treeW, (svgH - padY * 2) / treeH, 1.5);
+    setVp({
+      zoom,
+      panX: svgW / 2 - (b.x1 + treeW / 2) * zoom,
+      panY: svgH / 2 - (b.y1 + treeH / 2) * zoom,
+    });
+  };
+
+  // Auto-fit once on mount
+  useEffect(() => {
+    const raf = requestAnimationFrame(fitToView);
+    return () => cancelAnimationFrame(raf);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Expand / collapse all
+  function expandAll() {
+    const ids = new Set<string>();
+    function collect(n: MindmapNode) { ids.add(n.id); n.children.forEach(collect); }
+    collect(root);
+    setExpanded(ids);
+  }
+  function collapseAll() {
+    setExpanded(new Set([root.id]));
+  }
+
+  // Keyboard shortcuts: F = fit, +/= = zoom in, - = zoom out
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "f" || e.key === "F") { e.preventDefault(); fitToView(); }
+      else if (e.key === "+" || e.key === "=") { e.preventDefault(); setVp((v) => ({ ...v, zoom: Math.min(2,v.zoom * 1.15) })); }
+      else if (e.key === "-") { e.preventDefault(); setVp((v) => ({ ...v, zoom: Math.max(0.4,v.zoom / 1.15) })); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodeOffsets]);
 
   // Non-passive wheel — zoom toward cursor
   useEffect(() => {
@@ -395,13 +461,23 @@ export function MindmapTree({ root, filename = "mindmap", downloadRef }: Mindmap
       const cx = e.clientX - rect.left; const cy = e.clientY - rect.top;
       setVp((v) => {
         const factor = e.deltaY < 0 ? 1.05 : 0.95;
-        const newZoom = Math.max(0.2, Math.min(3, v.zoom * factor));
+        const newZoom = Math.max(0.4,Math.min(2,v.zoom * factor));
         const ratio = newZoom / v.zoom;
         return { zoom: newZoom, panX: cx + (v.panX - cx) * ratio, panY: cy + (v.panY - cy) * ratio };
       });
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // Track SVG pixel width for toolbar right-alignment
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    setSvgW(el.getBoundingClientRect().width || 1100);
+    const obs = new ResizeObserver(entries => setSvgW(entries[0].contentRect.width));
+    obs.observe(el);
+    return () => obs.disconnect();
   }, []);
 
   // Prevent context menu on right-click
@@ -525,7 +601,7 @@ export function MindmapTree({ root, filename = "mindmap", downloadRef }: Mindmap
       ref={svgRef}
       width="100%"
       height={CONTAINER_H}
-      style={{ background: "#0d0d0d", borderRadius: 8, display: "block", cursor: "grab", userSelect: "none" }}
+      style={{ background: "#0d0d0d", borderRadius: 8, display: "block", cursor: "grab", userSelect: "none", outline: "none" }}
       onMouseDown={handleSvgMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -559,24 +635,26 @@ export function MindmapTree({ root, filename = "mindmap", downloadRef }: Mindmap
             >
               {/* @ts-expect-error: xmlns required for SVG foreignObject */}
               <div xmlns="http://www.w3.org/1999/xhtml" style={{
-                position: "relative",
+                display: "block",
                 background: "#1a1a1a", border: "1px solid #2e2e2e", borderRadius: 8,
-                padding: "8px 26px 8px 10px",
-                width: "100%", boxSizing: "border-box", fontFamily: "sans-serif",
+                padding: "8px 10px",
+                width: "100%", boxSizing: "border-box", fontFamily: "system-ui,-apple-system,sans-serif",
                 cursor: "grab",
               }}>
-                <button
-                  onClick={() => closeDescription(node.id)}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  style={{
-                    position: "absolute", top: 5, right: 5,
-                    background: "transparent", border: "none",
-                    color: "#6b7280", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: "2px 3px",
-                  }}
-                >×</button>
-                <p style={{ fontSize: 11, fontWeight: 700, color: "#e0e0e0", margin: "0 0 4px 0" }}>
-                  {node.label}
-                </p>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4 }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: "#e0e0e0", margin: 0, flex: 1 }}>
+                    {node.label}
+                  </p>
+                  <button
+                    onClick={() => closeDescription(node.id)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    style={{
+                      flexShrink: 0, marginLeft: 6,
+                      background: "transparent", border: "none",
+                      color: "#6b7280", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0,
+                    }}
+                  >×</button>
+                </div>
                 <p style={{ fontSize: 10, color: "#9ca3af", lineHeight: 1.65, margin: 0 }}>
                   {node.description || "No description available."}
                 </p>
@@ -586,10 +664,35 @@ export function MindmapTree({ root, filename = "mindmap", downloadRef }: Mindmap
         })}
       </g>
 
+      {/* Control toolbar — pure SVG, Safari-safe, right-aligned via svgW */}
+      {([
+        { label: "⊞", title: "Fit to view (F)", onClick: fitToView },
+        { label: "+", title: "Zoom in (+)", onClick: () => setVp((v) => ({ ...v, zoom: Math.min(2, v.zoom * 1.15) })) },
+        { label: "−", title: "Zoom out (−)", onClick: () => setVp((v) => ({ ...v, zoom: Math.max(0.4, v.zoom / 1.15) })) },
+        { label: "⤢", title: "Expand all", onClick: expandAll },
+        { label: "⤡", title: "Collapse all", onClick: collapseAll },
+      ] as { label: string; title: string; onClick: () => void }[]).map(({ label, title, onClick }, i) => (
+        <g
+          key={title}
+          transform={`translate(${svgW - 40},${10 + i * 32})`}
+          style={{ cursor: "pointer" }}
+          onClick={(e) => { e.stopPropagation(); onClick(); }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <title>{title}</title>
+          <rect width={28} height={28} rx={6} fill="#1c1c1c" stroke="#3a3a3a" strokeWidth={1} />
+          <text x={14} y={19} textAnchor="middle"
+            fill="#9ca3af" fontSize={14} fontFamily="system-ui,-apple-system,sans-serif"
+            style={{ pointerEvents: "none", userSelect: "none" }}>
+            {label}
+          </text>
+        </g>
+      ))}
+
       {/* Hint — fixed at bottom, outside pan/zoom transform */}
-      <text x="50%" y={CONTAINER_H - 9} textAnchor="middle" fontSize={12} fill="#FFFFFF"
+      <text x="50%" y={CONTAINER_H - 9} textAnchor="middle" fontSize={11} fill="#4a4a4a"
         style={{ userSelect: "none", pointerEvents: "none" }}>
-        Click node to reveal description · Drag nodes to rearrange (Right-click to move with child nodes) · Scroll to zoom · Drag canvas to pan
+        Click node for description · Scroll or ±/F keys to zoom/fit · Drag canvas to pan · Right-click node to move with children
       </text>
     </svg>
   );

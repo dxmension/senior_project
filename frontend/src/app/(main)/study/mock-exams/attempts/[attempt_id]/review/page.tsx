@@ -87,7 +87,7 @@ export default function MockExamReviewPage({ params }: { params: PageParams }) {
       setError(null);
       try {
         const response = await api.get<ApiResponse<MockExamAttemptReview>>(
-          `/study/mock-exams/attempts/${attemptId}/review`,
+          `/mock-exams/attempts/${attemptId}/review`,
         );
         setReview(response.data);
       } catch (err) {

@@ -343,8 +343,124 @@ def _course_cols(course) -> dict:
     return {k: v for k, v in course.__dict__.items() if not k.startswith("_")}
 
 
+_SCHOOL_MAJORS: dict[str, list[str]] = {
+    "school of sciences and humanities": [
+        # Declared majors (as they appear in priority texts and student profiles)
+        "anthropology", "biological sciences", "biology", "chemistry",
+        "economics", "history", "history and culture", "mathematics", "physics",
+        "political science and international relations",
+        "political sciences and international relations",
+        "sociology",
+        "world languages", "world languages, literatures and cultures",
+        "literatures and cultures", "literature and culture",
+        # Undeclared variants
+        "undeclared ssh", "undeclared (ssh)",
+    ],
+    "school of engineering and digital sciences": [
+        # Declared majors
+        "chemical and materials engineering",
+        "civil and environmental engineering",
+        "computer science",
+        "electrical and computer engineering",
+        "mechanical and aerospace engineering",
+        "robotics engineering", "robotics and mechatronics",
+        # Undeclared variants
+        "undeclared seds", "undeclared (seds)",
+    ],
+    "school of mining and geosciences": [
+        "geology", "geosciences",
+        "mining engineering",
+        "petroleum engineering",
+        # Undeclared variants
+        "undeclared smg", "undeclared (smg)",
+    ],
+    "school of medicine": [
+        "a six-year medical program", "medical sciences",
+        "medicine", "nursing",
+        # Undeclared variants
+        "undeclared som", "undeclared nusom",
+    ],
+    "graduate school of business": [
+        "business administration", "business administration (ug)",
+        "undeclared gsb",
+    ],
+    "graduate school of education": [
+        "education", "educational leadership",
+        "undeclared gse",
+    ],
+    "graduate school of public policy": [
+        "public policy", "public administration",
+        "undeclared gspp",
+    ],
+}
+# Abbreviation → canonical school name
+_SCHOOL_ABBREV: dict[str, str] = {
+    "ssh": "school of sciences and humanities",
+    "seds": "school of engineering and digital sciences",
+    "smg": "school of mining and geosciences",
+    "som": "school of medicine",
+    "nusom": "school of medicine",
+    "gsb": "graduate school of business",
+    "gse": "graduate school of education",
+    "gspp": "graduate school of public policy",
+}
+# Pre-built: major (lower) → school name(s) it belongs to
+_MAJOR_TO_SCHOOLS: dict[str, list[str]] = {}
+for _school, _majors in _SCHOOL_MAJORS.items():
+    for _m in _majors:
+        _MAJOR_TO_SCHOOLS.setdefault(_m, []).append(_school)
+
+# Matches "2 year UG SEDS" (all students in a school for that year, no specific major/qualifier)
+_YEAR_SCHOOL_RE = re.compile(r"^\d+\s+year\s+ug\s+(\w+)$", re.IGNORECASE)
+
+
+def _priority_text_matches(text: str, major_lower: str) -> bool:
+    """Return True if priority text matches the user's major directly or via school.
+
+    Priority text is a comma-separated list of items such as:
+      "Computer Science", "SEDS", "2 year UG SEDS", "Undeclared SEDS"
+
+    School-level matching (abbreviation) only fires when an item is the
+    abbreviation alone ("SEDS") or a year+school without a specific major
+    ("2 year UG SEDS").  Items like "Undeclared SEDS" are specific sub-groups
+    and must NOT cause all SEDS students to match — only students whose major
+    is literally "Undeclared SEDS" will match via the direct substring check.
+    """
+    text_lower = text.lower()
+    # 1. Direct major substring match (handles specific majors AND "Undeclared SEDS" etc.)
+    if major_lower in text_lower:
+        return True
+
+    # 2. School-level matching — only for items that represent the whole school
+    schools_for_major = _MAJOR_TO_SCHOOLS.get(major_lower, [])
+    if not schools_for_major:
+        return False
+
+    user_abbrevs = {
+        abbrev
+        for abbrev, canonical in _SCHOOL_ABBREV.items()
+        if canonical in schools_for_major
+    }
+    user_school_names = set(schools_for_major)
+
+    for raw_item in text.split(","):
+        item = raw_item.strip().lower()
+        # Exact school full name
+        if item in user_school_names:
+            return True
+        # Exact abbreviation alone (e.g. item == "seds")
+        if item in user_abbrevs:
+            return True
+        # "X year UG ABBREVIATION" with no further qualifier
+        m = _YEAR_SCHOOL_RE.match(item)
+        if m and m.group(1).lower() in user_abbrevs:
+            return True
+
+    return False
+
+
 def _get_user_priority(course, user_major: str | None) -> int | None:
-    """Return 1/2/3/4 if user's major appears in that priority group text, else None."""
+    """Return 1/2/3/4 if user's major (or their school) appears in that priority group text."""
     if not user_major:
         return None
     major_lower = user_major.lower()
@@ -354,7 +470,7 @@ def _get_user_priority(course, user_major: str | None) -> int | None:
         (3, course.priority_3),
         (4, course.priority_4),
     ]:
-        if text and major_lower in text.lower():
+        if text and _priority_text_matches(text, major_lower):
             return level
     return None
 
@@ -424,6 +540,7 @@ class CourseCatalogService:
         has_priority: bool = False,
         user_id: int | None = None,
         user_major: str | None = None,
+        kazakh_level: str | None = None,
     ) -> tuple[list[CourseDetailResponse], int]:
         # When filtering by eligibility or priority (user-computed fields), we
         # must fetch all matching rows from the DB, apply the filters in Python,
@@ -456,19 +573,26 @@ class CourseCatalogService:
 
         # Fetch user enrollment history once for eligibility computation
         history: list[dict] = []
+        passed: dict[int, dict] = {}
+        in_progress: set[int] = set()
+        code_to_id: dict[tuple[str, str], int] = {}
         if user_id is not None:
             history = await self.course_repository.get_user_course_history(user_id)
-
-        passed: dict[tuple[str, str], dict] = {
-            (r["code"].upper(), r["level"]): r
-            for r in history
-            if r["status"] == EnrollmentStatus.PASSED
-        }
-        in_progress: set[tuple[str, str]] = {
-            (r["code"].upper(), r["level"])
-            for r in history
-            if r["status"] == EnrollmentStatus.IN_PROGRESS
-        }
+            passed = {
+                r["id"]: r
+                for r in history
+                if r["status"] == EnrollmentStatus.PASSED
+            }
+            in_progress = {
+                r["id"]
+                for r in history
+                if r["status"] == EnrollmentStatus.IN_PROGRESS
+            }
+            # Batch-resolve all prerequisite course codes to catalog IDs.
+            all_pairs = _collect_req_pairs(
+                *[text for c in courses for text in (c.prerequisites, c.corequisites, c.antirequisites)]
+            )
+            code_to_id = await self.course_repository.get_ids_by_code_levels(all_pairs)
 
         result = []
         for c in courses:
@@ -492,22 +616,29 @@ class CourseCatalogService:
             ]
 
             if user_id is not None:
-                _, prereqs_met = (
-                    _build_prereq_checks(c.prerequisites, passed)
+                prereq_checks, prereqs_met = (
+                    _build_prereq_checks(c.prerequisites, passed, code_to_id, kazakh_level)
                     if c.prerequisites
                     else ([], True)
                 )
-                _, coreqs_met = (
-                    _build_coreq_checks(c.corequisites, passed, in_progress)
+                coreq_checks, coreqs_met = (
+                    _build_coreq_checks(c.corequisites, passed, in_progress, code_to_id)
                     if c.corequisites
                     else ([], True)
                 )
-                _, antireqs_blocking = (
-                    _build_antireq_checks(c.antirequisites, passed)
+                antireq_checks, antireqs_blocking = (
+                    _build_antireq_checks(c.antirequisites, passed, code_to_id)
                     if c.antirequisites
                     else ([], False)
                 )
-                resp.is_eligible = prereqs_met and coreqs_met and not antireqs_blocking
+                enrollment = passed.get(c.id)
+                already_taken = enrollment is not None and enrollment.get("grade") != "F"
+                resp.is_eligible = prereqs_met and coreqs_met and not antireqs_blocking and not already_taken
+                if not resp.is_eligible:
+                    resp.ineligibility_reason = _ineligibility_reason(
+                        prereqs_met, coreqs_met, antireqs_blocking, already_taken,
+                        prereq_checks, coreq_checks, antireq_checks,
+                    )
                 resp.user_priority = _get_user_priority(c, user_major)
 
             result.append(resp)
@@ -1082,7 +1213,13 @@ class CourseRequirementsService:
 # CourseEligibilityService — helpers
 # ---------------------------------------------------------------------------
 
-_COURSE_RE = re.compile(r"\b([A-Z]{2,6})\s+(\d{3}[A-Za-z]?)\b")
+_COURSE_RE = re.compile(r"\b([A-Z]{2,6})\s+(\d{2,4}[A-Za-z]?)\b")
+
+KLL_LEVEL_ORDER = ["A1", "A2", "B1", "B2", "C1", "C2"]
+
+# Matches the actual DB format: KLL "[B1.2] Intermediate" / KLL "[C1.1] Advanced"
+_KLL_PREREQ_RE = re.compile(r"\bKLL\b[^[]*\[([A-C][12])\.\d\]", re.IGNORECASE)
+
 _GRADE_REQ_RE = re.compile(r"\(([A-F][+-]?)\s+and\s+above\)", re.IGNORECASE)
 _HAS_OR_RE = re.compile(r"\bor\b", re.IGNORECASE)
 
@@ -1101,26 +1238,91 @@ _GRADE_POINTS_MAP: dict[str, float] = {
 }
 
 
+def _ineligibility_reason(
+    prereqs_met: bool,
+    coreqs_met: bool,
+    antireqs_blocking: bool,
+    already_taken: bool,
+    prereq_checks: list,
+    coreq_checks: list,
+    antireq_checks: list,
+) -> str | None:
+    if already_taken:
+        return "Already completed"
+    parts: list[str] = []
+    if not prereqs_met:
+        missing = [c.course_code for c in prereq_checks if not c.met]
+        parts.append(
+            f"Prerequisites not met: {', '.join(missing)}" if missing else "Prerequisites not met"
+        )
+    if not coreqs_met:
+        missing = [c.course_code for c in coreq_checks if not c.met]
+        parts.append(
+            f"Corequisites not met: {', '.join(missing)}" if missing else "Corequisites not met"
+        )
+    if antireqs_blocking:
+        blocking = [c.course_code for c in antireq_checks if c.blocking]
+        parts.append(
+            f"Already took: {', '.join(blocking)}" if blocking else "Antirequisite conflict"
+        )
+    return "; ".join(parts) if parts else None
+
+
+def _build_kll_check(text: str, kazakh_level: str | None) -> "PrerequisiteCheck | None":
+    """Return a PrerequisiteCheck for a KLL requirement if present in text, else None."""
+    m = _KLL_PREREQ_RE.search(text)
+    if not m:
+        return None
+    required = m.group(1).upper()  # e.g. "B1", "C1"
+    if kazakh_level:
+        try:
+            met = KLL_LEVEL_ORDER.index(kazakh_level.upper()) >= KLL_LEVEL_ORDER.index(required)
+        except ValueError:
+            met = False
+    else:
+        met = False
+    return PrerequisiteCheck(
+        course_code=f"KLL {required}",
+        met=met,
+        your_grade=f"KLL {kazakh_level}" if met else None,
+    )
+
+
+def _collect_req_pairs(*texts: str | None) -> list[tuple[str, str]]:
+    """Extract unique (code, level) pairs from one or more requirement text fields."""
+    seen: set[tuple[str, str]] = set()
+    for text in texts:
+        if text:
+            for code, level in _COURSE_RE.findall(text):
+                seen.add((code.upper(), level))
+    return list(seen)
+
+
 def _build_prereq_checks(
     text: str,
-    passed: dict[tuple[str, str], dict],
+    passed: dict[int, dict],
+    code_to_id: dict[tuple[str, str], int],
+    kazakh_level: str | None = None,
 ) -> tuple[list[PrerequisiteCheck], bool]:
     """Parse prerequisite text and check against passed enrollments.
 
     Returns (checks, overall_met).  OR logic applies when "or" appears in text.
+    KLL "[X1.Y] ..." patterns are checked against the user's kazakh_level.
     """
     has_or = bool(_HAS_OR_RE.search(text))
     grade_match = _GRADE_REQ_RE.search(text)
     global_grade = grade_match.group(1).upper() if grade_match else None
 
     courses = _COURSE_RE.findall(text)
-    if not courses:
+    kll_check = _build_kll_check(text, kazakh_level)
+
+    if not courses and kll_check is None:
         return [], True
 
     checks: list[PrerequisiteCheck] = []
     for code, level in courses:
-        key = (code.upper(), level)
-        enrollment = passed.get(key)
+        course_id = code_to_id.get((code.upper(), level))
+        enrollment = passed.get(course_id) if course_id is not None else None
         if enrollment is None:
             checks.append(
                 PrerequisiteCheck(
@@ -1146,14 +1348,21 @@ def _build_prereq_checks(
             )
         )
 
+    if kll_check is not None:
+        checks.append(kll_check)
+
+    if not checks:
+        return [], True
+
     overall = any(c.met for c in checks) if has_or else all(c.met for c in checks)
     return checks, overall
 
 
 def _build_coreq_checks(
     text: str,
-    passed: dict[tuple[str, str], dict],
-    in_progress: set[tuple[str, str]],
+    passed: dict[int, dict],
+    in_progress: set[int],
+    code_to_id: dict[tuple[str, str], int],
 ) -> tuple[list[CorequisiteCheck], bool]:
     """Parse corequisite text and check against passed/in-progress enrollments.
 
@@ -1166,9 +1375,9 @@ def _build_coreq_checks(
 
     checks: list[CorequisiteCheck] = []
     for code, level in courses:
-        key = (code.upper(), level)
-        passed_info = passed.get(key)
-        in_prog = key in in_progress
+        course_id = code_to_id.get((code.upper(), level))
+        passed_info = passed.get(course_id) if course_id is not None else None
+        in_prog = course_id in in_progress if course_id is not None else False
         if passed_info:
             checks.append(
                 CorequisiteCheck(
@@ -1203,7 +1412,8 @@ def _build_coreq_checks(
 
 def _build_antireq_checks(
     text: str,
-    passed: dict[tuple[str, str], dict],
+    passed: dict[int, dict],
+    code_to_id: dict[tuple[str, str], int],
 ) -> tuple[list[AntirequisiteCheck], bool]:
     """Parse antirequisite text and check if user has already taken any of them.
 
@@ -1216,8 +1426,8 @@ def _build_antireq_checks(
 
     checks: list[AntirequisiteCheck] = []
     for code, level in courses:
-        key = (code.upper(), level)
-        enrollment = passed.get(key)
+        course_id = code_to_id.get((code.upper(), level))
+        enrollment = passed.get(course_id) if course_id is not None else None
         if enrollment:
             checks.append(
                 AntirequisiteCheck(
@@ -1246,7 +1456,7 @@ class CourseEligibilityService:
         self.course_repository = course_repository
 
     async def check_eligibility(
-        self, course_id: int, user_id: int
+        self, course_id: int, user_id: int, kazakh_level: str | None = None
     ) -> EligibilityResponse:
         course = await self.course_repository.get_by_id(course_id)
         if not course:
@@ -1254,36 +1464,43 @@ class CourseEligibilityService:
 
         history = await self.course_repository.get_user_course_history(user_id)
 
-        passed: dict[tuple[str, str], dict] = {
-            (r["code"].upper(), r["level"]): r
+        passed: dict[int, dict] = {
+            r["id"]: r
             for r in history
             if r["status"] == EnrollmentStatus.PASSED
         }
-        in_progress: set[tuple[str, str]] = {
-            (r["code"].upper(), r["level"])
+        in_progress: set[int] = {
+            r["id"]
             for r in history
             if r["status"] == EnrollmentStatus.IN_PROGRESS
         }
 
+        all_pairs = _collect_req_pairs(
+            course.prerequisites, course.corequisites, course.antirequisites
+        )
+        code_to_id = await self.course_repository.get_ids_by_code_levels(all_pairs)
+
         prereq_checks, prereqs_met = (
-            _build_prereq_checks(course.prerequisites, passed)
+            _build_prereq_checks(course.prerequisites, passed, code_to_id, kazakh_level)
             if course.prerequisites
             else ([], True)
         )
         coreq_checks, coreqs_met = (
-            _build_coreq_checks(course.corequisites, passed, in_progress)
+            _build_coreq_checks(course.corequisites, passed, in_progress, code_to_id)
             if course.corequisites
             else ([], True)
         )
         antireq_checks, antireqs_blocking = (
-            _build_antireq_checks(course.antirequisites, passed)
+            _build_antireq_checks(course.antirequisites, passed, code_to_id)
             if course.antirequisites
             else ([], False)
         )
 
+        enrollment = passed.get(course_id)
+        already_taken = enrollment is not None and enrollment.get("grade") != "F"
         return EligibilityResponse(
             course_id=course_id,
-            can_register=prereqs_met and coreqs_met and not antireqs_blocking,
+            can_register=prereqs_met and coreqs_met and not antireqs_blocking and not already_taken,
             prerequisites_met=prereqs_met,
             corequisites_met=coreqs_met,
             antirequisites_blocking=antireqs_blocking,
