@@ -26,3 +26,4 @@ load_model_modules()
 
 # Import task modules explicitly so workers register application tasks on boot.
 from nutrack.tasks import materials, parse_transcript  # noqa: F401,E402
+from nutrack.notifications import tasks as notification_tasks  # noqa: F401,E402

@@ -4,7 +4,7 @@ from nutrack.assessments.exceptions import (
     AssessmentNotEnrolledError,
     AssessmentNotFoundError,
 )
-from nutrack.assessments.models import Assessment
+from nutrack.assessments.models import Assessment, AssessmentType
 from nutrack.assessments.repository import AssessmentRepository
 from nutrack.assessments.schemas import (
     AssessmentResponse,
@@ -134,3 +134,4 @@ class AssessmentService:
         )
         result = await self.enrollment_repo.session.execute(stmt)
         return bool(result.scalar())
+        

@@ -1,6 +1,7 @@
 name: nutrack
 
 x-runtime-environment: &runtime-environment
+  PYTHONUNBUFFERED: "1"
   PYTHONPATH: /app/src
   DATABASE_URL: ${DATABASE_URL}
   SYNC_DATABASE_URL: ${SYNC_DATABASE_URL}
@@ -19,6 +20,7 @@ x-runtime-environment: &runtime-environment
   CELERY_BROKER_URL: ${CELERY_BROKER_URL}
   CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
   OPENAI_API_KEY: ${OPENAI_API_KEY}
+  RESEND_API_KEY: ${RESEND_API_KEY}
 
 x-migration-environment: &migration-environment
   <<: *runtime-environment

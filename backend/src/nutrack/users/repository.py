@@ -26,3 +26,11 @@ class UserRepository(BaseRepository[User]):
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def get_subscribed_users(self) -> list[User]:
+        stmt = select(User).where(
+            User.is_onboarded.is_(True),
+            User.is_subscribed_notifications.is_(True) | User.is_subscribed_notifications.is_(None),
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
