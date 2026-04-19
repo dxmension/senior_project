@@ -28,8 +28,11 @@ from nutrack.mock_exams.schemas import (
     AdminMockExamListItem,
     CreateMockExamQuestionRequest,
     CreateMockExamRequest,
+    MockExamGenerationJobResponse,
+    MockExamGenerationSettingsResponse,
     MockExamAdminDetailResponse,
     MockExamQuestionAdminResponse,
+    UpdateMockExamGenerationSettingsRequest,
     UpdateMockExamQuestionRequest,
     UpdateMockExamRequest,
 )
@@ -263,6 +266,57 @@ async def list_admin_mock_exams(
 ):
     exams = await service.list_admin_mock_exams(course_id)
     return ApiResponse(data=exams)
+
+
+@router.get(
+    "/mock-exams/ai-settings",
+    response_model=ApiResponse[MockExamGenerationSettingsResponse],
+)
+async def get_mock_exam_generation_settings(
+    _: User = Depends(get_current_admin_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    settings_payload = await service.get_generation_settings()
+    return ApiResponse(data=settings_payload)
+
+
+@router.put(
+    "/mock-exams/ai-settings",
+    response_model=ApiResponse[MockExamGenerationSettingsResponse],
+)
+async def update_mock_exam_generation_settings(
+    body: UpdateMockExamGenerationSettingsRequest,
+    _: User = Depends(get_current_admin_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    settings_payload = await service.update_generation_settings(body)
+    return ApiResponse(data=settings_payload)
+
+
+@router.get(
+    "/mock-exams/generation-jobs",
+    response_model=ApiResponse[list[MockExamGenerationJobResponse]],
+)
+async def list_mock_exam_generation_jobs(
+    limit: int = Query(default=50, ge=1, le=200),
+    _: User = Depends(get_current_admin_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    jobs = await service.list_generation_jobs(limit)
+    return ApiResponse(data=jobs)
+
+
+@router.post(
+    "/mock-exams/generation-jobs/{job_id}/retry",
+    response_model=ApiResponse[MockExamGenerationJobResponse],
+)
+async def retry_mock_exam_generation_job(
+    job_id: int,
+    _: User = Depends(get_current_admin_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    job = await service.retry_generation_job(job_id)
+    return ApiResponse(data=job)
 
 
 @router.get(

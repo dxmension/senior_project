@@ -46,6 +46,7 @@ async def test_create_assessment_uses_assessment_number() -> None:
     enrollment_repo = SimpleNamespace(session=AsyncMock())
     service = AssessmentService(assessment_repo, enrollment_repo)
     service._is_enrolled = AsyncMock(return_value=True)  # noqa: SLF001
+    service._schedule_mock_exam_generation = AsyncMock()  # noqa: SLF001
     payload = CreateAssessmentRequest(
         course_id=4,
         assessment_type=AssessmentType.MIDTERM,
@@ -60,6 +61,7 @@ async def test_create_assessment_uses_assessment_number() -> None:
 
     assert result.assessment_number == 2
     assert result.title == "Midterm 2"
+    service._schedule_mock_exam_generation.assert_awaited_once()  # noqa: SLF001
     assessment_repo.create.assert_awaited_once_with(
         user_id=1,
         course_id=4,
@@ -72,6 +74,24 @@ async def test_create_assessment_uses_assessment_number() -> None:
         score=None,
         is_completed=False,
     )
+
+
+@pytest.mark.asyncio
+async def test_generate_mock_exam_queues_job() -> None:
+    assessment = _assessment_record()
+    assessment_repo = SimpleNamespace(
+        get_by_id_and_user=AsyncMock(return_value=assessment),
+    )
+    enrollment_repo = SimpleNamespace(session=AsyncMock())
+    service = AssessmentService(assessment_repo, enrollment_repo)
+    service._queue_manual_mock_exam_generation = AsyncMock(  # noqa: SLF001
+        return_value=SimpleNamespace(id=31)
+    )
+
+    result = await service.generate_mock_exam(1, 7)
+
+    assert result.job_id == 31
+    assert result.status == "queued"
 
 
 @pytest.mark.asyncio
