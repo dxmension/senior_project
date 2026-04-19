@@ -5,6 +5,7 @@ import {
   Brain,
   CheckSquare,
   Edit2,
+  LoaderCircle,
   Plus,
   Square,
   Trash2,
@@ -236,6 +237,18 @@ function findAssessmentPrediction(
   );
 }
 
+function findAiMockExam(
+  group: MockExamCourseGroup | null,
+  assessment: Assessment,
+) {
+  if (!group) return null;
+  return group.exams.find((item) => (
+    item.assessment_type === assessment.assessment_type
+    && item.assessment_number === assessment.assessment_number
+    && item.origin === "ai"
+  )) ?? null;
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 type PageParams = Promise<{ course_id: string }>;
@@ -256,9 +269,17 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
     useState<Assessment | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [generatingIds, setGeneratingIds] = useState<Set<number>>(new Set());
   const [studyGroup, setStudyGroup] = useState<MockExamCourseGroup | null>(null);
 
-  const { byCourse, loadingCourseIds, fetchForCourse, toggleComplete, deleteAssessment } =
+  const {
+    byCourse,
+    loadingCourseIds,
+    fetchForCourse,
+    toggleComplete,
+    deleteAssessment,
+    generateMockExam,
+  } =
     useAssessmentsStore();
 
   const assessments = byCourse[courseId] ?? [];
@@ -353,6 +374,19 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
       // error ignored, store keeps state
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  async function handleGenerateMock(assessment: Assessment) {
+    setGeneratingIds((current) => new Set(current).add(assessment.id));
+    try {
+      await generateMockExam(assessment.id);
+    } finally {
+      setGeneratingIds((current) => {
+        const next = new Set(current);
+        next.delete(assessment.id);
+        return next;
+      });
     }
   }
 
@@ -566,12 +600,14 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
                           prediction?.predicted_grade_letter ?? null,
                           prediction?.predicted_score_pct ?? null,
                         );
-                        const hasMockExam =
+                        const aiMockExam = findAiMockExam(studyGroup, assessment);
+                        const canOpenStudy =
                           ["quiz", "midterm", "final"].includes(
                             assessment.assessment_type
                           ) &&
                           !assessment.is_completed &&
                           !isPast;
+                        const isGenerating = generatingIds.has(assessment.id);
 
                         return (
                           <Fragment key={assessment.id}>
@@ -651,7 +687,7 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
                               </td>
                               <td className="px-3 py-3">
                                 <div className="flex items-center justify-end gap-1">
-                                  {hasMockExam ? (
+                                  {canOpenStudy ? (
                                     <>
                                       <span
                                         className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${predicted.badgeClass}`}
@@ -660,16 +696,26 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
                                       </span>
                                       <button
                                         type="button"
-                                        onClick={() => router.push(`/study/${courseId}`)}
+                                        disabled={isGenerating}
+                                        onClick={() => {
+                                          if (aiMockExam) {
+                                            router.push(
+                                              `/study/${courseId}/${assessment.assessment_type}/${assessment.assessment_number}`
+                                            );
+                                            return;
+                                          }
+                                          void handleGenerateMock(assessment);
+                                        }}
                                         className="inline-flex items-center gap-1 rounded-md
                                           border border-border-primary px-2 py-1 text-[11px]
                                           text-text-secondary transition-colors
                                           hover:border-accent-green hover:bg-[#243111]
-                                          hover:text-accent-green"
-                                        title="Open AI mock exams"
+                                          hover:text-accent-green disabled:cursor-not-allowed
+                                          disabled:opacity-60"
+                                        title={aiMockExam ? "Open AI mock exams" : "Generate AI mock exam"}
                                       >
-                                        <Brain size={12} />
-                                        AI Mock Exam
+                                        {isGenerating ? <LoaderCircle size={12} className="animate-spin" /> : <Brain size={12} />}
+                                        {aiMockExam ? "Go to AI Mock" : "Generate AI Mock"}
                                       </button>
                                     </>
                                   ) : null}

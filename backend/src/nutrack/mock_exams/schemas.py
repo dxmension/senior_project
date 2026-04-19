@@ -3,7 +3,13 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from nutrack.assessments.models import AssessmentType
-from nutrack.mock_exams.models import MockExamAttemptStatus, MockExamQuestionSource
+from nutrack.mock_exams.models import (
+    MockExamAttemptStatus,
+    MockExamGenerationStatus,
+    MockExamGenerationTrigger,
+    MockExamOrigin,
+    MockExamQuestionSource,
+)
 
 
 class MockExamQuestionBase(BaseModel):
@@ -187,6 +193,7 @@ class MockExamListItem(BaseModel):
     assessment_number: int
     title: str
     assessment_type: AssessmentType
+    origin: MockExamOrigin
     version: int
     question_count: int
     time_limit_minutes: int | None
@@ -319,3 +326,57 @@ class AdminCourseOfferingResponse(BaseModel):
     section: str | None
     meeting_time: str | None
     room: str | None
+
+
+class MockExamGenerationSettingsInput(BaseModel):
+    enabled: bool
+    model: str = Field(min_length=1, max_length=64)
+    temperature: float = Field(ge=0, le=2)
+    question_count: int = Field(ge=1, le=60)
+    time_limit_minutes: int | None = Field(default=None, ge=1, le=240)
+    max_source_files: int = Field(ge=1, le=20)
+    max_source_chars: int = Field(ge=1000, le=200000)
+    regeneration_offset_hours: int = Field(ge=1, le=168)
+    new_question_ratio: float = Field(ge=0, le=1)
+    tricky_question_ratio: float = Field(ge=0, le=1)
+
+
+class MockExamGenerationSettingsItem(MockExamGenerationSettingsInput):
+    id: int
+    setting_key: str
+    assessment_type: AssessmentType | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class MockExamGenerationSettingsResponse(BaseModel):
+    default: MockExamGenerationSettingsItem
+    quiz: MockExamGenerationSettingsItem
+    midterm: MockExamGenerationSettingsItem
+    final: MockExamGenerationSettingsItem
+
+
+class UpdateMockExamGenerationSettingsRequest(BaseModel):
+    default: MockExamGenerationSettingsInput
+    quiz: MockExamGenerationSettingsInput
+    midterm: MockExamGenerationSettingsInput
+    final: MockExamGenerationSettingsInput
+
+
+class MockExamGenerationJobResponse(BaseModel):
+    id: int
+    assessment_id: int
+    user_id: int
+    course_offering_id: int
+    course_id: int
+    assessment_type: AssessmentType
+    assessment_number: int
+    trigger: MockExamGenerationTrigger
+    status: MockExamGenerationStatus
+    run_at: datetime
+    attempts: int
+    celery_task_id: str | None
+    error_message: str | None
+    generated_mock_exam_id: int | None
+    created_at: datetime
+    updated_at: datetime

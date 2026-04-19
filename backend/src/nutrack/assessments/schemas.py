@@ -57,3 +57,8 @@ class AssessmentResponse(BaseModel):
     is_completed: bool
     created_at: datetime
     updated_at: datetime
+
+
+class MockExamGenerationQueuedResponse(BaseModel):
+    job_id: int
+    status: str

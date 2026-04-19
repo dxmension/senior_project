@@ -109,3 +109,28 @@ def _fake_client(
     parse = AsyncMock(side_effect=error) if error else AsyncMock(return_value=response)
     return SimpleNamespace(responses=SimpleNamespace(parse=parse))
 
+
+def test_request_kwargs_omits_temperature_for_gpt_5_mini() -> None:
+    kwargs = llm_service._request_kwargs(
+        "system",
+        "user",
+        DemoResponse,
+        "gpt-5-mini",
+        0.2,
+        100,
+    )
+
+    assert "temperature" not in kwargs
+
+
+def test_request_kwargs_keeps_temperature_for_gpt_5_1() -> None:
+    kwargs = llm_service._request_kwargs(
+        "system",
+        "user",
+        DemoResponse,
+        "gpt-5.1",
+        0.2,
+        100,
+    )
+
+    assert kwargs["temperature"] == 0.2

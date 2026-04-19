@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from sqlalchemy import exists, select
 
 from nutrack.assessments.exceptions import (
@@ -10,11 +12,13 @@ from nutrack.assessments.repository import AssessmentRepository
 from nutrack.assessments.schemas import (
     AssessmentResponse,
     CreateAssessmentRequest,
+    MockExamGenerationQueuedResponse,
     UpdateAssessmentRequest,
 )
 from nutrack.assessments.utils import assessment_label
 from nutrack.enrollments.models import Enrollment
 from nutrack.enrollments.repository import EnrollmentRepository
+from nutrack.mock_exams.models import MockExamGenerationJob
 
 
 def _build_response(assessment: Assessment) -> AssessmentResponse:
@@ -94,6 +98,7 @@ class AssessmentService:
             is_completed=False,
         )
         loaded = await self.assessment_repo.get_by_id_and_user(assessment.id, user_id)
+        await self._schedule_mock_exam_generation(loaded)
         return _build_response(loaded)
 
     async def get_assessment(
@@ -135,19 +140,37 @@ class AssessmentService:
         updates = {field: getattr(data, field) for field in data.model_fields_set}
         if updates:
             await self.assessment_repo.update(assessment, **updates)
-        refreshed = await self.assessment_repo.get_by_id_and_user(assessment_id, user_id)
+        refreshed = await self.assessment_repo.get_by_id_and_user(
+            assessment_id,
+            user_id,
+        )
+        await self._schedule_mock_exam_generation(refreshed)
         return _build_response(refreshed)
+
+    async def generate_mock_exam(
+        self,
+        user_id: int,
+        assessment_id: int,
+    ) -> MockExamGenerationQueuedResponse:
+        assessment = await self.assessment_repo.get_by_id_and_user(
+            assessment_id,
+            user_id,
+        )
+        if not assessment:
+            raise AssessmentNotFoundError()
+        job = await self._queue_manual_mock_exam_generation(assessment)
+        return MockExamGenerationQueuedResponse(job_id=job.id, status="queued")
 
     async def delete_assessment(
         self,
         user_id: int,
         assessment_id: int,
     ) -> None:
-        deleted = await self.assessment_repo.delete_by_id_and_user(
-            assessment_id, user_id
-        )
-        if not deleted:
+        assessment = await self.assessment_repo.get_by_id_and_user(assessment_id, user_id)
+        if not assessment:
             raise AssessmentNotFoundError()
+        await self._cancel_mock_exam_generation(assessment.id)
+        await self.assessment_repo.delete_by_id_and_user(assessment_id, user_id)
 
     async def _is_enrolled(self, user_id: int, course_id: int) -> bool:
         # course_id is a course_offerings.id; Enrollment.course_id also references course_offerings.id
@@ -180,3 +203,46 @@ class AssessmentService:
         if exclude_id is not None and existing.id == exclude_id:
             return
         raise AssessmentConflictError()
+
+    async def _schedule_mock_exam_generation(
+        self,
+        assessment: Assessment,
+    ) -> None:
+        from nutrack.mock_exams.generation import MockExamGenerationService
+
+        service = MockExamGenerationService(self.assessment_repo.session)
+        jobs = await service.schedule_for_assessment(assessment)
+        for job in jobs:
+            task_id = self._enqueue_generation_job(job)
+            await service.set_celery_task_id(job.id, task_id)
+
+    async def _queue_manual_mock_exam_generation(
+        self,
+        assessment: Assessment,
+    ) -> MockExamGenerationJob:
+        from nutrack.mock_exams.generation import MockExamGenerationService
+
+        service = MockExamGenerationService(self.assessment_repo.session)
+        job = await service.queue_manual_generation(assessment)
+        task_id = self._enqueue_generation_job(job)
+        await service.set_celery_task_id(job.id, task_id)
+        return job
+
+    async def _cancel_mock_exam_generation(self, assessment_id: int) -> None:
+        from nutrack.mock_exams.generation import MockExamGenerationService
+
+        service = MockExamGenerationService(self.assessment_repo.session)
+        await service.job_repo.cancel_pending_for_assessment(assessment_id)
+
+    def _enqueue_generation_job(self, job: MockExamGenerationJob) -> str | None:
+        from nutrack.mock_exams.tasks import generate_assessment_mock_exam_task
+
+        now = datetime.now(timezone.utc)
+        if job.run_at <= now:
+            task = generate_assessment_mock_exam_task.delay(job.id)
+        else:
+            task = generate_assessment_mock_exam_task.apply_async(
+                args=[job.id],
+                eta=job.run_at,
+            )
+        return getattr(task, "id", None)
