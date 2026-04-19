@@ -8,9 +8,10 @@ import { ProfileHeader } from "@/components/profile/profile-header";
 import { StatsGrid } from "@/components/profile/stats-grid";
 import { EnrollmentHistory } from "@/components/profile/enrollment-history";
 import { AuditSection } from "@/components/profile/audit-section";
+import { GpaCalculator } from "@/components/profile/gpa-calculator";
 import type { ApiResponse, UserStats, EnrollmentItem, AuditResult } from "@/types";
 
-type Tab = "audit" | "history";
+type Tab = "audit" | "history" | "gpa";
 
 export default function ProfilePage() {
   const { user } = useAuthStore();
@@ -64,7 +65,7 @@ export default function ProfilePage() {
       {/* Tabs */}
       <div>
         <div className="flex gap-1 border-b border-border-primary mb-6">
-          {(["audit", "history"] as Tab[]).map((tab) => (
+          {(["audit", "history", "gpa"] as Tab[]).map((tab) => (
             <button
               key={tab}
               type="button"
@@ -75,7 +76,7 @@ export default function ProfilePage() {
                   : "border-transparent text-text-muted hover:text-text-secondary"
               }`}
             >
-              {tab === "audit" ? "Degree Audit" : "Course History"}
+              {tab === "audit" ? "Degree Audit" : tab === "history" ? "Course History" : "GPA Calculator"}
             </button>
           ))}
         </div>
@@ -92,6 +93,10 @@ export default function ProfilePage() {
 
         {activeTab === "history" && (
           <EnrollmentHistory enrollments={enrollments} />
+        )}
+
+        {activeTab === "gpa" && (
+          <GpaCalculator enrollments={enrollments} />
         )}
       </div>
     </div>
