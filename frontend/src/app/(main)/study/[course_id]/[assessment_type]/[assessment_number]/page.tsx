@@ -5,6 +5,7 @@ import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, PlayCircle } from "lucide-react";
 
+import { MockExamCountdown } from "@/components/study/mock-exam-countdown";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
@@ -60,35 +61,35 @@ export default function StudyAssessmentFamilyPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const [studyResponse, enrollmentResponse] = await Promise.all([
-          api.get<ApiResponse<MockExamCourseGroup[]>>("/study/mock-exams"),
-          api.get<ApiResponse<EnrollmentItem[]>>("/enrollments?status=in_progress"),
-        ]);
-        const next = findStudyGroupByRouteCourseId(
-          studyResponse.data ?? [],
-          enrollmentResponse.data ?? [],
-          courseId,
-        );
-        if (!next) {
-          throw new Error("Study course not found");
-        }
-        setGroup(next);
-      } catch (err) {
-        const message = err instanceof Error
-          ? err.message
-          : "Failed to load assessment family";
-        setError(message);
-      } finally {
-        setLoading(false);
+  async function loadFamilyData(silent = false) {
+    if (!silent) setLoading(true);
+    setError(null);
+    try {
+      const [studyResponse, enrollmentResponse] = await Promise.all([
+        api.get<ApiResponse<MockExamCourseGroup[]>>("/mock-exams"),
+        api.get<ApiResponse<EnrollmentItem[]>>("/enrollments?status=in_progress"),
+      ]);
+      const next = findStudyGroupByRouteCourseId(
+        studyResponse.data ?? [],
+        enrollmentResponse.data ?? [],
+        courseId,
+      );
+      if (!next) {
+        throw new Error("Study course not found");
       }
+      setGroup(next);
+    } catch (err) {
+      const message = err instanceof Error
+        ? err.message
+        : "Failed to load assessment family";
+      setError(message);
+    } finally {
+      if (!silent) setLoading(false);
     }
+  }
 
-    void load();
+  useEffect(() => {
+    void loadFamilyData();
   }, [courseId]);
 
   const family = useMemo(
@@ -187,6 +188,7 @@ export default function StudyAssessmentFamilyPage({
             assessmentType={assessment_type}
             assessmentNumber={assessmentNumber}
             item={item}
+            onTimerExpire={() => void loadFamilyData(true)}
           />
         ))}
       </div>
@@ -220,11 +222,13 @@ function MockExamCard({
   assessmentType,
   assessmentNumber,
   item,
+  onTimerExpire,
 }: {
   courseId: number;
   assessmentType: string;
   assessmentNumber: number;
   item: MockExamListItem;
+  onTimerExpire: () => void;
 }) {
   const predicted = predictedGradeBadge(
     item.predicted_grade_letter,
@@ -282,10 +286,19 @@ function MockExamCard({
               tone={predicted.textClass}
             />
             <StatChip
-              label={`${item.completed_attempts} completed`}
-              tone="text-text-secondary"
+              label={item.has_active_attempt ? "Uncompleted" : `${item.completed_attempts} completed`}
+              tone={item.has_active_attempt ? "text-accent-orange" : "text-text-secondary"}
             />
           </div>
+
+          {item.active_attempt ? (
+            <MockExamCountdown
+              expiresAt={item.active_attempt.expires_at}
+              label="Active timer"
+              onExpire={onTimerExpire}
+              className="rounded-full border border-accent-orange/30 bg-accent-orange/10 px-3 py-2 text-xs font-semibold text-accent-orange"
+            />
+          ) : null}
         </div>
       </GlassCard>
     </Link>

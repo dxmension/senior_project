@@ -11,12 +11,12 @@ from nutrack.config import settings
 ModelT = TypeVar("ModelT")
 MODEL_MODULES = (
     "nutrack.assessments.models",
-    "nutrack.categories.models",
     "nutrack.courses.models",
     "nutrack.enrollments.models",
     "nutrack.events.models",
     "nutrack.mindmaps.models",
-    "nutrack.study.models",
+    "nutrack.course_materials.models",
+    "nutrack.mock_exams.models",
     "nutrack.transcripts.models",
     "nutrack.users.models",
 )

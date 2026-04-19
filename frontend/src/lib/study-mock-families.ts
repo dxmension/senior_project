@@ -14,6 +14,7 @@ export type MockExamFamily = {
   predictedScore: number | null;
   predictedLetter: string | null;
   hasActiveAttempt: boolean;
+  activeAttempt: MockExamListItem["active_attempt"];
 };
 
 export function assessmentFamilyLabel(
@@ -57,6 +58,7 @@ export function groupMockExamFamilies(exams: MockExamListItem[]) {
       );
       existing.predictedLetter = existing.predictedLetter ?? exam.predicted_grade_letter;
       existing.hasActiveAttempt = existing.hasActiveAttempt || exam.has_active_attempt;
+      existing.activeAttempt = existing.activeAttempt ?? exam.active_attempt;
       continue;
     }
     families.set(key, {
@@ -76,6 +78,7 @@ export function groupMockExamFamilies(exams: MockExamListItem[]) {
       predictedScore: exam.predicted_score_pct,
       predictedLetter: exam.predicted_grade_letter,
       hasActiveAttempt: exam.has_active_attempt,
+      activeAttempt: exam.active_attempt,
     });
   }
   return [...families.values()].sort(

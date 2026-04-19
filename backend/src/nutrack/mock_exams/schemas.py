@@ -3,69 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from nutrack.assessments.models import AssessmentType
-from nutrack.study.models import MockExamAttemptStatus, MockExamQuestionSource
-
-
-class MaterialUploadResponse(BaseModel):
-    id: int
-    course_id: int
-    course_code: str
-    course_title: str
-    week: int
-    original_filename: str
-    content_type: str
-    file_size_bytes: int
-    upload_status: str
-    curation_status: str
-    publish_requested: bool
-    error_message: str | None = None
-    is_published: bool
-    download_url: str | None = None
-    created_at: datetime
-    updated_at: datetime
-
-
-class SharedMaterialResponse(BaseModel):
-    id: int
-    upload_id: int
-    course_id: int
-    course_code: str
-    course_title: str
-    week: int
-    title: str
-    original_filename: str
-    content_type: str
-    file_size_bytes: int
-    download_url: str | None = None
-    is_owned_by_current_user: bool
-    published_at: datetime
-
-
-class PublishMaterialRequest(BaseModel):
-    title: str = Field(..., min_length=1, max_length=255)
-    week: int = Field(..., ge=1, le=15)
-
-
-class AdminMaterialUploadResponse(BaseModel):
-    id: int
-    course_id: int
-    course_code: str
-    course_title: str
-    uploader_id: int
-    uploader_name: str
-    uploader_email: str
-    user_week: int
-    shared_week: int | None = None
-    shared_title: str | None = None
-    original_filename: str
-    content_type: str
-    file_size_bytes: int
-    upload_status: str
-    curation_status: str
-    error_message: str | None = None
-    download_url: str | None = None
-    created_at: datetime
-    updated_at: datetime
+from nutrack.mock_exams.models import MockExamAttemptStatus, MockExamQuestionSource
 
 
 class MockExamQuestionBase(BaseModel):
@@ -215,6 +153,8 @@ class MockExamAttemptResponse(BaseModel):
     status: MockExamAttemptStatus
     started_at: datetime
     submitted_at: datetime | None
+    expires_at: datetime | None = None
+    remaining_seconds: int | None = None
     last_active_at: datetime
     current_position: int
     answered_count: int
@@ -238,6 +178,8 @@ class MockExamAttemptSummary(BaseModel):
     score_pct: float | None
     started_at: datetime
     submitted_at: datetime | None
+    expires_at: datetime | None = None
+    remaining_seconds: int | None = None
 
 
 class MockExamListItem(BaseModel):
@@ -258,6 +200,7 @@ class MockExamListItem(BaseModel):
     attempts_count: int
     completed_attempts: int
     has_active_attempt: bool
+    active_attempt: MockExamAttemptSummary | None = None
 
 
 class MockExamAssessmentPrediction(BaseModel):

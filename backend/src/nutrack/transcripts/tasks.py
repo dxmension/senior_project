@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(
-    name="nutrack.tasks.parse_transcript.parse_transcript_task",
+    name="nutrack.transcripts.tasks.parse_transcript_task",
     bind=True,
     max_retries=2,
     default_retry_delay=10,

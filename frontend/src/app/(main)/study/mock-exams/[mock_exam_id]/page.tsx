@@ -12,6 +12,7 @@ import {
   Trophy,
 } from "lucide-react";
 
+import { MockExamCountdown } from "@/components/study/mock-exam-countdown";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
@@ -78,32 +79,32 @@ export default function MockExamDetailPage({ params }: { params: PageParams }) {
     data?.predicted_score_pct ?? null,
   );
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      setError(null);
-      setStudyCourseId(null);
-      try {
-        const [dashboardResponse, enrollmentResponse] = await Promise.all([
-          api.get<ApiResponse<MockExamDashboard>>(`/study/mock-exams/${mockExamId}`),
-          api.get<ApiResponse<EnrollmentItem[]>>("/enrollments?status=in_progress"),
-        ]);
-        setData(dashboardResponse.data);
-        setStudyCourseId(
-          resolveStudyRouteCourseId(
-            enrollmentResponse.data ?? [],
-            dashboardResponse.data.course_id,
-          ),
-        );
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to load mock exam";
-        setError(message);
-      } finally {
-        setLoading(false);
-      }
+  async function loadDashboard(silent = false) {
+    if (!silent) setLoading(true);
+    setError(null);
+    setStudyCourseId(null);
+    try {
+      const [dashboardResponse, enrollmentResponse] = await Promise.all([
+        api.get<ApiResponse<MockExamDashboard>>(`/mock-exams/${mockExamId}`),
+        api.get<ApiResponse<EnrollmentItem[]>>("/enrollments?status=in_progress"),
+      ]);
+      setData(dashboardResponse.data);
+      setStudyCourseId(
+        resolveStudyRouteCourseId(
+          enrollmentResponse.data ?? [],
+          dashboardResponse.data.course_id,
+        ),
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load mock exam";
+      setError(message);
+    } finally {
+      if (!silent) setLoading(false);
     }
+  }
 
-    void load();
+  useEffect(() => {
+    void loadDashboard();
   }, [mockExamId]);
 
   const totalAttemptPages = Math.max(
@@ -129,7 +130,7 @@ export default function MockExamDetailPage({ params }: { params: PageParams }) {
     setAttemptMessage(null);
     try {
       const response = await api.post<ApiResponse<MockExamAttempt>>(
-        `/study/mock-exams/${mockExamId}/attempts`,
+        `/mock-exams/${mockExamId}/attempts`,
       );
       router.push(`/study/mock-exams/attempts/${response.data.id}`);
     } catch (err) {
@@ -221,6 +222,14 @@ export default function MockExamDetailPage({ params }: { params: PageParams }) {
                 ? "You have an active saved attempt ready to resume."
                 : "Start a new saved attempt. Review stays available after submission."}
             </p>
+            {data.active_attempt ? (
+              <MockExamCountdown
+                expiresAt={data.active_attempt.expires_at}
+                label="Time left"
+                onExpire={() => void loadDashboard(true)}
+                className="justify-center rounded-full border border-accent-orange/30 bg-accent-orange/10 px-3 py-2 text-xs font-semibold text-accent-orange"
+              />
+            ) : null}
             <button
               type="button"
               onClick={() => void handleStart()}
@@ -281,6 +290,7 @@ export default function MockExamDetailPage({ params }: { params: PageParams }) {
                   key={attempt.id}
                   attempt={attempt}
                   mockExamId={data.id}
+                  onTimerExpire={() => void loadDashboard(true)}
                 />
               ))}
               {data.attempts.length > ATTEMPTS_PER_PAGE ? (
@@ -341,9 +351,11 @@ function MetricCard({
 function AttemptCard({
   attempt,
   mockExamId,
+  onTimerExpire,
 }: {
   attempt: MockExamAttemptSummary;
   mockExamId: number;
+  onTimerExpire: () => void;
 }) {
   const action = attempt.status === "completed" ? "Review Attempt" : "Resume Attempt";
   const href =
@@ -374,6 +386,14 @@ function AttemptCard({
             <p className="mt-1 text-xs uppercase tracking-wide text-text-secondary">
               {attempt.status.replace("_", " ")}
             </p>
+            {attempt.expires_at ? (
+              <MockExamCountdown
+                expiresAt={attempt.expires_at}
+                label="Time left"
+                onExpire={onTimerExpire}
+                className="mt-2 justify-end text-xs font-semibold text-accent-orange"
+              />
+            ) : null}
           </div>
           {attempt.status === "abandoned" ? (
             <Link

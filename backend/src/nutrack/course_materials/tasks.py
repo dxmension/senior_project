@@ -1,13 +1,13 @@
 import asyncio
 
 from nutrack.celery_app import celery_app
+from nutrack.course_materials.service import CourseMaterialService
 from nutrack.database import AsyncSessionLocal
-from nutrack.study.service import StudyService
 
 
 async def _run_upload(upload_id: int) -> None:
     async with AsyncSessionLocal() as session:
-        service = StudyService(session=session)
+        service = CourseMaterialService(session=session)
         try:
             await service.process_upload(upload_id)
         except Exception:
@@ -17,13 +17,13 @@ async def _run_upload(upload_id: int) -> None:
 
 async def _mark_failed(upload_id: int, message: str) -> None:
     async with AsyncSessionLocal() as session:
-        service = StudyService(session=session)
+        service = CourseMaterialService(session=session)
         await service.mark_upload_failed(upload_id, message)
 
 
 @celery_app.task(
     bind=True,
-    name="nutrack.tasks.materials.upload_course_material_task",
+    name="nutrack.course_materials.tasks.upload_course_material_task",
     max_retries=2,
     default_retry_delay=10,
 )

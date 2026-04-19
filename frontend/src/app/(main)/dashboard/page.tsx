@@ -3,7 +3,6 @@
 import {
   AlertTriangle,
   BookOpen,
-  Brain,
   CheckCircle2,
   Clock,
   FileText,
@@ -14,8 +13,6 @@ import {
   Loader2,
   MoreHorizontal,
   Presentation,
-  RefreshCw,
-  Sparkles,
   TrendingUp,
   X,
 } from "lucide-react";
@@ -28,7 +25,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth";
 import type {
-  AISummaryData,
   ApiResponse,
   CourseProgressItem,
   DashboardData,
@@ -532,99 +528,6 @@ function CourseRoadmapRow({
   );
 }
 
-function AISummaryCard() {
-  const [data, setData] = useState<AISummaryData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function generate() {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await api.post<ApiResponse<AISummaryData>>(
-        "/dashboard/ai-summary"
-      );
-      setData(res.data);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to generate summary."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <GlassCard padding={false} className="overflow-hidden">
-      <div className="flex items-center justify-between border-b border-[#2a2a2a] px-5 py-4">
-        <div className="flex items-center gap-2">
-          <Sparkles size={16} className="text-accent-green" />
-          <h2 className="text-sm font-semibold text-text-primary">
-            AI Academic Summary
-          </h2>
-        </div>
-        <button
-          type="button"
-          onClick={generate}
-          disabled={loading}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-accent-green/10 px-3 py-1.5 text-xs font-medium text-accent-green transition-colors hover:bg-accent-green/20 disabled:opacity-50"
-        >
-          {loading ? (
-            <RefreshCw size={12} className="animate-spin" />
-          ) : (
-            <Brain size={12} />
-          )}
-          {data ? "Regenerate" : "Generate"}
-        </button>
-      </div>
-
-      <div className="px-5 py-4">
-        {loading && (
-          <div className="flex justify-center py-6">
-            <Spinner text="Generating your academic summary..." />
-          </div>
-        )}
-        {error && <p className="text-sm text-accent-red">{error}</p>}
-        {!loading && !error && !data && (
-          <p className="text-sm text-text-secondary">
-            Click &ldquo;Generate&rdquo; to get a personalized AI summary of
-            your academic progress and recommendations.
-          </p>
-        )}
-        {!loading && data && (
-          <div className="space-y-4">
-            <p className="text-sm leading-relaxed text-text-primary">
-              {data.summary}
-            </p>
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">
-                Recommendations
-              </p>
-              <ul className="space-y-1.5">
-                {data.recommendations.map((rec, i) => (
-                  <li
-                    key={i}
-                    className="flex items-start gap-2 text-sm text-text-primary"
-                  >
-                    <CheckCircle2
-                      size={14}
-                      className="mt-0.5 shrink-0 text-accent-green"
-                    />
-                    {rec}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <p className="rounded-lg bg-accent-green/5 px-3 py-2 text-sm italic text-accent-green">
-              {data.motivation}
-            </p>
-          </div>
-        )}
-      </div>
-    </GlassCard>
-  );
-}
-
 // ─── Main page ───────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -758,9 +661,8 @@ export default function DashboardPage() {
               </GlassCard>
             </div>
 
-            {/* Right col — upcoming deadlines + AI */}
+            {/* Right col — upcoming deadlines */}
             <div className="flex flex-col gap-4">
-              {/* Upcoming deadlines */}
               <GlassCard padding={false} className="overflow-hidden">
                 <div className="flex items-center gap-2 border-b border-[#2a2a2a] px-5 py-4">
                   <GraduationCap size={15} className="text-accent-green" />
@@ -772,9 +674,6 @@ export default function DashboardPage() {
                   <DeadlinesList items={data.upcoming_deadlines} />
                 </div>
               </GlassCard>
-
-              {/* AI Summary */}
-              <AISummaryCard />
             </div>
           </div>
         </>

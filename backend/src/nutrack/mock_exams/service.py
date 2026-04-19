@@ -1,64 +1,40 @@
-import asyncio
 import re
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
-from uuid import uuid4
+from math import ceil
+from datetime import datetime, timezone
+from datetime import timedelta
 
-from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutrack.assessments.models import Assessment
 from nutrack.assessments.repository import AssessmentRepository
 from nutrack.assessments.utils import assessment_label, mock_exam_title
-from nutrack.config import settings
 from nutrack.courses.models import CourseOffering
 from nutrack.enrollments.models import EnrollmentStatus
 from nutrack.enrollments.repository import EnrollmentRepository
-from nutrack.storage import ObjectStorage, sanitize_filename, slugify
-from nutrack.study.exceptions import (
+from nutrack.mock_exams.exceptions import (
     MockExamAttemptNotFoundError,
     MockExamForbiddenError,
     MockExamNotFoundError,
     MockExamQuestionNotFoundError,
     MockExamValidationError,
-    StudyMaterialForbiddenError,
-    StudyMaterialNotFoundError,
-    StudyMaterialQueueError,
-    StudyMaterialValidationError,
 )
-from nutrack.study.models import (
-    MaterialCurationStatus,
-    MaterialUploadStatus,
+from nutrack.mock_exams.models import (
     MockExam,
     MockExamAttempt,
     MockExamAttemptStatus,
     MockExamQuestion,
-    MockExamQuestionSource,
     MockExamQuestionLink,
-    StudyMaterialLibraryEntry,
-    StudyMaterialUpload,
+    MockExamQuestionSource,
 )
-from nutrack.study.repository import (
+from nutrack.mock_exams.repository import (
     MockExamAttemptAnswerRepository,
     MockExamAttemptRepository,
     MockExamQuestionRepository,
     MockExamRepository,
-    StudyMaterialLibraryRepository,
-    StudyMaterialUploadRepository,
 )
-from nutrack.study.utils import predicted_grade_letter, predicted_score_average
+from nutrack.mock_exams.utils import predicted_grade_letter, predicted_score_average
+from nutrack.storage import slugify
 
-MAX_FILE_SIZE = 25 * 1024 * 1024
-MAX_FILES_PER_BATCH = 10
-STALE_UPLOAD_MINUTES = 15
-ALLOWED_EXTENSIONS = {
-    ".pdf": "application/pdf",
-    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-}
 ELIGIBLE_ASSESSMENT_TYPES = {"quiz", "midterm", "final"}
 
 
@@ -68,103 +44,6 @@ def format_course_code(code: str, level: str) -> str:
 
 def _attempt_completed_at(attempt: MockExamAttempt) -> datetime:
     return attempt.submitted_at or attempt.started_at
-
-
-def _publish_requested(status: MaterialCurationStatus) -> bool:
-    return status != MaterialCurationStatus.NOT_REQUESTED
-
-
-def _admin_visible_curation_statuses(
-    curation_status: MaterialCurationStatus | None,
-) -> tuple[MaterialCurationStatus, ...]:
-    visible_statuses = (
-        MaterialCurationStatus.PENDING,
-        MaterialCurationStatus.PUBLISHED,
-    )
-    if curation_status is None:
-        return visible_statuses
-    if curation_status in visible_statuses:
-        return (curation_status,)
-    return ()
-
-
-def _upload_response(
-    upload: StudyMaterialUpload,
-    download_url: str | None,
-):
-    course = upload.course_offering.course
-    return {
-        "id": upload.id,
-        "course_id": upload.course_id,
-        "course_code": format_course_code(course.code, course.level),
-        "course_title": course.title,
-        "week": upload.user_week,
-        "original_filename": upload.original_filename,
-        "content_type": upload.content_type,
-        "file_size_bytes": upload.file_size_bytes,
-        "upload_status": upload.upload_status.value,
-        "curation_status": upload.curation_status.value,
-        "publish_requested": _publish_requested(upload.curation_status),
-        "error_message": upload.error_message,
-        "is_published": upload.library_entry is not None,
-        "download_url": download_url,
-        "created_at": upload.created_at,
-        "updated_at": upload.updated_at,
-    }
-
-
-def _library_response(
-    entry: StudyMaterialLibraryEntry,
-    download_url: str | None,
-    current_user_id: int,
-):
-    upload = entry.upload
-    course = upload.course_offering.course
-    return {
-        "id": entry.id,
-        "upload_id": upload.id,
-        "course_id": entry.course_id,
-        "course_code": format_course_code(course.code, course.level),
-        "course_title": course.title,
-        "week": entry.curated_week,
-        "title": entry.curated_title,
-        "original_filename": upload.original_filename,
-        "content_type": upload.content_type,
-        "file_size_bytes": upload.file_size_bytes,
-        "download_url": download_url,
-        "is_owned_by_current_user": upload.uploader_id == current_user_id,
-        "published_at": entry.updated_at,
-    }
-
-
-def _admin_upload_response(
-    upload: StudyMaterialUpload,
-    download_url: str | None,
-):
-    course = upload.course_offering.course
-    uploader = upload.uploader
-    library_entry = upload.library_entry
-    return {
-        "id": upload.id,
-        "course_id": upload.course_id,
-        "course_code": format_course_code(course.code, course.level),
-        "course_title": course.title,
-        "uploader_id": uploader.id,
-        "uploader_name": f"{uploader.first_name} {uploader.last_name}",
-        "uploader_email": uploader.email,
-        "user_week": upload.user_week,
-        "shared_week": library_entry.curated_week if library_entry else None,
-        "shared_title": library_entry.curated_title if library_entry else None,
-        "original_filename": upload.original_filename,
-        "content_type": upload.content_type,
-        "file_size_bytes": upload.file_size_bytes,
-        "upload_status": upload.upload_status.value,
-        "curation_status": upload.curation_status.value,
-        "error_message": upload.error_message,
-        "download_url": download_url,
-        "created_at": upload.created_at,
-        "updated_at": upload.updated_at,
-    }
 
 
 def _assessment_number_value(value: object) -> int | None:
@@ -206,16 +85,51 @@ def _question_source_label(source: MockExamQuestionSource) -> str:
     return labels[source]
 
 
-def _attempt_response(attempt: MockExamAttempt) -> dict:
+def _attempt_status_value(attempt: MockExamAttempt) -> str:
+    status = attempt.status
+    return status.value if hasattr(status, "value") else str(status)
+
+
+def _attempt_expires_at(
+    started_at: datetime,
+    time_limit_minutes: int | None,
+) -> datetime | None:
+    if time_limit_minutes is None:
+        return None
+    return started_at + timedelta(minutes=time_limit_minutes)
+
+
+def _remaining_seconds(expires_at: datetime, now: datetime) -> int:
+    seconds = (expires_at - now).total_seconds()
+    return max(int(ceil(seconds)), 0)
+
+
+def _attempt_response(
+    attempt: MockExamAttempt,
+    time_limit_minutes: int | None = None,
+    now: datetime | None = None,
+) -> dict:
+    expires_at = None
+    remaining_seconds = None
+    status = _attempt_status_value(attempt)
+    if status == MockExamAttemptStatus.IN_PROGRESS.value:
+        expires_at = _attempt_expires_at(attempt.started_at, time_limit_minutes)
+        if expires_at is not None:
+            remaining_seconds = _remaining_seconds(
+                expires_at,
+                now or datetime.now(timezone.utc),
+            )
     return {
         "id": attempt.id,
-        "status": attempt.status.value,
+        "status": status,
         "started_at": attempt.started_at,
         "submitted_at": attempt.submitted_at,
-        "last_active_at": attempt.last_active_at,
-        "current_position": attempt.current_position,
-        "answered_count": attempt.answered_count,
-        "correct_count": attempt.correct_count,
+        "expires_at": expires_at,
+        "remaining_seconds": remaining_seconds,
+        "last_active_at": getattr(attempt, "last_active_at", attempt.started_at),
+        "current_position": getattr(attempt, "current_position", 1),
+        "answered_count": getattr(attempt, "answered_count", 0),
+        "correct_count": getattr(attempt, "correct_count", 0),
         "score_pct": attempt.score_pct,
     }
 
@@ -288,12 +202,8 @@ def _student_question_link_response(link) -> dict:
     }
 
 
-class StudyService:
-    def __init__(
-        self,
-        session: AsyncSession,
-        storage: ObjectStorage | None = None,
-    ) -> None:
+class MockExamService:
+    def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.assessment_repo = AssessmentRepository(session)
         self.enrollment_repo = EnrollmentRepository(session)
@@ -301,86 +211,6 @@ class StudyService:
         self.mock_exam_question_repo = MockExamQuestionRepository(session)
         self.mock_exam_attempt_repo = MockExamAttemptRepository(session)
         self.mock_exam_answer_repo = MockExamAttemptAnswerRepository(session)
-        self.upload_repo = StudyMaterialUploadRepository(session)
-        self.library_repo = StudyMaterialLibraryRepository(session)
-        self.storage = storage or ObjectStorage()
-
-    async def queue_uploads(
-        self,
-        user_id: int,
-        course_id: int,
-        week: int,
-        request_shared_library: bool,
-        files: list[UploadFile],
-    ) -> list[dict]:
-        await self._cleanup_stale_uploads()
-        offering = await self.upload_repo.get_enrolled_course(user_id, course_id)
-        if not offering:
-            raise StudyMaterialForbiddenError()
-        self._validate_batch(week, files)
-        uploads = []
-        for file in files:
-            uploads.append(
-                await self._create_upload(
-                    user_id,
-                    offering,
-                    week,
-                    request_shared_library,
-                    file,
-                )
-            )
-        await self.session.commit()
-        try:
-            self._enqueue_uploads(uploads)
-        except StudyMaterialQueueError:
-            await self._mark_queue_failure(uploads)
-            raise
-        refreshed = [await self.upload_repo.get_upload_by_id(item.id) for item in uploads]
-        return await self._serialize_uploads(refreshed)
-
-    async def list_user_uploads(
-        self,
-        user_id: int,
-        course_id: int,
-    ) -> list[dict]:
-        await self._cleanup_stale_uploads()
-        await self._require_course_access(user_id, course_id)
-        uploads = await self.upload_repo.list_user_uploads(user_id, course_id)
-        return await self._serialize_uploads(uploads)
-
-    async def list_shared_library(
-        self,
-        user_id: int,
-        course_id: int,
-    ) -> list[dict]:
-        await self._cleanup_stale_uploads()
-        await self._require_course_access(user_id, course_id)
-        entries = await self.library_repo.list_course_library(course_id)
-        return await self._serialize_library(entries, user_id)
-
-    async def list_admin_uploads(
-        self,
-        *,
-        course_id: int | None = None,
-        user_id: int | None = None,
-        upload_status: str | None = None,
-        curation_status: MaterialCurationStatus | None = None,
-    ) -> list[dict]:
-        await self._cleanup_stale_uploads()
-        curation_statuses = _admin_visible_curation_statuses(curation_status)
-        if not curation_statuses:
-            return []
-        uploads = await self.upload_repo.list_admin_uploads(
-            course_id=course_id,
-            user_id=user_id,
-            upload_status=upload_status,
-            curation_statuses=curation_statuses,
-        )
-        payload = []
-        for upload in uploads:
-            url = await self._download_url(upload.storage_key, upload.upload_status)
-            payload.append(_admin_upload_response(upload, url))
-        return payload
 
     async def list_mock_exams(self, user_id: int) -> list[dict]:
         enrollments = await self.enrollment_repo.list_by_user(
@@ -398,6 +228,7 @@ class StudyService:
         course_ids = list(courses)
         exams = await self.mock_exam_repo.list_matching(course_ids)
         available = self._available_mock_exams(exams, allowed_types)
+        active_attempts = await self._sync_active_attempts(user_id, available)
         stats_map = await self._student_attempt_stats(user_id, available)
         prediction_map = await self._student_prediction_map(user_id, available)
         return self._group_mock_exam_items(
@@ -405,11 +236,13 @@ class StudyService:
             available,
             stats_map,
             prediction_map,
+            active_attempts,
         )
 
     async def get_mock_exam_dashboard(self, user_id: int, mock_exam_id: int) -> dict:
         exam = await self._require_student_exam_access(user_id, mock_exam_id)
         attempts = await self.mock_exam_attempt_repo.list_for_user_exam(user_id, exam.id)
+        await self._sync_attempts_for_exam(attempts, exam)
         return self._dashboard_payload(exam, attempts)
 
     async def start_mock_exam_attempt(
@@ -422,7 +255,9 @@ class StudyService:
             raise MockExamValidationError("This mock exam has no questions")
         active = await self.mock_exam_attempt_repo.get_active(user_id, mock_exam_id)
         if active:
-            return _attempt_response(active)
+            await self._sync_attempt_timeout(active, exam)
+            if _attempt_status_value(active) == MockExamAttemptStatus.IN_PROGRESS.value:
+                return _attempt_response(active, exam.time_limit_minutes)
         now = datetime.now(timezone.utc)
         attempt = await self.mock_exam_attempt_repo.create(
             user_id=user_id,
@@ -436,7 +271,7 @@ class StudyService:
             score_pct=None,
             submitted_at=None,
         )
-        return _attempt_response(attempt)
+        return _attempt_response(attempt, exam.time_limit_minutes, now)
 
     async def get_mock_exam_attempt(
         self,
@@ -446,6 +281,7 @@ class StudyService:
         attempt = await self.mock_exam_attempt_repo.get_by_id_for_user(attempt_id, user_id)
         if not attempt:
             raise MockExamAttemptNotFoundError()
+        await self._sync_attempt_timeout(attempt, attempt.mock_exam)
         return self._attempt_session_payload(attempt)
 
     async def get_mock_exam_attempt_review(
@@ -456,6 +292,7 @@ class StudyService:
         attempt = await self.mock_exam_attempt_repo.get_by_id_for_user(attempt_id, user_id)
         if not attempt:
             raise MockExamAttemptNotFoundError()
+        await self._sync_attempt_timeout(attempt, attempt.mock_exam)
         if attempt.status != MockExamAttemptStatus.COMPLETED:
             raise MockExamValidationError("Only completed attempts can be reviewed")
         return self._attempt_review_payload(attempt)
@@ -499,8 +336,13 @@ class StudyService:
         user_id: int,
         attempt_id: int,
     ) -> dict:
-        attempt = await self._require_active_attempt(user_id, attempt_id)
+        attempt = await self.mock_exam_attempt_repo.get_by_id_for_user(attempt_id, user_id)
+        if not attempt:
+            raise MockExamAttemptNotFoundError()
         exam = await self.mock_exam_repo.get_by_id_with_links(attempt.mock_exam_id)
+        await self._sync_attempt_timeout(attempt, exam)
+        if _attempt_status_value(attempt) != MockExamAttemptStatus.IN_PROGRESS.value:
+            return _attempt_response(attempt, exam.time_limit_minutes)
         await self._refresh_attempt_progress(attempt, exam)
         total = max(len(exam.question_links), 1)
         now = datetime.now(timezone.utc)
@@ -512,7 +354,7 @@ class StudyService:
             last_active_at=now,
             score_pct=score_pct,
         )
-        return _attempt_response(attempt)
+        return _attempt_response(attempt, exam.time_limit_minutes)
 
     async def list_admin_mock_exams(self, course_id: int) -> list[dict]:
         exams = await self.mock_exam_repo.list_by_course(course_id)
@@ -528,7 +370,7 @@ class StudyService:
         }
 
     async def create_mock_exam(self, admin_id: int, payload) -> dict:
-        questions = await self._validated_questions(payload.course_id, payload.questions)
+        await self._validated_questions(payload.course_id, payload.questions)
         number = payload.assessment_number
         label = assessment_label(payload.assessment_type, number)
         latest = await self.mock_exam_repo.get_latest_version(
@@ -628,11 +470,7 @@ class StudyService:
         )
         return {**_question_response(question), "usage_count": 0}
 
-    async def update_mock_exam_question(
-        self,
-        question_id: int,
-        payload,
-    ) -> dict:
+    async def update_mock_exam_question(self, question_id: int, payload) -> dict:
         question = await self.mock_exam_question_repo.get_by_id(question_id)
         if not question:
             raise MockExamQuestionNotFoundError()
@@ -665,349 +503,6 @@ class StudyService:
             raise MockExamValidationError("Linked questions cannot be deleted")
         await self.mock_exam_question_repo.delete(question)
         return {"deleted": True}
-
-    async def publish_upload(
-        self,
-        admin_id: int,
-        upload_id: int,
-        title: str,
-        week: int,
-    ) -> dict:
-        await self._cleanup_stale_uploads()
-        self._validate_week(week)
-        if not title.strip():
-            raise StudyMaterialValidationError("Title is required")
-        upload = await self._load_upload(upload_id)
-        if upload.upload_status != MaterialUploadStatus.COMPLETED:
-            raise StudyMaterialValidationError("Only completed uploads can be published")
-        if not _publish_requested(upload.curation_status):
-            raise StudyMaterialValidationError(
-                "This upload was not submitted for shared library curation"
-            )
-        library_entry = await self.library_repo.get_by_upload_id(upload.id)
-        if library_entry:
-            await self.library_repo.update(
-                library_entry,
-                curated_title=title.strip(),
-                curated_week=week,
-                curated_by_admin_id=admin_id,
-            )
-        else:
-            library_entry = await self.library_repo.create(
-                upload_id=upload.id,
-                course_id=upload.course_id,
-                curated_title=title.strip(),
-                curated_week=week,
-                curated_by_admin_id=admin_id,
-            )
-        await self.upload_repo.update(
-            upload,
-            curation_status=MaterialCurationStatus.PUBLISHED,
-        )
-        await self.session.commit()
-        loaded = await self.library_repo.get_by_upload_id(upload.id)
-        return _library_response(
-            loaded,
-            await self.storage.generate_download_url(upload.storage_key),
-            upload.uploader_id,
-        )
-
-    async def reject_upload(self, upload_id: int) -> dict:
-        await self._cleanup_stale_uploads()
-        upload = await self._load_upload(upload_id)
-        if upload.library_entry is not None:
-            raise StudyMaterialValidationError("Published uploads cannot be rejected")
-        if not _publish_requested(upload.curation_status):
-            raise StudyMaterialValidationError("Private uploads cannot be rejected")
-        await self.upload_repo.update(
-            upload,
-            curation_status=MaterialCurationStatus.REJECTED,
-        )
-        await self.session.commit()
-        return {"rejected": True}
-
-    async def cancel_user_publish(
-        self,
-        user_id: int,
-        course_id: int,
-        upload_id: int,
-    ) -> dict:
-        await self._cleanup_stale_uploads()
-        upload = await self._load_user_upload(user_id, course_id, upload_id)
-        return await self._make_upload_private(upload)
-
-    async def unpublish_upload(self, upload_id: int) -> dict:
-        await self._cleanup_stale_uploads()
-        upload = await self._load_upload(upload_id)
-        return await self._make_upload_private(upload)
-
-    async def delete_user_upload(
-        self,
-        user_id: int,
-        course_id: int,
-        upload_id: int,
-    ) -> dict:
-        await self._cleanup_stale_uploads()
-        upload = await self._load_user_upload(user_id, course_id, upload_id)
-        return await self._delete_upload(upload)
-
-    async def delete_upload(self, upload_id: int) -> dict:
-        await self._cleanup_stale_uploads()
-        upload = await self._load_upload(upload_id)
-        return await self._delete_upload(upload)
-
-    async def mark_upload_failed(
-        self,
-        upload_id: int,
-        message: str,
-    ) -> None:
-        upload = await self.upload_repo.get_upload_by_id(upload_id)
-        if not upload:
-            return
-        staged_path = upload.staged_path
-        await self.upload_repo.update(
-            upload,
-            upload_status=MaterialUploadStatus.FAILED,
-            staged_path=None,
-            error_message=message[:500],
-        )
-        await self.session.commit()
-        await self._remove_staged_file(staged_path)
-
-    async def process_upload(self, upload_id: int) -> None:
-        upload = await self._load_upload(upload_id)
-        if upload.upload_status == MaterialUploadStatus.COMPLETED:
-            return
-        if not upload.staged_path:
-            raise StudyMaterialValidationError("Staged upload file is missing")
-        staged_path = upload.staged_path
-        await self.upload_repo.update(
-            upload,
-            upload_status=MaterialUploadStatus.UPLOADING,
-            error_message=None,
-        )
-        await self.session.commit()
-        await self.storage.ensure_bucket()
-        await self.storage.upload_file(
-            upload.staged_path,
-            upload.storage_key,
-            upload.content_type,
-        )
-        await self.upload_repo.update(
-            upload,
-            upload_status=MaterialUploadStatus.COMPLETED,
-            staged_path=None,
-            error_message=None,
-        )
-        await self.session.commit()
-        await self._remove_staged_file(staged_path)
-
-    async def _create_upload(
-        self,
-        user_id: int,
-        offering,
-        week: int,
-        request_shared_library: bool,
-        file: UploadFile,
-    ) -> StudyMaterialUpload:
-        filename = self._validate_file(file)
-        payload = await file.read()
-        if not payload:
-            raise StudyMaterialValidationError("Uploaded file is empty")
-        if len(payload) > MAX_FILE_SIZE:
-            raise StudyMaterialValidationError("File size exceeds 25MB")
-        storage_key = self._storage_key(offering.course.title, week, filename)
-        staged_path = await self._stage_file(filename, payload)
-        return await self.upload_repo.create(
-            course_id=offering.id,
-            uploader_id=user_id,
-            user_week=week,
-            original_filename=filename,
-            staged_path=staged_path,
-            storage_key=storage_key,
-            content_type=self._content_type(file, filename),
-            file_size_bytes=len(payload),
-            upload_status=MaterialUploadStatus.QUEUED,
-            curation_status=self._curation_status(request_shared_library),
-            error_message=None,
-        )
-
-    async def _require_course_access(
-        self,
-        user_id: int,
-        course_id: int,
-    ) -> None:
-        if await self.upload_repo.get_enrolled_course(user_id, course_id):
-            return
-        raise StudyMaterialForbiddenError()
-
-    async def _load_upload(self, upload_id: int) -> StudyMaterialUpload:
-        upload = await self.upload_repo.get_upload_by_id(upload_id)
-        if upload:
-            return upload
-        raise StudyMaterialNotFoundError()
-
-    async def _load_user_upload(
-        self,
-        user_id: int,
-        course_id: int,
-        upload_id: int,
-    ) -> StudyMaterialUpload:
-        await self._require_course_access(user_id, course_id)
-        upload = await self._load_upload(upload_id)
-        if upload.course_id == course_id and upload.uploader_id == user_id:
-            return upload
-        raise StudyMaterialNotFoundError()
-
-    async def _serialize_uploads(
-        self,
-        uploads: list[StudyMaterialUpload | None],
-    ) -> list[dict]:
-        payload = []
-        for upload in uploads:
-            if not upload:
-                continue
-            url = await self._download_url(upload.storage_key, upload.upload_status)
-            payload.append(_upload_response(upload, url))
-        return payload
-
-    async def _serialize_library(
-        self,
-        entries: list[StudyMaterialLibraryEntry],
-        user_id: int,
-    ) -> list[dict]:
-        payload = []
-        for entry in entries:
-            url = await self.storage.generate_download_url(entry.upload.storage_key)
-            payload.append(_library_response(entry, url, user_id))
-        return payload
-
-    async def _download_url(
-        self,
-        storage_key: str,
-        upload_status: MaterialUploadStatus,
-    ) -> str | None:
-        if upload_status != MaterialUploadStatus.COMPLETED:
-            return None
-        return await self.storage.generate_download_url(storage_key)
-
-    def _enqueue_uploads(self, uploads: list[StudyMaterialUpload]) -> None:
-        from nutrack.tasks.materials import upload_course_material_task
-
-        try:
-            for upload in uploads:
-                upload_course_material_task.delay(upload.id)
-        except Exception as exc:  # pragma: no cover - broker/network failure
-            raise StudyMaterialQueueError() from exc
-
-    def _validate_batch(self, week: int, files: list[UploadFile]) -> None:
-        self._validate_week(week)
-        if not files:
-            raise StudyMaterialValidationError("Select at least one file")
-        if len(files) > MAX_FILES_PER_BATCH:
-            raise StudyMaterialValidationError("You can upload up to 10 files at once")
-
-    def _validate_week(self, week: int) -> None:
-        if 1 <= week <= 15:
-            return
-        raise StudyMaterialValidationError("Week must be between 1 and 15")
-
-    def _validate_file(self, file: UploadFile) -> str:
-        filename = (file.filename or "").strip()
-        suffix = Path(filename).suffix.lower()
-        if filename and suffix in ALLOWED_EXTENSIONS:
-            return filename
-        raise StudyMaterialValidationError("Unsupported file type")
-
-    def _content_type(self, file: UploadFile, filename: str) -> str:
-        return file.content_type or ALLOWED_EXTENSIONS[Path(filename).suffix.lower()]
-
-    def _storage_key(self, course_title: str, week: int, filename: str) -> str:
-        safe_name = sanitize_filename(filename)
-        return f"{slugify(course_title)}/week_{week}/{uuid4()}__{safe_name}"
-
-    async def _stage_file(self, filename: str, payload: bytes) -> str:
-        directory = Path(settings.MATERIAL_UPLOAD_STAGING_DIR)
-        await asyncio.to_thread(directory.mkdir, parents=True, exist_ok=True)
-        path = directory / f"{uuid4()}__{sanitize_filename(filename)}"
-        await asyncio.to_thread(path.write_bytes, payload)
-        return str(path)
-
-    async def _remove_staged_file(self, staged_path: str | None) -> None:
-        if not staged_path:
-            return
-        path = Path(staged_path)
-        if not path.exists():
-            return
-        await asyncio.to_thread(path.unlink)
-
-    async def _delete_storage_file(self, storage_key: str | None) -> None:
-        if not storage_key:
-            return
-        try:
-            await self.storage.delete_file(storage_key)
-        except Exception:
-            return
-
-    async def _mark_queue_failure(
-        self,
-        uploads: list[StudyMaterialUpload],
-    ) -> None:
-        for upload in uploads:
-            staged_path = upload.staged_path
-            await self.upload_repo.update(
-                upload,
-                upload_status=MaterialUploadStatus.FAILED,
-                staged_path=None,
-                error_message="Failed to queue material upload",
-            )
-            await self._remove_staged_file(staged_path)
-        await self.session.commit()
-
-    def _curation_status(
-        self,
-        request_shared_library: bool,
-    ) -> MaterialCurationStatus:
-        if request_shared_library:
-            return MaterialCurationStatus.PENDING
-        return MaterialCurationStatus.NOT_REQUESTED
-
-    async def _make_upload_private(
-        self,
-        upload: StudyMaterialUpload,
-    ) -> dict:
-        await self._delete_library_entry(upload)
-        await self.upload_repo.update(
-            upload,
-            curation_status=MaterialCurationStatus.NOT_REQUESTED,
-        )
-        await self.session.commit()
-        loaded = await self.upload_repo.get_upload_by_id(upload.id)
-        return _upload_response(
-            loaded,
-            await self._download_url(loaded.storage_key, loaded.upload_status),
-        )
-
-    async def _delete_upload(
-        self,
-        upload: StudyMaterialUpload,
-    ) -> dict:
-        staged_path = upload.staged_path
-        storage_key = upload.storage_key
-        await self._delete_library_entry(upload)
-        await self.upload_repo.delete(upload)
-        await self.session.commit()
-        await self._remove_staged_file(staged_path)
-        await self._delete_storage_file(storage_key)
-        return {"deleted": True}
-
-    async def _delete_library_entry(
-        self,
-        upload: StudyMaterialUpload,
-    ) -> None:
-        if upload.library_entry is None:
-            return
-        await self.library_repo.delete(upload.library_entry)
 
     def _eligible_assessments(self, assessments: list[Assessment]) -> list[Assessment]:
         return [
@@ -1064,6 +559,27 @@ class StudyService:
         attempts = await self.mock_exam_attempt_repo.list_for_user_exams(user_id, exam_ids)
         return self._prediction_map(exams, attempts)
 
+    async def _sync_active_attempts(
+        self,
+        user_id: int,
+        exams: list[MockExam],
+    ) -> dict[int, MockExamAttempt]:
+        exam_ids = [exam.id for exam in exams]
+        attempts = await self.mock_exam_attempt_repo.list_active_for_user_exams(
+            user_id,
+            exam_ids,
+        )
+        exam_map = {exam.id: exam for exam in exams}
+        for attempt in attempts:
+            exam = exam_map.get(attempt.mock_exam_id)
+            if exam is not None:
+                await self._sync_attempt_timeout(attempt, exam)
+        return {
+            attempt.mock_exam_id: attempt
+            for attempt in attempts
+            if _attempt_status_value(attempt) == MockExamAttemptStatus.IN_PROGRESS.value
+        }
+
     def _prediction_map(
         self,
         exams: list[MockExam],
@@ -1087,10 +603,7 @@ class StudyService:
             "assessment": self._recent_prediction_scores(type_scores),
         }
 
-    def _recent_prediction_scores(
-        self,
-        scores_map: dict,
-    ) -> dict:
+    def _recent_prediction_scores(self, scores_map: dict) -> dict:
         predictions = {}
         for key, values in scores_map.items():
             ordered = sorted(values, key=lambda item: item[0], reverse=True)
@@ -1104,6 +617,7 @@ class StudyService:
         exams: list[MockExam],
         stats_map: dict[int, dict[str, float | int | bool | None]],
         prediction_map: dict[str, dict],
+        active_attempts: dict[int, MockExamAttempt],
     ) -> list[dict]:
         groups = {
             course_id: {
@@ -1162,6 +676,12 @@ class StudyService:
                     "attempts_count": stats.get("attempts_count", 0),
                     "completed_attempts": stats.get("completed_attempts", 0),
                     "has_active_attempt": bool(stats.get("has_active_attempt")),
+                    "active_attempt": self._attempt_summary(
+                        active_attempts[exam.id],
+                        exam.time_limit_minutes,
+                    )
+                    if exam.id in active_attempts
+                    else None,
                 }
             )
         return list(groups.values())
@@ -1220,7 +740,14 @@ class StudyService:
         latest = scores[0] if scores else None
         predicted = predicted_score_average(latest_scores)
         improvement = round(scores[0] - scores[-1], 1) if len(scores) > 1 else None
-        active = next((item for item in attempts if item.status == MockExamAttemptStatus.IN_PROGRESS), None)
+        active = next(
+            (
+                item
+                for item in attempts
+                if _attempt_status_value(item) == MockExamAttemptStatus.IN_PROGRESS.value
+            ),
+            None,
+        )
         return {
             "id": exam.id,
             "course_id": exam.course_id,
@@ -1235,15 +762,18 @@ class StudyService:
             "instructions": exam.instructions,
             "created_at": exam.created_at,
             "sources": self._exam_sources_payload(exam),
-            "attempts_count": len(completed),
+            "attempts_count": len(attempts),
             "best_score_pct": best,
             "average_score_pct": average,
             "latest_score_pct": latest,
             "predicted_score_pct": predicted,
             "predicted_grade_letter": predicted_grade_letter(predicted),
             "improvement_pct": improvement,
-            "active_attempt": _attempt_response(active) if active else None,
-            "attempts": [self._attempt_summary(item) for item in attempts],
+            "active_attempt": _attempt_response(active, exam.time_limit_minutes) if active else None,
+            "attempts": [
+                self._attempt_summary(item, exam.time_limit_minutes)
+                for item in attempts
+            ],
             "trend": self._trend_points(completed),
         }
 
@@ -1251,7 +781,7 @@ class StudyService:
         exam = attempt.mock_exam
         answers = [self._answer_payload(answer) for answer in attempt.answers]
         return {
-            **_attempt_response(attempt),
+            **_attempt_response(attempt, exam.time_limit_minutes),
             **self._attempt_exam_payload(exam),
             "questions": self._student_question_links_payload(exam),
             "answers": answers,
@@ -1262,7 +792,7 @@ class StudyService:
         answers = {item.mock_exam_question_link_id: item for item in attempt.answers}
         questions = self._review_questions_payload(exam, answers)
         return {
-            **_attempt_response(attempt),
+            **_attempt_response(attempt, exam.time_limit_minutes),
             **self._attempt_exam_payload(exam),
             "review_questions": questions,
         }
@@ -1298,13 +828,20 @@ class StudyService:
             )
         return sources
 
-    def _attempt_summary(self, attempt: MockExamAttempt) -> dict:
+    def _attempt_summary(
+        self,
+        attempt: MockExamAttempt,
+        time_limit_minutes: int | None,
+    ) -> dict:
+        payload = _attempt_response(attempt, time_limit_minutes)
         return {
-            "id": attempt.id,
-            "status": attempt.status.value,
-            "score_pct": attempt.score_pct,
-            "started_at": attempt.started_at,
-            "submitted_at": attempt.submitted_at,
+            "id": payload["id"],
+            "status": payload["status"],
+            "score_pct": payload["score_pct"],
+            "started_at": payload["started_at"],
+            "submitted_at": payload["submitted_at"],
+            "expires_at": payload["expires_at"],
+            "remaining_seconds": payload["remaining_seconds"],
         }
 
     def _trend_points(self, attempts: list[MockExamAttempt]) -> list[dict]:
@@ -1332,11 +869,7 @@ class StudyService:
         links = sorted(exam.question_links, key=lambda item: item.position)
         return [_student_question_link_response(link) for link in links]
 
-    def _review_questions_payload(
-        self,
-        exam: MockExam,
-        answers: dict[int, object],
-    ) -> list[dict]:
+    def _review_questions_payload(self, exam: MockExam, answers: dict[int, object]) -> list[dict]:
         items = []
         links = sorted(exam.question_links, key=lambda item: item.position)
         for link in links:
@@ -1364,6 +897,76 @@ class StudyService:
             "answered_at": answer.answered_at,
         }
 
+    async def _sync_attempts_for_exam(
+        self,
+        attempts: list[MockExamAttempt],
+        exam: MockExam,
+    ) -> None:
+        for attempt in attempts:
+            await self._sync_attempt_timeout(attempt, exam)
+
+    async def _sync_attempt_timeout(
+        self,
+        attempt: MockExamAttempt,
+        exam: MockExam,
+    ) -> bool:
+        if _attempt_status_value(attempt) != MockExamAttemptStatus.IN_PROGRESS.value:
+            return False
+        expires_at = _attempt_expires_at(attempt.started_at, exam.time_limit_minutes)
+        now = datetime.now(timezone.utc)
+        if expires_at is None or expires_at > now:
+            return False
+        await self._complete_attempt(attempt.id, exam, expires_at)
+        return True
+
+    async def _complete_attempt(
+        self,
+        attempt_id: int,
+        exam: MockExam,
+        submitted_at: datetime,
+    ) -> MockExamAttempt:
+        attempt = await self.mock_exam_attempt_repo.get_by_id(attempt_id)
+        if attempt is None:
+            raise MockExamAttemptNotFoundError()
+        if _attempt_status_value(attempt) != MockExamAttemptStatus.IN_PROGRESS.value:
+            return attempt
+        answered_count, correct_count, current_position = self._attempt_progress(
+            attempt.answers,
+            exam,
+        )
+        total = max(len(exam.question_links), 1)
+        score_pct = round(correct_count / total * 100, 1)
+        return await self.mock_exam_attempt_repo.update(
+            attempt,
+            status=MockExamAttemptStatus.COMPLETED,
+            submitted_at=submitted_at,
+            last_active_at=submitted_at,
+            answered_count=answered_count,
+            correct_count=correct_count,
+            current_position=current_position,
+            score_pct=score_pct,
+        )
+
+    def _attempt_progress(
+        self,
+        answers: list,
+        exam: MockExam,
+    ) -> tuple[int, int, int]:
+        link_positions = {link.id: link.position for link in exam.question_links}
+        answered = [
+            item for item in answers if item.selected_option_index is not None
+        ]
+        correct_count = len([item for item in answered if item.is_correct])
+        current_position = 1
+        positions = [
+            link_positions[item.mock_exam_question_link_id]
+            for item in answered
+            if item.mock_exam_question_link_id in link_positions
+        ]
+        if positions:
+            current_position = min(max(positions) + 1, len(exam.question_links))
+        return len(answered), correct_count, max(current_position, 1)
+
     async def _require_active_attempt(
         self,
         user_id: int,
@@ -1372,7 +975,10 @@ class StudyService:
         attempt = await self.mock_exam_attempt_repo.get_by_id_for_user(attempt_id, user_id)
         if not attempt:
             raise MockExamAttemptNotFoundError()
-        if attempt.status != MockExamAttemptStatus.IN_PROGRESS:
+        expired = await self._sync_attempt_timeout(attempt, attempt.mock_exam)
+        if _attempt_status_value(attempt) != MockExamAttemptStatus.IN_PROGRESS.value:
+            if expired:
+                raise MockExamValidationError("Mock exam time limit has expired")
             raise MockExamValidationError("Only active attempts can be changed")
         return attempt
 
@@ -1388,20 +994,23 @@ class StudyService:
         exam: MockExam,
     ) -> None:
         refreshed = await self.mock_exam_attempt_repo.get_by_id(attempt.id)
-        answered = [item for item in refreshed.answers if item.selected_option_index is not None]
-        correct = [item for item in answered if item.is_correct]
-        current = refreshed.current_position
-        if answered:
-            current = min(max(item.question_link.position for item in answered) + 1, len(exam.question_links))
+        answered_count, correct_count, current_position = self._attempt_progress(
+            refreshed.answers,
+            exam,
+        )
         await self.mock_exam_attempt_repo.update(
             attempt,
-            answered_count=len(answered),
-            correct_count=len(correct),
-            current_position=max(current, 1),
+            answered_count=answered_count,
+            correct_count=correct_count,
+            current_position=current_position,
             last_active_at=datetime.now(timezone.utc),
         )
 
-    async def _validated_questions(self, course_id: int, questions: list) -> dict[int, MockExamQuestion]:
+    async def _validated_questions(
+        self,
+        course_id: int,
+        questions: list,
+    ) -> dict[int, MockExamQuestion]:
         payload: dict[int, MockExamQuestion] = {}
         for item in questions:
             question = await self.mock_exam_question_repo.get_by_id(item.question_id)
@@ -1412,11 +1021,7 @@ class StudyService:
             payload[item.question_id] = question
         return payload
 
-    async def _create_question_links(
-        self,
-        mock_exam_id: int,
-        items: list,
-    ) -> None:
+    async def _create_question_links(self, mock_exam_id: int, items: list) -> None:
         for item in items:
             self.session.add(
                 MockExamQuestionLink(
@@ -1489,12 +1094,32 @@ class StudyService:
         data.question_text = payload.question_text or question.question_text
         data.answer_variant_1 = payload.answer_variant_1 or question.answer_variant_1
         data.answer_variant_2 = payload.answer_variant_2 or question.answer_variant_2
-        data.answer_variant_3 = payload.answer_variant_3 if payload.answer_variant_3 is not None else question.answer_variant_3
-        data.answer_variant_4 = payload.answer_variant_4 if payload.answer_variant_4 is not None else question.answer_variant_4
-        data.answer_variant_5 = payload.answer_variant_5 if payload.answer_variant_5 is not None else question.answer_variant_5
-        data.answer_variant_6 = payload.answer_variant_6 if payload.answer_variant_6 is not None else question.answer_variant_6
+        data.answer_variant_3 = (
+            payload.answer_variant_3
+            if payload.answer_variant_3 is not None
+            else question.answer_variant_3
+        )
+        data.answer_variant_4 = (
+            payload.answer_variant_4
+            if payload.answer_variant_4 is not None
+            else question.answer_variant_4
+        )
+        data.answer_variant_5 = (
+            payload.answer_variant_5
+            if payload.answer_variant_5 is not None
+            else question.answer_variant_5
+        )
+        data.answer_variant_6 = (
+            payload.answer_variant_6
+            if payload.answer_variant_6 is not None
+            else question.answer_variant_6
+        )
         data.correct_option_index = payload.correct_option_index or question.correct_option_index
-        data.explanation = payload.explanation if payload.explanation is not None else question.explanation
+        data.explanation = (
+            payload.explanation
+            if payload.explanation is not None
+            else question.explanation
+        )
         return data
 
     def _clone_question_links(self, exam: MockExam) -> list:
@@ -1534,30 +1159,3 @@ class StudyService:
             "created_at": exam.created_at,
             "updated_at": exam.updated_at,
         }
-
-    async def _cleanup_stale_uploads(self) -> None:
-        cutoff = datetime.now(timezone.utc) - timedelta(minutes=STALE_UPLOAD_MINUTES)
-        statuses = (
-            MaterialUploadStatus.QUEUED,
-            MaterialUploadStatus.UPLOADING,
-        )
-        uploads = await self.upload_repo.list_stale_uploads(cutoff, statuses)
-        if not uploads:
-            return
-        for upload in uploads:
-            await self._fail_stale_upload(upload)
-        await self.session.commit()
-
-    async def _fail_stale_upload(
-        self,
-        upload: StudyMaterialUpload,
-    ) -> None:
-        staged_path = upload.staged_path
-        await self.upload_repo.update(
-            upload,
-            upload_status=MaterialUploadStatus.FAILED,
-            staged_path=None,
-            error_message="Upload timed out before completion",
-        )
-        await self._remove_staged_file(staged_path)
-        await self._delete_storage_file(upload.storage_key)
