@@ -16,7 +16,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAssessmentsStore } from "@/stores/assessments";
 import type { Assessment, AssessmentType, EnrollmentItem } from "@/types";
 
@@ -114,7 +114,8 @@ function splitToDisplay(iso: string): { dateText: string; timeText: string } {
 interface FormState {
   assessment_type: AssessmentType;
   assessment_number: string;
-  deadline: string;
+  dateText: string;
+  timeText: string;
   weight: string;
   max_score: string;
   description: string;
@@ -123,7 +124,8 @@ interface FormState {
 const EMPTY_FORM: FormState = {
   assessment_type: "other",
   assessment_number: "",
-  deadline: "",
+  dateText: "",
+  timeText: "",
   weight: "",
   max_score: "",
   description: "",
@@ -171,7 +173,8 @@ export function AddAssessmentModal({
       setForm({
         assessment_type: initialData.assessment_type,
         assessment_number: String(initialData.assessment_number),
-        deadline: toDatetimeLocal(initialData.deadline),
+        dateText,
+        timeText,
         weight: initialData.weight != null ? String(initialData.weight) : "",
         max_score: initialData.max_score != null ? String(initialData.max_score) : "",
         description: initialData.description ?? "",
@@ -201,7 +204,6 @@ export function AddAssessmentModal({
       weight: String(preset.weight),
     }));
     setTab("manual");
-    setTimeout(() => titleRef.current?.focus(), 60);
   }
 
   function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -212,7 +214,11 @@ export function AddAssessmentModal({
     e.preventDefault();
     setError(null);
 
-    if (!form.title.trim()) { setError("Title is required."); titleRef.current?.focus(); return; }
+    const assessmentNumber = Number(form.assessment_number);
+    if (!Number.isInteger(assessmentNumber) || assessmentNumber < 1) {
+      setError("Assessment number must be 1 or higher.");
+      return;
+    }
     const parsedDate = parseDateText(form.dateText);
     if (!parsedDate) { setError("Enter a valid date — DD.MM.YYYY"); return; }
     const parsedTime = parseTimeText(form.timeText);
@@ -228,7 +234,7 @@ export function AddAssessmentModal({
       if (isEdit && initialData) {
         result = await updateAssessment(initialData.id, {
           assessment_type: form.assessment_type,
-          assessment_number: Number(form.assessment_number),
+          assessment_number: assessmentNumber,
           deadline: deadlineIso,
           weight,
           max_score: maxScore,
@@ -238,7 +244,7 @@ export function AddAssessmentModal({
         result = await addAssessment({
           course_id: enrollment.course_id,
           assessment_type: form.assessment_type,
-          assessment_number: Number(form.assessment_number),
+          assessment_number: assessmentNumber,
           deadline: deadlineIso,
           weight,
           max_score: maxScore,
@@ -357,20 +363,23 @@ export function AddAssessmentModal({
             ) : (
               <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
-                {/* Title */}
+                {/* Number */}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                    Title <span className="text-accent-red normal-case tracking-normal">*</span>
+                    Number <span className="text-accent-red normal-case tracking-normal">*</span>
                   </label>
                   <input
-                    ref={titleRef}
-                    type="text"
-                    maxLength={255}
-                    placeholder="e.g. Midterm Exam"
-                    value={form.title}
-                    onChange={(e) => setField("title", e.target.value)}
+                    type="number"
+                    min={1}
+                    inputMode="numeric"
+                    placeholder="e.g. 2"
+                    value={form.assessment_number}
+                    onChange={(e) => setField("assessment_number", e.target.value)}
                     className="glass-input w-full text-sm px-3 py-2.5"
                   />
+                  <p className="text-[10px] text-text-muted">
+                    The title is generated automatically, like Midterm 2.
+                  </p>
                 </div>
 
                 {/* Type chips */}
@@ -383,7 +392,12 @@ export function AddAssessmentModal({
                       <button
                         key={t}
                         type="button"
-                        onClick={() => setField("assessment_type", t)}
+                        onClick={() => {
+                          setField("assessment_type", t);
+                          if (!isEdit) {
+                            setField("assessment_number", nextAssessmentNumber(courseAssessments, t));
+                          }
+                        }}
                         className="flex flex-col items-center gap-1 rounded-lg py-2.5 px-1 text-center transition-all text-[10px] font-medium"
                         style={
                           form.assessment_type === t
