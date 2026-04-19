@@ -331,6 +331,12 @@ class MockExamAttemptReviewResponse(MockExamAttemptResponse):
     review_questions: list[MockExamReviewQuestionResponse]
 
 
+class FlashcardItem(BaseModel):
+    id: int
+    question: str
+    answer: str
+
+
 class SaveMockExamAnswerRequest(BaseModel):
     selected_option_index: int | None = Field(default=None, ge=1, le=6)
 

@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from nutrack.auth.dependencies import get_current_user
 from nutrack.study.dependencies import get_study_service
 from nutrack.study.schemas import (
+    FlashcardItem,
     MockExamAttemptReviewResponse,
     MaterialUploadResponse,
     MockExamAttemptSessionResponse,
@@ -29,6 +30,19 @@ async def list_mock_exams(
 ):
     exams = await service.list_mock_exams(user.id)
     return ApiResponse(data=exams)
+
+
+@router.get(
+    "/mock-exams/{mock_exam_id}/flashcards",
+    response_model=ApiResponse[list[FlashcardItem]],
+)
+async def get_mock_exam_flashcards(
+    mock_exam_id: int,
+    user: User = Depends(get_current_user),
+    service: StudyService = Depends(get_study_service),
+):
+    flashcards = await service.get_mock_exam_flashcards(user.id, mock_exam_id)
+    return ApiResponse(data=flashcards)
 
 
 @router.get(

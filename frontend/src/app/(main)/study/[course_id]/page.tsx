@@ -5,6 +5,7 @@ import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Layers } from "lucide-react";
 
+import { FlashcardExamPicker } from "@/components/flashcards/flashcard-exam-picker";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
@@ -159,14 +160,7 @@ export default function StudyCoursePage({ params }: { params: PageParams }) {
           </div>
         )
       ) : (
-        <GlassCard className="py-14 text-center">
-          <p className="text-lg font-semibold text-text-primary">
-            Flashcards are coming here next
-          </p>
-          <p className="mt-2 text-sm text-text-secondary">
-            This tab is a placeholder for course-specific flashcard study tools.
-          </p>
-        </GlassCard>
+        <FlashcardExamPicker exams={group.exams} />
       )}
     </div>
   );
