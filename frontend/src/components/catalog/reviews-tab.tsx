@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Star, Pencil, Trash2, AlertCircle } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth";
 import type { ApiResponse, ReviewsPage, CourseReview } from "@/types";
@@ -347,6 +348,7 @@ export function ReviewsTab({ courseId }: { courseId: number }) {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   async function fetchReviews() {
     try {
@@ -390,10 +392,10 @@ export function ReviewsTab({ courseId }: { courseId: number }) {
 
   async function handleDelete() {
     if (!myReview) return;
-    if (!confirm("Delete your review?")) return;
     await api.delete(`/courses/catalog/${courseId}/reviews/${myReview.id}`);
     fetchReviews();
     setEditing(false);
+    setDeleteConfirmOpen(false);
   }
 
   const subFields = ["difficulty", "informativeness", "gpa_boost", "workload"] as const;
@@ -438,7 +440,7 @@ export function ReviewsTab({ courseId }: { courseId: number }) {
             review={myReview}
             isOwn
             onEdit={() => setEditing(true)}
-            onDelete={handleDelete}
+            onDelete={() => setDeleteConfirmOpen(true)}
           />
         </div>
       ) : myReview && editing ? (
@@ -505,6 +507,17 @@ export function ReviewsTab({ courseId }: { courseId: number }) {
           <p className="text-sm text-text-secondary">No reviews yet — be the first!</p>
         </GlassCard>
       )}
+
+      <ConfirmDialog
+        isOpen={deleteConfirmOpen}
+        title="Delete review"
+        message="Are you sure you want to delete your review? This cannot be undone."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteConfirmOpen(false)}
+      />
     </div>
   );
 }
