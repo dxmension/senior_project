@@ -1,8 +1,8 @@
 """mindmaps
 
-Revision ID: 20260416_0004
-Revises: 20260414_0003
-Create Date: 2026-04-16 12:00:00.000000
+Revision ID: 20260419_0008
+Revises: 20260418_0007
+Create Date: 2026-04-19 12:00:00.000000
 
 """
 
@@ -11,8 +11,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "20260416_0004"
-down_revision: Union[str, None] = "20260414_0003"
+revision: str = "20260419_0008"
+down_revision: Union[str, None] = "20260418_0007"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
