@@ -773,7 +773,6 @@ async def test_create_mock_exam_uses_assessment_number_family() -> None:
         created_by_admin_id=99,
     )
 
-
 @pytest.mark.asyncio
 async def test_update_mock_exam_reuses_current_assessment_number_by_default() -> None:
     session = AsyncMock()

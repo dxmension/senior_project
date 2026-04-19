@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy.exc import ProgrammingError
 
 from nutrack.enrollments.models import EnrollmentStatus
 from nutrack.users.exceptions import NotFoundError
@@ -98,3 +99,26 @@ async def test_get_stats_aggregates_credits_and_semesters() -> None:
         "Spring 2025",
         "Fall 2025",
     ]
+
+
+@pytest.mark.asyncio
+async def test_get_audit_ignores_missing_handbook_table(monkeypatch) -> None:
+    service = UserService(session=SimpleNamespace(execute=AsyncMock()))
+    user = _user()
+    service.user_repo.get_by_id = AsyncMock(return_value=user)
+    service.session.execute = AsyncMock(return_value=_result_with())
+
+    error = ProgrammingError(
+        "SELECT handbook_plans",
+        {},
+        Exception('relation "handbook_plans" does not exist'),
+    )
+    monkeypatch.setattr(
+        "nutrack.users.service.HandbookService.get_plans_for_year",
+        AsyncMock(side_effect=error),
+    )
+
+    result = await service.get_audit(1)
+
+    assert result.supported is True
+    assert result.major == "Computer Science"

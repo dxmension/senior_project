@@ -538,6 +538,18 @@ export interface SavedMindmap {
   created_at: string;
 }
 
+export interface MindmapGenerationQueued {
+  task_id: string;
+  status: "queued";
+}
+
+export interface MindmapGenerationStatus {
+  task_id: string;
+  status: "queued" | "processing" | "completed" | "failed";
+  mindmap: SavedMindmap | null;
+  error_message: string | null;
+}
+
 export interface AdminMaterialUpload {
   id: number;
   course_id: number;

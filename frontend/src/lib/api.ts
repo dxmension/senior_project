@@ -1,5 +1,13 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/v1";
 
+type ApiErrorPayload = {
+  data?: {
+    error?: {
+      message?: string;
+    };
+  };
+};
+
 class ApiClient {
   private getAccessToken(): string | null {
     if (typeof window === "undefined") return null;
@@ -129,13 +137,6 @@ class ApiClient {
     });
   }
 
-  async put<T>(endpoint: string, body?: unknown): Promise<T> {
-    return this.request<T>(endpoint, {
-      method: "PUT",
-      body: body ? JSON.stringify(body) : undefined,
-    });
-  }
-
   async delete<T>(endpoint: string): Promise<T> {
     return this.request<T>(endpoint, { method: "DELETE" });
   }
@@ -209,3 +210,21 @@ class ApiClient {
 }
 
 export const api = new ApiClient();
+
+
+export function getApiErrorMessage(
+  error: unknown,
+  fallback: string
+): string {
+  if (error instanceof Error) {
+    const response = (error as Error & { response?: ApiErrorPayload }).response;
+    const message = response?.data?.error?.message;
+    if (message) {
+      return message;
+    }
+    if (error.message) {
+      return error.message;
+    }
+  }
+  return fallback;
+}
