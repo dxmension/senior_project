@@ -6,7 +6,12 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from fastapi import UploadFile
 
-from nutrack.study.models import MaterialCurationStatus, MaterialUploadStatus
+from nutrack.assessments.models import AssessmentType
+from nutrack.study.models import (
+    MaterialCurationStatus,
+    MaterialUploadStatus,
+    MockExamQuestionSource,
+)
 from nutrack.study.service import StudyService
 
 
@@ -295,3 +300,333 @@ async def test_cleanup_stale_uploads_marks_old_items_failed() -> None:
         staged_path=None,
         error_message="Upload timed out before completion",
     )
+
+
+@pytest.mark.asyncio
+async def test_list_mock_exams_returns_available_course_exams_by_type() -> None:
+    session = AsyncMock()
+    service = StudyService(session=session, storage=AsyncMock())
+    assessment = SimpleNamespace(
+        id=3,
+        course_id=7,
+        title="Midterm 1",
+        assessment_number=1,
+        assessment_type=SimpleNamespace(value="midterm"),
+        deadline=datetime(2026, 4, 20, tzinfo=timezone.utc),
+        course_offering=SimpleNamespace(
+            course=SimpleNamespace(id=2, code="CSCI", level="151", title="Programming")
+        ),
+    )
+    latest_exam = SimpleNamespace(
+        id=4,
+        course_id=2,
+        assessment_number=1,
+        assessment_type=SimpleNamespace(value="midterm"),
+        title="Midterm 1 Mock 2",
+        version=2,
+        question_count=25,
+        time_limit_minutes=40,
+        created_at=datetime(2026, 4, 16, tzinfo=timezone.utc),
+        course=SimpleNamespace(id=2, code="CSCI", level="151", title="Programming"),
+        question_links=[
+            SimpleNamespace(
+                position=1,
+                question=SimpleNamespace(source=MockExamQuestionSource.HISTORIC),
+            )
+        ],
+    )
+    older_exam = SimpleNamespace(
+        id=3,
+        course_id=2,
+        assessment_number=1,
+        assessment_type=SimpleNamespace(value="midterm"),
+        title="Midterm 1 Mock 1",
+        version=1,
+        question_count=20,
+        time_limit_minutes=35,
+        created_at=datetime(2026, 4, 12, tzinfo=timezone.utc),
+        course=SimpleNamespace(id=2, code="CSCI", level="151", title="Programming"),
+        question_links=[
+            SimpleNamespace(
+                position=1,
+                question=SimpleNamespace(source=MockExamQuestionSource.AI),
+            )
+        ],
+    )
+    service.assessment_repo = SimpleNamespace(
+        get_by_user=AsyncMock(return_value=[assessment]),
+    )
+    service.enrollment_repo = SimpleNamespace(
+        list_by_user=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    course_offering=SimpleNamespace(
+                        course=SimpleNamespace(
+                            id=2,
+                            code="CSCI",
+                            level="151",
+                            title="Programming",
+                        )
+                    )
+                )
+            ]
+        )
+    )
+    service.mock_exam_repo = SimpleNamespace(
+        list_matching=AsyncMock(return_value=[latest_exam, older_exam]),
+    )
+    service.mock_exam_attempt_repo = SimpleNamespace(
+        get_attempt_stats=AsyncMock(
+            return_value={
+                4: {
+                    "attempts_count": 3,
+                    "best_score_pct": 88.5,
+                    "average_score_pct": 82.0,
+                    "latest_score_pct": 88.5,
+                    "predicted_score_pct": 86.7,
+                    "completed_attempts": 2,
+                    "has_active_attempt": True,
+                },
+                3: {
+                    "attempts_count": 1,
+                    "best_score_pct": 70.0,
+                    "average_score_pct": 70.0,
+                    "latest_score_pct": 70.0,
+                    "predicted_score_pct": 72.0,
+                    "completed_attempts": 1,
+                    "has_active_attempt": False,
+                }
+            }
+        ),
+        list_for_user_exams=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    mock_exam_id=4,
+                    score_pct=88.5,
+                    started_at=datetime(2026, 4, 16, tzinfo=timezone.utc),
+                    submitted_at=datetime(2026, 4, 16, tzinfo=timezone.utc),
+                ),
+                SimpleNamespace(
+                    mock_exam_id=3,
+                    score_pct=70.0,
+                    started_at=datetime(2026, 4, 12, tzinfo=timezone.utc),
+                    submitted_at=datetime(2026, 4, 12, tzinfo=timezone.utc),
+                ),
+                SimpleNamespace(
+                    mock_exam_id=4,
+                    score_pct=85.0,
+                    started_at=datetime(2026, 4, 14, tzinfo=timezone.utc),
+                    submitted_at=datetime(2026, 4, 14, tzinfo=timezone.utc),
+                ),
+            ]
+        ),
+    )
+
+    result = await service.list_mock_exams(1)
+
+    assert result[0]["course_code"] == "CSCI 151"
+    assert result[0]["predicted_score_pct"] == 81.2
+    assert result[0]["predicted_grade_letter"] == "B"
+    assert result[0]["assessment_predictions"][0]["predicted_score_pct"] == 81.2
+    assert result[0]["assessment_predictions"][0]["predicted_grade_letter"] == "B"
+    assert len(result[0]["exams"]) == 2
+    assert result[0]["exams"][0]["id"] == 4
+    assert result[0]["exams"][0]["has_active_attempt"] is True
+    assert result[0]["exams"][0]["predicted_score_pct"] == 86.7
+    assert result[0]["exams"][0]["predicted_grade_letter"] == "B+"
+    assert result[0]["exams"][0]["title"] == "Midterm 1 Mock 2"
+    assert result[0]["exams"][0]["sources"][0]["label"] == "Historic"
+    assert result[0]["exams"][1]["id"] == 3
+    assert result[0]["exams"][1]["title"] == "Midterm 1 Mock 1"
+
+
+def test_dashboard_payload_builds_best_and_trend() -> None:
+    service = StudyService(session=AsyncMock(), storage=AsyncMock())
+    exam = SimpleNamespace(
+        id=4,
+        course_id=2,
+        course=SimpleNamespace(code="CSCI", level="151", title="Programming"),
+        assessment_type=SimpleNamespace(value="midterm"),
+        title="Midterm 1 Mock 2",
+        version=2,
+        question_count=3,
+        time_limit_minutes=40,
+        instructions="Choose the best answer.",
+        created_at=datetime(2026, 4, 15, tzinfo=timezone.utc),
+        question_links=[
+            SimpleNamespace(
+                position=1,
+                question=SimpleNamespace(source=MockExamQuestionSource.AI),
+            )
+        ],
+    )
+    attempts = [
+        SimpleNamespace(
+            id=2,
+            status=SimpleNamespace(value="completed"),
+            score_pct=88.0,
+            started_at=datetime(2026, 4, 16, tzinfo=timezone.utc),
+            submitted_at=datetime(2026, 4, 16, tzinfo=timezone.utc),
+        ),
+        SimpleNamespace(
+            id=1,
+            status=SimpleNamespace(value="completed"),
+            score_pct=70.0,
+            started_at=datetime(2026, 4, 14, tzinfo=timezone.utc),
+            submitted_at=datetime(2026, 4, 14, tzinfo=timezone.utc),
+        ),
+    ]
+
+    payload = service._dashboard_payload(exam, attempts)  # noqa: SLF001
+
+    assert payload["best_score_pct"] == 88.0
+    assert payload["predicted_score_pct"] == 79.0
+    assert payload["predicted_grade_letter"] == "B-"
+    assert payload["improvement_pct"] == 18.0
+    assert payload["trend"][-1]["best_score_pct"] == 88.0
+    assert payload["sources"][0]["label"] == "AI"
+    assert "questions" not in payload
+
+
+def test_attempt_review_payload_includes_correctness() -> None:
+    service = StudyService(session=AsyncMock(), storage=AsyncMock())
+    question = SimpleNamespace(
+        id=5,
+        course_id=2,
+        source=MockExamQuestionSource.HISTORIC,
+        historical_course_offering_id=None,
+        question_text="What is Python?",
+        answer_variant_1="A language",
+        answer_variant_2="A database",
+        answer_variant_3=None,
+        answer_variant_4=None,
+        answer_variant_5=None,
+        answer_variant_6=None,
+        correct_option_index=1,
+        explanation="It is a language.",
+    )
+    link = SimpleNamespace(id=9, position=1, points=2, question=question)
+    exam = SimpleNamespace(
+        id=4,
+        course_id=2,
+        course=SimpleNamespace(code="CSCI", level="151", title="Programming"),
+        assessment_type=SimpleNamespace(value="midterm"),
+        title="Midterm 1 Mock 2",
+        question_count=1,
+        time_limit_minutes=40,
+        instructions="Choose the best answer.",
+        question_links=[link],
+    )
+    attempt = SimpleNamespace(
+        id=21,
+        mock_exam_id=4,
+        status=SimpleNamespace(value="completed"),
+        started_at=datetime(2026, 4, 16, tzinfo=timezone.utc),
+        submitted_at=datetime(2026, 4, 16, tzinfo=timezone.utc),
+        last_active_at=datetime(2026, 4, 16, tzinfo=timezone.utc),
+        current_position=1,
+        answered_count=1,
+        correct_count=0,
+        score_pct=0.0,
+        mock_exam=exam,
+        answers=[
+            SimpleNamespace(
+                mock_exam_question_link_id=9,
+                selected_option_index=2,
+                is_correct=False,
+            )
+        ],
+    )
+
+    payload = service._attempt_review_payload(attempt)  # noqa: SLF001
+
+    assert payload["review_questions"][0]["selected_option_index"] == 2
+    assert payload["review_questions"][0]["question"]["correct_option_index"] == 1
+
+
+@pytest.mark.asyncio
+async def test_create_mock_exam_uses_assessment_number_family() -> None:
+    session = AsyncMock()
+    service = StudyService(session=session, storage=AsyncMock())
+    payload = SimpleNamespace(
+        course_id=2,
+        assessment_type=AssessmentType.QUIZ,
+        assessment_number=3,
+        time_limit_minutes=25,
+        instructions="Answer everything.",
+        is_active=True,
+        questions=[
+            SimpleNamespace(question_id=10, position=1, points=1),
+            SimpleNamespace(question_id=11, position=2, points=1),
+        ],
+    )
+    created_exam = SimpleNamespace(id=44)
+    service._validated_questions = AsyncMock(return_value={})  # noqa: SLF001
+    service._create_question_links = AsyncMock()  # noqa: SLF001
+    service.get_admin_mock_exam_detail = AsyncMock(return_value={"exam": {"id": 44}})
+    service.mock_exam_repo = SimpleNamespace(
+        get_latest_version=AsyncMock(return_value=SimpleNamespace(version=2)),
+        deactivate_family=AsyncMock(),
+        create=AsyncMock(return_value=created_exam),
+    )
+
+    result = await service.create_mock_exam(99, payload)
+
+    assert result == {"exam": {"id": 44}}
+    service.mock_exam_repo.get_latest_version.assert_awaited_once_with(2, "quiz", 3)
+    service.mock_exam_repo.deactivate_family.assert_awaited_once_with(2, "quiz", 3)
+    service.mock_exam_repo.create.assert_awaited_once_with(
+        course_id=2,
+        assessment_type=AssessmentType.QUIZ,
+        assessment_number=3,
+        assessment_title="Quiz 3",
+        assessment_title_slug="quiz-3",
+        title="Quiz 3 Mock 3",
+        version=3,
+        question_count=2,
+        time_limit_minutes=25,
+        instructions="Answer everything.",
+        is_active=True,
+        created_by_admin_id=99,
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_mock_exam_reuses_current_assessment_number_by_default() -> None:
+    session = AsyncMock()
+    service = StudyService(session=session, storage=AsyncMock())
+    current = SimpleNamespace(
+        id=12,
+        course_id=2,
+        assessment_type=AssessmentType.MIDTERM,
+        assessment_number=2,
+        time_limit_minutes=50,
+        instructions="Current instructions",
+        is_active=True,
+        question_links=[
+            SimpleNamespace(question_id=8, position=1, points=1),
+        ],
+    )
+    payload = SimpleNamespace(
+        assessment_number=None,
+        time_limit_minutes=None,
+        instructions=None,
+        is_active=None,
+        questions=None,
+    )
+    service._load_mock_exam = AsyncMock(return_value=current)  # noqa: SLF001
+    service.create_mock_exam = AsyncMock(return_value={"exam": {"id": 13}})
+
+    result = await service.update_mock_exam(99, 12, payload)
+
+    assert result == {"exam": {"id": 13}}
+    service.create_mock_exam.assert_awaited_once()
+    request = service.create_mock_exam.await_args.args[1]
+    assert request.course_id == 2
+    assert request.assessment_type == AssessmentType.MIDTERM
+    assert request.assessment_number == 2
+    assert request.time_limit_minutes == 50
+    assert request.instructions == "Current instructions"
+    assert request.is_active is True
+    assert len(request.questions) == 1
+    assert request.questions[0].question_id == 8
