@@ -116,6 +116,8 @@ services:
         "--port",
         "8000",
         "--reload",
+        "--reload-dir",
+        "src",
         "--loop",
         "asyncio",
       ]

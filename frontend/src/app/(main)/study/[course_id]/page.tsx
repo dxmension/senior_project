@@ -7,6 +7,7 @@ import { ArrowLeft, GitFork, Layers } from "lucide-react";
 
 import { MockExamCountdown } from "@/components/study/mock-exam-countdown";
 import { CourseMindmapsPanel } from "@/components/courses/course-mindmaps-panel";
+import { FlashcardExamPicker } from "@/components/flashcards/flashcard-exam-picker";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
@@ -185,6 +186,8 @@ export default function StudyCoursePage({ params }: { params: PageParams }) {
         <GlassCard className="py-14 text-center">
           <p className="text-sm text-text-secondary">Enrollment data unavailable.</p>
         </GlassCard>
+      ) : (
+        <FlashcardExamPicker exams={group.exams} />
       )}
     </div>
   );

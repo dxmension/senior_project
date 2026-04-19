@@ -239,6 +239,27 @@ class MockExamService:
             active_attempts,
         )
 
+    async def get_mock_exam_flashcards(
+        self, user_id: int, mock_exam_id: int
+    ) -> list[dict]:
+        exam = await self._require_student_exam_access(user_id, mock_exam_id)
+        result = []
+        for link in sorted(exam.question_links, key=lambda l: l.position):
+            q = link.question
+            correct_idx = q.correct_option_index
+            correct_answer = getattr(q, f"answer_variant_{correct_idx}", "")
+            answer_parts = [correct_answer]
+            if q.explanation:
+                answer_parts.append(q.explanation)
+            result.append(
+                {
+                    "id": q.id,
+                    "question": q.question_text,
+                    "answer": " — ".join(answer_parts),
+                }
+            )
+        return result
+
     async def get_mock_exam_dashboard(self, user_id: int, mock_exam_id: int) -> dict:
         exam = await self._require_student_exam_access(user_id, mock_exam_id)
         attempts = await self.mock_exam_attempt_repo.list_for_user_exam(user_id, exam.id)
