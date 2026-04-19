@@ -8,11 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from nutrack.assessments.models import Assessment
+from nutrack.assessments.utils import assessment_label
 from nutrack.courses.models import Course, CourseOffering
 from nutrack.dashboard.exceptions import AISummaryUnavailableError
 from nutrack.dashboard.schemas import (
     AISummaryResponse,
     CourseProgressItem,
+    DeadlineDotItem,
     DashboardResponse,
     UpcomingDeadlineItem,
     WeeklyWorkloadItem,
@@ -25,6 +27,13 @@ from nutrack.users.models import User
 def _course_code(course: Course) -> str:
     level = (course.level or "").strip()
     return f"{course.code} {level}" if level and level != "0" else course.code
+
+
+def _assessment_title(assessment: Assessment) -> str:
+    return assessment_label(
+        assessment.assessment_type,
+        assessment.assessment_number,
+    )
 
 
 def _compute_gpa(
@@ -95,10 +104,8 @@ class DashboardService:
         today = now.date()
 
         # GPA
+        current_gpa = user.cgpa if user else None
         gpa_statuses = {EnrollmentStatus.PASSED, EnrollmentStatus.IN_PROGRESS}
-        current_gpa = _compute_gpa(enrollments, gpa_statuses)
-        if current_gpa is None and user and user.cgpa is not None:
-            current_gpa = user.cgpa
         semester_gpa = _compute_gpa(
             enrollments, gpa_statuses, current_term, current_year
         )
@@ -153,6 +160,17 @@ class DashboardService:
                 ),
                 default=None,
             )
+            dots_sorted = sorted(course_assessments, key=lambda a: a.deadline)
+            deadline_dots = [
+                DeadlineDotItem(
+                    assessment_id=a.id,
+                    title=_assessment_title(a),
+                    assessment_type=a.assessment_type.value,
+                    deadline=a.deadline,
+                    is_completed=a.is_completed,
+                )
+                for a in dots_sorted
+            ]
             course_progress.append(
                 CourseProgressItem(
                     course_id=e.course_id,
@@ -165,6 +183,7 @@ class DashboardService:
                     completed_assessments=completed,
                     progress_pct=round(progress_pct, 1),
                     upcoming_deadline=upcoming_dl,
+                    deadline_dots=deadline_dots,
                 )
             )
 
@@ -176,7 +195,7 @@ class DashboardService:
         upcoming_deadlines = [
             UpcomingDeadlineItem(
                 assessment_id=a.id,
-                title=a.title,
+                title=_assessment_title(a),
                 assessment_type=a.assessment_type.value,
                 deadline=a.deadline,
                 course_code=_course_code(a.course_offering.course),
@@ -213,7 +232,7 @@ class DashboardService:
                     assessments=[
                         WorkloadAssessmentItem(
                             assessment_id=a.id,
-                            title=a.title,
+                            title=_assessment_title(a),
                             assessment_type=a.assessment_type.value,
                             deadline=a.deadline,
                             course_code=_course_code(a.course_offering.course),
@@ -253,10 +272,7 @@ class DashboardService:
         )
 
         now = datetime.now(tz=timezone.utc)
-        gpa_statuses = {EnrollmentStatus.PASSED, EnrollmentStatus.IN_PROGRESS}
-        current_gpa = _compute_gpa(enrollments, gpa_statuses)
-        if current_gpa is None and user and user.cgpa is not None:
-            current_gpa = user.cgpa
+        current_gpa = user.cgpa if user else None
 
         active_enrollments = [
             e
@@ -299,7 +315,7 @@ class DashboardService:
         )[:5]
         upcoming_ctx = [
             {
-                "title": a.title,
+                "title": _assessment_title(a),
                 "type": a.assessment_type.value,
                 "course": _course_code(a.course_offering.course),
                 "deadline": a.deadline.isoformat(),

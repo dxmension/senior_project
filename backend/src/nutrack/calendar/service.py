@@ -6,6 +6,7 @@ from sqlalchemy.orm import joinedload
 
 from nutrack.assessments.models import Assessment
 from nutrack.assessments.repository import AssessmentRepository
+from nutrack.assessments.utils import assessment_label
 from nutrack.calendar.schemas import CalendarEntry, CalendarEventType
 from nutrack.courses.models import CourseOffering
 from nutrack.enrollments.models import Enrollment, EnrollmentStatus
@@ -54,6 +55,9 @@ def _parse_compact_days(s: str) -> set[int]:
             i += 1
         elif s[i] == "w":
             result.add(2)
+            i += 1
+        elif s[i] == "r":  # "R" = Thursday in US academic notation (avoids conflict with "T"=Tuesday)
+            result.add(3)
             i += 1
         elif s[i] == "f":
             result.add(4)
@@ -144,7 +148,10 @@ def _entry_from_assessment(assessment: Assessment) -> CalendarEntry:
     return CalendarEntry(
         id=assessment.id,
         event_type=CalendarEventType.ASSESSMENT_DEADLINE,
-        title=assessment.title,
+        title=assessment_label(
+            assessment.assessment_type,
+            assessment.assessment_number,
+        ),
         description=None,
         start_at=assessment.deadline,
         end_at=assessment.deadline,
@@ -168,7 +175,7 @@ def _entry_from_course_session(
     start_time: time | None,
     end_time: time | None,
 ) -> CalendarEntry:
-    tz = timezone.utc
+    tz = timezone(timedelta(hours=5))  # Astana time — meeting times are stored in local time
     if start_time:
         start_at = datetime.combine(session_date, start_time, tzinfo=tz)
         end_at = datetime.combine(session_date, end_time, tzinfo=tz) if end_time else None

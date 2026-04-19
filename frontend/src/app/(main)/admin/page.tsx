@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
 import { api } from "@/lib/api";
 import type {
@@ -15,24 +16,28 @@ import { DatabaseManagement } from "@/components/admin/database-management";
 import { Analytics } from "@/components/admin/analytics";
 import { CourseManagement } from "@/components/admin/course-management";
 import { MaterialsManagement } from "@/components/admin/materials-management";
+import { MockExamsManagement } from "@/components/admin/mock-exams-management";
 import { Shield, AlertCircle } from "lucide-react";
 
 type TabType =
   | "users"
   | "courses"
+  | "mock-exams"
   | "materials"
   | "database"
   | "analytics";
 
 export default function AdminPage() {
   const user = useAuthStore((state) => state.user);
-  const [activeTab, setActiveTab] = useState<TabType>("users");
   const [stats, setStats] = useState<DatabaseStats | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsOverview | null>(null);
   const [health, setHealth] = useState<DatabaseHealth | null>(null);
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const activeTab = parseTab(searchParams.get("tab"));
 
   useEffect(() => {
     if (!user?.is_admin) {
@@ -123,31 +128,37 @@ export default function AdminPage() {
       <div className="mb-6 flex flex-wrap gap-x-3 gap-y-2 border-b border-border-primary pb-2">
         <TabButton
           active={activeTab === "users"}
-          onClick={() => setActiveTab("users")}
+          onClick={() => changeTab("users", router, searchParams)}
         >
           User Management
         </TabButton>
         <TabButton
           active={activeTab === "courses"}
-          onClick={() => setActiveTab("courses")}
+          onClick={() => changeTab("courses", router, searchParams)}
         >
           Course Management
         </TabButton>
         <TabButton
+          active={activeTab === "mock-exams"}
+          onClick={() => changeTab("mock-exams", router, searchParams)}
+        >
+          Mock Exams
+        </TabButton>
+        <TabButton
           active={activeTab === "materials"}
-          onClick={() => setActiveTab("materials")}
+          onClick={() => changeTab("materials", router, searchParams)}
         >
           Materials
         </TabButton>
         <TabButton
           active={activeTab === "database"}
-          onClick={() => setActiveTab("database")}
+          onClick={() => changeTab("database", router, searchParams)}
         >
           Database Management
         </TabButton>
         <TabButton
           active={activeTab === "analytics"}
-          onClick={() => setActiveTab("analytics")}
+          onClick={() => changeTab("analytics", router, searchParams)}
         >
           Analytics & Reporting
         </TabButton>
@@ -160,6 +171,7 @@ export default function AdminPage() {
         {activeTab === "courses" && (
           <CourseManagement onUpdate={loadData} />
         )}
+        {activeTab === "mock-exams" && <MockExamsManagement />}
         {activeTab === "materials" && (
           <MaterialsManagement refreshKey={0} />
         )}
@@ -172,6 +184,28 @@ export default function AdminPage() {
       </div>
     </div>
   );
+}
+
+function parseTab(value: string | null): TabType {
+  const tabs: TabType[] = [
+    "users",
+    "courses",
+    "mock-exams",
+    "materials",
+    "database",
+    "analytics",
+  ];
+  return tabs.includes(value as TabType) ? (value as TabType) : "users";
+}
+
+function changeTab(
+  tab: TabType,
+  router: { replace: (href: string) => void },
+  searchParams: { toString: () => string }
+) {
+  const params = new URLSearchParams(searchParams.toString());
+  params.set("tab", tab);
+  router.replace(`/admin?${params.toString()}`);
 }
 
 function TabButton({
