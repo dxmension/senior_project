@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 
 import pdfplumber
+from celery.result import AsyncResult
 
 from nutrack.course_materials.models import CourseMaterialUpload
 from nutrack.course_materials.repository import CourseMaterialUploadRepository
@@ -18,17 +19,24 @@ from nutrack.mindmaps.models import Mindmap
 from nutrack.mindmaps.repository import MindmapRepository
 from nutrack.mindmaps.schemas import (
     GenerateMindmapRequest,
+    MindmapGenerationQueuedResponse,
+    MindmapGenerationStatusResponse,
     MindmapLLMNode,
     MindmapLLMResponse,
     MindmapNode,
     SavedMindmapResponse,
 )
+from nutrack.logging import get_logger, log_step
 from nutrack.storage import ObjectStorage
 from nutrack.tools.llm import (
     LLMConfigurationError,
     LLMError,
     parse_structured_response,
 )
+
+MAX_SOURCE_TEXT_CHARS = 20_000
+MAX_FILE_TEXT_CHARS = 8_000
+logger = get_logger(__name__)
 
 _SYSTEM_PROMPT_WITH_MATERIAL = """\
 You are a mindmap generator. Given study material excerpts, produce a flat
@@ -78,6 +86,14 @@ class MindmapService:
         course_id: int,
         request: GenerateMindmapRequest,
     ) -> SavedMindmapResponse:
+        log_step(
+            logger,
+            "mindmap_generation_started",
+            user_id=user_id,
+            course_id=course_id,
+            week=request.week,
+            depth=request.depth,
+        )
         material_text = await _extract_week_material_text(
             self.material_repo,
             self.storage,
@@ -85,15 +101,41 @@ class MindmapService:
             course_id,
             request.week,
         )
-        raw = await _generate_mindmap(request.week, request.depth, material_text)
-        root = _build_tree(raw, request.depth)
-        topic = root.label or f"Week {request.week}"
-        mindmap = await self.repo.create(
+        log_step(
+            logger,
+            "mindmap_material_text_ready",
             user_id=user_id,
             course_id=course_id,
             week=request.week,
+            chars=len(material_text),
+        )
+        raw = await _generate_mindmap(request.week, request.depth, material_text)
+        log_step(
+            logger,
+            "mindmap_llm_response_ready",
+            user_id=user_id,
+            course_id=course_id,
+            week=request.week,
+            node_count=len(raw.nodes),
+        )
+        root = _build_tree_with_logs(raw, request, user_id, course_id)
+        topic = root.label or f"Week {request.week}"
+        mindmap = await _save_mindmap(
+            self.repo,
+            user_id,
+            course_id,
+            request.week,
+            topic,
+            root.model_dump(),
+        )
+        log_step(
+            logger,
+            "mindmap_saved",
+            user_id=user_id,
+            course_id=course_id,
+            week=request.week,
+            mindmap_id=mindmap.id,
             topic=topic,
-            tree_json=root.model_dump(),
         )
         return _to_response(mindmap)
 
@@ -102,6 +144,37 @@ class MindmapService:
     ) -> list[SavedMindmapResponse]:
         mindmaps = await self.repo.list_by_course_and_user(user_id, course_id)
         return [_to_response(m) for m in mindmaps]
+
+    def queue_generation(
+        self,
+        user_id: int,
+        course_id: int,
+        request: GenerateMindmapRequest,
+    ) -> MindmapGenerationQueuedResponse:
+        from nutrack.mindmaps.tasks import generate_mindmap_task
+
+        task = generate_mindmap_task.delay(user_id, course_id, request.model_dump())
+        return MindmapGenerationQueuedResponse(task_id=str(task.id), status="queued")
+
+    async def get_generation_status(
+        self,
+        user_id: int,
+        course_id: int,
+        task_id: str,
+    ) -> MindmapGenerationStatusResponse:
+        from nutrack.celery_app import celery_app
+
+        task = AsyncResult(task_id, app=celery_app)
+        status = _task_status(task.state)
+        if status == "completed":
+            return await _completed_status(self.repo, user_id, course_id, task_id, task.result)
+        if status == "failed":
+            return MindmapGenerationStatusResponse(
+                task_id=task_id,
+                status=status,
+                error_message=str(task.result),
+            )
+        return MindmapGenerationStatusResponse(task_id=task_id, status=status)
 
     async def delete(
         self, user_id: int, course_id: int, mindmap_id: int
@@ -146,8 +219,16 @@ async def _extract_week_material_text(
     uploads = await material_repo.list_completed_uploads_for_week(
         user_id, course_id, week
     )
+    log_step(
+        logger,
+        "mindmap_materials_loaded",
+        user_id=user_id,
+        course_id=course_id,
+        week=week,
+        upload_count=len(uploads),
+    )
     parts = await _material_parts(storage, uploads)
-    return "\n\n".join(parts)
+    return _trim_material_text("\n\n".join(parts))
 
 
 async def _material_parts(
@@ -165,11 +246,31 @@ async def _material_parts(
 async def _extract_text(storage: ObjectStorage, upload: CourseMaterialUpload) -> str:
     suffix = Path(upload.original_filename).suffix.lower()
     if suffix != ".pdf":
+        log_step(
+            logger,
+            "mindmap_material_skipped",
+            filename=upload.original_filename,
+            reason="unsupported_extension",
+        )
         return ""
     try:
         data = await storage.download_file_bytes(upload.storage_key)
-        return await asyncio.to_thread(_extract_pdf_text, data)
-    except Exception:
+        text = await asyncio.to_thread(_extract_pdf_text, data)
+        trimmed = _trim_file_text(text)
+        log_step(
+            logger,
+            "mindmap_material_extracted",
+            filename=upload.original_filename,
+            chars=len(trimmed),
+        )
+        return trimmed
+    except Exception as exc:
+        log_step(
+            logger,
+            "mindmap_material_extract_failed",
+            filename=upload.original_filename,
+            error=str(exc),
+        )
         return ""
 
 
@@ -179,15 +280,35 @@ async def _generate_mindmap(
     material_text: str,
 ) -> MindmapLLMResponse:
     system_prompt, user_prompt = _mindmap_prompts(week, depth, material_text)
+    log_step(
+        logger,
+        "mindmap_llm_request_started",
+        week=week,
+        depth=depth,
+        has_material=bool(material_text),
+        material_chars=len(material_text),
+        prompt_chars=len(system_prompt) + len(user_prompt),
+    )
     try:
-        return await parse_structured_response(
+        response = await parse_structured_response(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             response_model=MindmapLLMResponse,
+            max_output_tokens=2_500,
         )
+        log_step(
+            logger,
+            "mindmap_llm_request_completed",
+            week=week,
+            depth=depth,
+            node_count=len(response.nodes),
+        )
+        return response
     except LLMConfigurationError as exc:
+        log_step(logger, "mindmap_llm_unavailable", week=week, error=str(exc))
         raise MindmapUnavailableError() from exc
     except LLMError as exc:
+        log_step(logger, "mindmap_llm_failed", week=week, error=str(exc))
         raise MindmapGenerationError(str(exc)) from exc
 
 
@@ -202,6 +323,135 @@ def _mindmap_prompts(week: int, depth: int, material_text: str) -> tuple[str, st
     system_prompt = _SYSTEM_PROMPT_NO_MATERIAL.format(depth=depth)
     user_prompt = f"Generate a mindmap for Week {week} study topics."
     return system_prompt, user_prompt
+
+
+def _trim_file_text(text: str) -> str:
+    return text[:MAX_FILE_TEXT_CHARS].strip()
+
+
+def _trim_material_text(text: str) -> str:
+    return text[:MAX_SOURCE_TEXT_CHARS].strip()
+
+
+def _task_status(state: str) -> str:
+    mapped = {
+        "PENDING": "queued",
+        "RECEIVED": "queued",
+        "STARTED": "processing",
+        "RETRY": "processing",
+        "SUCCESS": "completed",
+        "FAILURE": "failed",
+    }
+    return mapped.get(state, "processing")
+
+
+async def _completed_status(
+    repo: MindmapRepository,
+    user_id: int,
+    course_id: int,
+    task_id: str,
+    result: object,
+) -> MindmapGenerationStatusResponse:
+    mindmap_id = _mindmap_id_from_result(result)
+    if mindmap_id is None:
+        return MindmapGenerationStatusResponse(
+            task_id=task_id,
+            status="failed",
+            error_message="Mindmap task completed without a result id",
+        )
+    mindmap = await repo.get_by_id_and_user(mindmap_id, user_id)
+    if mindmap is None or mindmap.course_id != course_id:
+        return MindmapGenerationStatusResponse(
+            task_id=task_id,
+            status="failed",
+            error_message="Generated mindmap could not be loaded",
+        )
+    return MindmapGenerationStatusResponse(
+        task_id=task_id,
+        status="completed",
+        mindmap=_to_response(mindmap),
+    )
+
+
+def _mindmap_id_from_result(result: object) -> int | None:
+    if not isinstance(result, dict):
+        return None
+    value = result.get("mindmap_id")
+    return value if isinstance(value, int) else None
+
+
+def _build_tree_with_logs(
+    raw: MindmapLLMResponse,
+    request: GenerateMindmapRequest,
+    user_id: int,
+    course_id: int,
+) -> MindmapNode:
+    log_step(
+        logger,
+        "mindmap_tree_build_started",
+        user_id=user_id,
+        course_id=course_id,
+        week=request.week,
+        depth=request.depth,
+    )
+    try:
+        root = _build_tree(raw, request.depth)
+    except MindmapGenerationError as exc:
+        log_step(
+            logger,
+            "mindmap_tree_build_failed",
+            user_id=user_id,
+            course_id=course_id,
+            week=request.week,
+            error=str(exc),
+        )
+        raise
+    log_step(
+        logger,
+        "mindmap_tree_build_completed",
+        user_id=user_id,
+        course_id=course_id,
+        week=request.week,
+        root_label=root.label,
+        child_count=len(root.children),
+    )
+    return root
+
+
+async def _save_mindmap(
+    repo: MindmapRepository,
+    user_id: int,
+    course_id: int,
+    week: int,
+    topic: str,
+    tree_json: dict,
+) -> Mindmap:
+    log_step(
+        logger,
+        "mindmap_save_started",
+        user_id=user_id,
+        course_id=course_id,
+        week=week,
+        topic=topic,
+    )
+    try:
+        return await repo.create(
+            user_id=user_id,
+            course_id=course_id,
+            week=week,
+            topic=topic,
+            tree_json=tree_json,
+        )
+    except Exception as exc:
+        log_step(
+            logger,
+            "mindmap_save_failed",
+            user_id=user_id,
+            course_id=course_id,
+            week=week,
+            error=str(exc),
+        )
+        raise
 
 
 def _build_tree(raw: MindmapLLMResponse, depth_remaining: int) -> MindmapNode:
@@ -257,10 +507,32 @@ def _build_children(
 ) -> list[MindmapNode]:
     if depth_remaining <= 1:
         return []
-    return [
-        _build_child(child_id, node.id, nodes, depth_remaining - 1, path)
-        for child_id in node.child_ids
-    ]
+    children: list[MindmapNode] = []
+    for child_id in node.child_ids:
+        child = nodes.get(child_id)
+        if child is None:
+            log_step(
+                logger,
+                "mindmap_tree_child_skipped",
+                parent_id=node.id,
+                child_id=child_id,
+                reason="unknown_node",
+            )
+            continue
+        if child.parent_id != node.id:
+            log_step(
+                logger,
+                "mindmap_tree_child_skipped",
+                parent_id=node.id,
+                child_id=child.id,
+                reason="invalid_parent",
+                child_parent_id=child.parent_id,
+            )
+            continue
+        children.append(
+            _build_child(child.id, node.id, nodes, depth_remaining - 1, path)
+        )
+    return children
 
 
 def _build_child(

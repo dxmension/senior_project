@@ -42,6 +42,18 @@ class GenerateMindmapRequest(BaseModel):
     depth: int = Field(default=3, ge=1, le=5)
 
 
+class MindmapGenerationQueuedResponse(BaseModel):
+    task_id: str
+    status: str
+
+
+class MindmapGenerationStatusResponse(BaseModel):
+    task_id: str
+    status: str
+    mindmap: SavedMindmapResponse | None = None
+    error_message: str | None = None
+
+
 class SavedMindmapResponse(BaseModel):
     id: int
     course_id: int

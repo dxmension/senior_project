@@ -23,14 +23,21 @@ export default function ProfilePage() {
   useEffect(() => {
     async function load() {
       try {
-        const [statsRes, enrollRes, auditRes] = await Promise.all([
+        const [statsRes, enrollRes, auditRes] = await Promise.allSettled([
           api.get<ApiResponse<UserStats>>("/profile/stats"),
           api.get<ApiResponse<EnrollmentItem[]>>("/profile/enrollments"),
           api.get<ApiResponse<AuditResult>>("/profile/audit"),
         ]);
-        setStats(statsRes.data);
-        setEnrollments(enrollRes.data);
-        setAudit(auditRes.data);
+
+        if (statsRes.status === "fulfilled") {
+          setStats(statsRes.value.data);
+        }
+        if (enrollRes.status === "fulfilled") {
+          setEnrollments(enrollRes.value.data);
+        }
+        if (auditRes.status === "fulfilled") {
+          setAudit(auditRes.value.data);
+        }
       } catch {
         // silently fail, components handle empty state
       } finally {

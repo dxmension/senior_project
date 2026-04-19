@@ -1,4 +1,5 @@
 from sqlalchemy import select
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, load_only
 
@@ -36,6 +37,10 @@ def course_loader():
             Course.ects,
         ),
     )
+
+
+def _is_missing_handbook_table(error: ProgrammingError) -> bool:
+    return 'relation "handbook_plans" does not exist' in str(error)
 
 
 class UserService:
@@ -155,7 +160,13 @@ class UserService:
         handbook_plans = None
         if enrollment_year:
             handbook_svc = HandbookService(self.session)
-            handbook_plans = await handbook_svc.get_plans_for_year(enrollment_year)
+            try:
+                handbook_plans = await handbook_svc.get_plans_for_year(
+                    enrollment_year
+                )
+            except ProgrammingError as exc:
+                if not _is_missing_handbook_table(exc):
+                    raise
 
         audit = compute_audit(major, courses, user.total_credits_earned or 0, handbook_plans)
 

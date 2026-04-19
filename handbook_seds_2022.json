@@ -194,7 +194,7 @@
           },
           {
             "name": "Social Science Elective",
-            "patterns": ["SOC", "ANT", "PSY", "ECON", "ECO", "POL", "HST"],
+            "patterns": ["SOC", "ANT", "PSY", "ECON", "ECO", "PLS", "HST"],
             "required_count": 1,
             "ects_per_course": 6,
             "is_elective": true,
@@ -360,7 +360,7 @@
           },
           {
             "name": "Social Science Elective",
-            "patterns": ["SOC", "ANT", "PSY", "ECON", "ECO", "POL", "HST"],
+            "patterns": ["SOC", "ANT", "PSY", "ECON", "ECO", "PLS", "HST"],
             "required_count": 1,
             "ects_per_course": 6,
             "is_elective": true,
@@ -448,7 +448,7 @@
           },
           {
             "name": "Social Science Elective",
-            "patterns": ["SOC", "ANT", "PSY", "ECON", "ECO", "POL", "HST"],
+            "patterns": ["SOC", "ANT", "PSY", "ECON", "ECO", "PLS", "HST"],
             "required_count": 1,
             "ects_per_course": 6,
             "is_elective": true,
