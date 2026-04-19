@@ -5,7 +5,9 @@ import {
   BookOpen,
   ChevronDown,
   ChevronUp,
+  Clock,
   GraduationCap,
+  MapPin,
   TrendingUp,
   Users,
 } from "lucide-react";
@@ -17,7 +19,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { ReviewsTab } from "@/components/catalog/reviews-tab";
 import { api } from "@/lib/api";
-import type { ApiResponse, CatalogCourse, ProfessorStats, SectionGpaStats } from "@/types";
+import type { ApiResponse, CatalogCourse, CourseOfferingInfo, ProfessorStats, SectionGpaStats } from "@/types";
 
 type Tab = "overview" | "reviews";
 
@@ -219,6 +221,95 @@ function TermBadge({ term }: { term: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Timetable
+// ---------------------------------------------------------------------------
+
+function TimetableSection({ offerings }: { offerings: CourseOfferingInfo[] }) {
+  if (offerings.length === 0) return null;
+
+  const term = offerings[0].term;
+  const year = offerings[0].year;
+
+  return (
+    <GlassCard>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-semibold text-text-primary">
+          Timetable
+        </h2>
+        <span className="text-xs text-text-muted">
+          {term} {year}
+        </span>
+      </div>
+      <div className="overflow-x-auto -mx-1">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-border-primary">
+              <th className="text-left pb-2 pr-3 text-text-muted font-medium">Section</th>
+              <th className="text-left pb-2 pr-3 text-text-muted font-medium">Instructor</th>
+              <th className="text-left pb-2 pr-3 text-text-muted font-medium">Days</th>
+              <th className="text-left pb-2 pr-3 text-text-muted font-medium">Time</th>
+              <th className="text-left pb-2 pr-3 text-text-muted font-medium">Room</th>
+              <th className="text-right pb-2 text-text-muted font-medium">Enrolled</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border-primary/50">
+            {offerings.map((o, i) => (
+              <tr key={i} className="hover:bg-bg-elevated/50 transition-colors">
+                <td className="py-2.5 pr-3 font-mono text-text-primary">
+                  {o.section ?? "—"}
+                </td>
+                <td className="py-2.5 pr-3 text-text-secondary max-w-[160px] truncate">
+                  {o.faculty ?? <span className="text-text-muted/50 italic">TBA</span>}
+                </td>
+                <td className="py-2.5 pr-3 text-text-secondary">
+                  {o.days ? (
+                    <span className="flex items-center gap-1">
+                      <Clock size={10} className="text-text-muted shrink-0" />
+                      {o.days}
+                    </span>
+                  ) : (
+                    <span className="text-text-muted/50">—</span>
+                  )}
+                </td>
+                <td className="py-2.5 pr-3 text-text-secondary font-mono whitespace-nowrap">
+                  {o.meeting_time ?? <span className="text-text-muted/50 not-italic font-sans">TBA</span>}
+                </td>
+                <td className="py-2.5 pr-3 text-text-secondary">
+                  {o.room ? (
+                    <span className="flex items-center gap-1">
+                      <MapPin size={10} className="text-text-muted shrink-0" />
+                      {o.room}
+                    </span>
+                  ) : (
+                    <span className="text-text-muted/50">—</span>
+                  )}
+                </td>
+                <td className="py-2.5 text-right">
+                  {o.enrolled != null ? (
+                    <span className={`font-mono ${
+                      o.capacity != null && o.enrolled >= o.capacity
+                        ? "text-accent-red"
+                        : "text-text-secondary"
+                    }`}>
+                      {o.enrolled}
+                      {o.capacity != null && (
+                        <span className="text-text-muted">/{o.capacity}</span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-text-muted/50">—</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </GlassCard>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -382,6 +473,9 @@ export default function CourseDetailPage({
                 </div>
               </GlassCard>
             )}
+
+            {/* Timetable — current semester sections */}
+            <TimetableSection offerings={course.offerings} />
 
             {/* Overall grade distribution */}
             {hasGrades && (

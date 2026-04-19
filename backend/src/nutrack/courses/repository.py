@@ -183,6 +183,19 @@ class CourseRepository(BaseRepository[Course]):
             out.setdefault(row.course_id, set()).add(row.term)
         return {k: sorted(v) for k, v in out.items()}
 
+    async def get_all_course_terms(self) -> list[tuple[str, str, str]]:
+        """
+        Return all distinct (code, level, term) triples from CourseOfferings.
+        Used to resolve term availability for audit requirement patterns.
+        """
+        stmt = (
+            select(Course.code, Course.level, CourseOffering.term)
+            .join(CourseOffering, Course.id == CourseOffering.course_id)
+            .distinct()
+        )
+        result = await self.session.execute(stmt)
+        return [(row.code, row.level, row.term) for row in result]
+
     async def get_stats(self, course_id: int) -> dict:
         """
         Aggregate enrollment statistics for a course across all offerings.
@@ -546,6 +559,23 @@ class CourseReviewRepository(BaseRepository[CourseReview]):
             "avg_gpa_boost": _rounded(averages[3]),
             "avg_workload": _rounded(averages[4]),
         }
+
+    async def get_avg_overall_rating_by_course_ids(
+        self, course_ids: list[int]
+    ) -> dict[int, float | None]:
+        """Return {course_id: avg_overall_rating} for a batch of courses."""
+        if not course_ids:
+            return {}
+        stmt = (
+            select(
+                CourseReview.course_id,
+                func.avg(CourseReview.overall_rating).label("avg_rating"),
+            )
+            .where(CourseReview.course_id.in_(course_ids))
+            .group_by(CourseReview.course_id)
+        )
+        result = await self.session.execute(stmt)
+        return {row.course_id: _rounded(row.avg_rating) for row in result}
 
     async def get_by_user_and_course(
         self,

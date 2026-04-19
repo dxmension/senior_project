@@ -4,12 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, load_only
 
 from nutrack.courses.models import Course, CourseOffering
+from nutrack.courses.repository import CourseRepository
 from nutrack.enrollments.models import Enrollment, EnrollmentStatus
 from nutrack.enrollments.service import EnrollmentService, format_course_code
 from nutrack.config import settings
 from nutrack.handbook.service import HandbookService
 from nutrack.semester import format_term_year
-from nutrack.users.audit import compute_audit
+from nutrack.users.audit import compute_audit, get_terms_for_patterns
 from nutrack.users.exceptions import NotFoundError
 from nutrack.users.repository import UserRepository
 from nutrack.users.schemas import (
@@ -170,6 +171,12 @@ class UserService:
 
         audit = compute_audit(major, courses, user.total_credits_earned or 0, handbook_plans)
 
+        # Fetch all course-term pairs once; used to resolve term availability for
+        # each requirement so the frontend can factor seasonal restrictions into
+        # the graduation timeline risk calculation.
+        course_repo = CourseRepository(self.session)
+        all_course_terms = await course_repo.get_all_course_terms()
+
         return AuditResultResponse(
             major=audit.major,
             supported=audit.supported,
@@ -195,6 +202,7 @@ class UserService:
                             ],
                             ects_per_course=req.ects_per_course,
                             note=req.note,
+                            terms_available=get_terms_for_patterns(req.patterns, all_course_terms),
                         )
                         for req in cat.requirements
                     ],

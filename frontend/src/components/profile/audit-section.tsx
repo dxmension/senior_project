@@ -28,32 +28,30 @@ function getCurrentTerm(): Term {
 // Semesters remaining AFTER the current one, within a standard 4-year plan.
 // "regular" = Fall or Spring (24–36 ECTS each).
 // "summers" = optional Summer sessions (6–16 ECTS each).
+// The summer after 4th year counts as a last-chance session before a 5th year.
 const SEMESTERS_AFTER: Record<string, { regular: number; summers: number }> = {
-  "1-Fall":   { regular: 7, summers: 3 },
-  "1-Spring": { regular: 6, summers: 3 },
-  "1-Summer": { regular: 6, summers: 2 },
-  "2-Fall":   { regular: 5, summers: 2 },
-  "2-Spring": { regular: 4, summers: 2 },
-  "2-Summer": { regular: 4, summers: 1 },
-  "3-Fall":   { regular: 3, summers: 1 },
-  "3-Spring": { regular: 2, summers: 1 },
-  "3-Summer": { regular: 2, summers: 0 },
-  "4-Fall":   { regular: 1, summers: 0 },
-  "4-Spring": { regular: 0, summers: 0 },
-  "4-Summer": { regular: 0, summers: 0 },
+  "1-Fall":   { regular: 7, summers: 4 },
+  "1-Spring": { regular: 6, summers: 4 },
+  "1-Summer": { regular: 6, summers: 3 },
+  "2-Fall":   { regular: 5, summers: 3 },
+  "2-Spring": { regular: 4, summers: 3 },
+  "2-Summer": { regular: 4, summers: 2 },
+  "3-Fall":   { regular: 3, summers: 2 },
+  "3-Spring": { regular: 2, summers: 2 },
+  "3-Summer": { regular: 2, summers: 1 },
+  "4-Fall":   { regular: 1, summers: 1 },  // 4th-Spring + last-chance 4th-Summer
+  "4-Spring": { regular: 0, summers: 1 },  // only last-chance 4th-Summer remains
+  "4-Summer": { regular: 0, summers: 0 },  // already in last-chance summer
 };
 
 interface RiskInfo {
   /** True if finishing in 4 years is impossible even at max load (36/16 ECTS). */
   needsFifthYear: boolean;
-  /**
-   * True if finishing requires at least one summer session or near-max load
-   * every semester — i.e. there's no comfortable margin.
-   */
-  tight: boolean;
+  /** True if regular semesters alone are not enough — at least one summer session needed. */
+  needsSummer: boolean;
   stillNeeded: number;
   maxAchievable: number;   // at 36 regular + 16 summer
-  minPerSemester: number;  // avg ECTS/semester needed (regular only)
+  regularMax: number;      // at 36 per regular semester only
   remaining: { regular: number; summers: number };
   term: Term;
 }
@@ -73,33 +71,61 @@ function computeRisk(
   const stillNeeded =
     audit.total_ects - audit.completed_ects - audit.in_progress_ects;
 
+  const regularMax = remaining.regular * 36;
+  const summerMax = remaining.summers * 16;
+  const maxAchievable = regularMax + summerMax;
+
   if (stillNeeded <= 0) {
     return {
       needsFifthYear: false,
-      tight: false,
+      needsSummer: false,
       stillNeeded: 0,
-      maxAchievable: 0,
-      minPerSemester: 0,
+      maxAchievable,
+      regularMax,
       remaining,
       term,
     };
   }
 
-  // Max physically achievable: 36 ECTS/regular + 16 ECTS/summer.
-  const maxAchievable = remaining.regular * 36 + remaining.summers * 16;
+  // Split outstanding ECTS by whether the required courses can be taken in summer.
+  // A requirement is "summer-eligible" only if at least one of its courses is
+  // actually offered during Summer.  If terms_available is empty (data not loaded),
+  // we conservatively assume all terms are available.
+  let regularOnlyEcts = 0;  // ECTS whose courses are never offered in summer
+  let summerEligibleEcts = 0;  // ECTS whose courses are sometimes offered in summer
 
-  // Needs 5th year: can't finish even at absolute max load.
-  const needsFifthYear = stillNeeded > maxAchievable;
+  for (const cat of audit.categories) {
+    for (const req of cat.requirements) {
+      const outstanding = Math.max(
+        0,
+        req.required_count - req.completed_count - req.in_progress_count,
+      );
+      if (outstanding === 0) continue;
+      const outstandingEcts = outstanding * req.ects_per_course;
 
-  // Tight: needs summers OR needs >30 ECTS every remaining regular semester.
-  const comfortableMax = remaining.regular * 30; // ~30 is a full but manageable semester
-  const tight = !needsFifthYear && stillNeeded > comfortableMax;
+      const canTakeInSummer =
+        req.terms_available.length === 0 ||  // unknown → assume flexible
+        req.terms_available.includes("Summer");
 
-  // Average regular-semester load needed (excluding summers, conservative).
-  const minPerSemester =
-    remaining.regular > 0 ? Math.ceil(stillNeeded / remaining.regular) : Infinity;
+      if (canTakeInSummer) {
+        summerEligibleEcts += outstandingEcts;
+      } else {
+        regularOnlyEcts += outstandingEcts;
+      }
+    }
+  }
 
-  return { needsFifthYear, tight, stillNeeded, maxAchievable, minPerSemester, remaining, term };
+  // Regular-only courses MUST fit in regular semesters.
+  // If they overflow, no amount of summer sessions can help.
+  const needsFifthYear =
+    regularOnlyEcts > regularMax ||
+    stillNeeded > maxAchievable;
+
+  // Needs summer: total doesn't fit in regular semesters alone,
+  // but does fit when summer is included.
+  const needsSummer = !needsFifthYear && stillNeeded > regularMax;
+
+  return { needsFifthYear, needsSummer, stillNeeded, maxAchievable, regularMax, remaining, term };
 }
 
 // ─── Display name normalisation ───────────────────────────────────────────────
@@ -268,32 +294,88 @@ function CategoryCard({ cat, showWarning }: { cat: AuditCategory; showWarning: b
 // ─── Risk banner ──────────────────────────────────────────────────────────────
 
 function RiskBanner({ risk }: { risk: RiskInfo }) {
-  const { needsFifthYear, tight, stillNeeded, minPerSemester, remaining } = risk;
+  const { needsFifthYear, needsSummer, stillNeeded, maxAchievable, regularMax, remaining } = risk;
 
-  if (!needsFifthYear && !tight) return null;
+  // All requirements completed or in progress
+  if (stillNeeded <= 0) {
+    return (
+      <div className="flex gap-3 rounded-lg border border-accent-green/40 bg-accent-green/10 text-accent-green px-4 py-3">
+        <CalendarClock size={16} className="shrink-0 mt-0.5" />
+        <div className="space-y-0.5">
+          <p className="text-sm font-semibold">All requirements on track</p>
+          <p className="text-xs opacity-80 leading-relaxed">
+            All remaining degree requirements are completed or currently in progress. You are on track to graduate on time.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-  const color = needsFifthYear
-    ? "border-accent-red/40 bg-accent-red/10 text-accent-red"
-    : "border-accent-orange/40 bg-accent-orange/10 text-accent-orange";
+  // On track — regular semesters are sufficient
+  if (!needsFifthYear && !needsSummer) {
+    return (
+      <div className="flex gap-3 rounded-lg border border-accent-green/40 bg-accent-green/10 text-accent-green px-4 py-3">
+        <CalendarClock size={16} className="shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <p className="text-sm font-semibold">On track to graduate in 4 years</p>
+          <p className="text-xs opacity-80 leading-relaxed">
+            You have {stillNeeded} ECTS remaining, which fits within your {remaining.regular} remaining regular semester{remaining.regular !== 1 ? "s" : ""} (up to {regularMax} ECTS at maximum load of 36 ECTS/semester).
+          </p>
+          <p className="text-xs opacity-60 italic">
+            Note: some courses are only offered in Fall or Spring — factor this in when planning each semester.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-  const title = needsFifthYear
-    ? "5th year likely required"
-    : "Graduation timeline is tight";
+  // Needs at least one summer session to stay on track
+  if (needsSummer) {
+    const isLastChanceSummer = remaining.regular === 0 && remaining.summers === 1;
+    return (
+      <div className="flex gap-3 rounded-lg border border-accent-orange/40 bg-accent-orange/10 text-accent-orange px-4 py-3">
+        <CalendarClock size={16} className="shrink-0 mt-0.5" />
+        <div className="space-y-1.5">
+          <p className="text-sm font-semibold">Summer session required to graduate on time</p>
+          <p className="text-xs opacity-80 leading-relaxed">
+            You have {stillNeeded} ECTS remaining. Regular semesters alone can cover up to {regularMax} ECTS — you will need at least one summer session (6–16 ECTS) to stay on track.
+          </p>
+          {isLastChanceSummer && (
+            <p className="text-xs opacity-80 leading-relaxed">
+              The summer after your 4th year is your final opportunity to complete remaining credits before a 5th year becomes necessary.
+            </p>
+          )}
+          <p className="text-xs opacity-60 italic">
+            Note: some courses are only offered in Fall or Spring — verify availability before selecting summer courses.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-  const body = needsFifthYear
-    ? `${stillNeeded} ECTS remaining after this semester, but only ${remaining.regular * 36 + remaining.summers * 16} ECTS achievable at maximum load in the time left.`
-    : `You need ~${minPerSemester} ECTS/semester to graduate on time${remaining.summers > 0 ? ", possibly including summer sessions" : ""}.`;
-
-  const note =
-    "Note: some courses are only offered in Fall or Spring — check availability when planning each semester.";
+  // Needs 5th year — can't finish even at max load including all summers
+  const breakdown: string[] = [];
+  if (remaining.regular > 0)
+    breakdown.push(`${remaining.regular} semester${remaining.regular > 1 ? "s" : ""} × 36 ECTS = ${remaining.regular * 36} ECTS`);
+  if (remaining.summers > 0)
+    breakdown.push(`${remaining.summers} summer${remaining.summers > 1 ? "s" : ""} × 16 ECTS = ${remaining.summers * 16} ECTS`);
 
   return (
-    <div className={`flex gap-3 rounded-lg border px-4 py-3 ${color}`}>
+    <div className="flex gap-3 rounded-lg border border-accent-red/40 bg-accent-red/10 text-accent-red px-4 py-3">
       <CalendarClock size={16} className="shrink-0 mt-0.5" />
-      <div className="space-y-0.5">
-        <p className="text-sm font-medium">{title}</p>
-        <p className="text-xs opacity-80">{body}</p>
-        <p className="text-xs opacity-60 italic">{note}</p>
+      <div className="space-y-1.5">
+        <p className="text-sm font-semibold">5th year likely required</p>
+        <p className="text-xs opacity-80 leading-relaxed">
+          You need {stillNeeded} more ECTS to graduate, but only {maxAchievable} ECTS are achievable at maximum load in the remaining time{breakdown.length > 0 ? ` (${breakdown.join(" + ")})` : ""}.
+        </p>
+        <p className="text-xs opacity-80 leading-relaxed">
+          Some courses are only offered in Fall or Spring — this further reduces how many ECTS you can realistically take each term.
+        </p>
+        <p className="text-xs opacity-80 leading-relaxed">
+          {remaining.summers > 0
+            ? "Even using all available summer sessions at maximum capacity, graduation within 4 years is not possible."
+            : "No summer sessions remain in your 4-year plan to compensate."}
+        </p>
       </div>
     </div>
   );
@@ -332,7 +414,7 @@ export function AuditSection({ audit, studyYear }: AuditSectionProps) {
       : 0;
 
   const risk = computeRisk(audit, studyYear);
-  const atRisk = risk ? risk.needsFifthYear || risk.tight : false;
+  const atRisk = risk ? risk.needsFifthYear : false;
 
   return (
     <div className="space-y-4">

@@ -4,6 +4,7 @@ import {
   BookOpen,
   ChevronDown,
   Search,
+  Star,
   TrendingUp,
   Users,
 } from "lucide-react";
@@ -115,7 +116,7 @@ function CourseCard({ course }: { course: CatalogCourse }) {
         </div>
       )}
 
-      {/* ── Footer: GPA + enrolled ── */}
+      {/* ── Footer: GPA + rating + enrolled ── */}
       <div className="flex items-center gap-3 mt-auto pt-2 border-t border-border-primary">
         {course.avg_gpa != null ? (
           <div className="flex items-center gap-1.5">
@@ -126,6 +127,15 @@ function CourseCard({ course }: { course: CatalogCourse }) {
           </div>
         ) : (
           <span className="text-xs text-text-muted italic">No GPA data</span>
+        )}
+
+        {course.avg_review_rating != null && (
+          <div className="flex items-center gap-1">
+            <Star size={11} className="text-yellow-400 fill-yellow-400" />
+            <span className="text-xs text-text-secondary font-mono">
+              {course.avg_review_rating.toFixed(1)}
+            </span>
+          </div>
         )}
 
         {course.total_enrolled != null && (
@@ -146,6 +156,8 @@ interface Filters {
   level_prefix: string;
   eligible_only: boolean;
   has_priority: boolean;
+  min_gpa: string;
+  min_rating: string;
 }
 
 export default function CatalogPage() {
@@ -158,6 +170,8 @@ export default function CatalogPage() {
     level_prefix: "",
     eligible_only: false,
     has_priority: false,
+    min_gpa: "",
+    min_rating: "",
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -177,6 +191,8 @@ export default function CatalogPage() {
       if (f.level_prefix) params.set("level_prefix", f.level_prefix);
       if (f.eligible_only) params.set("eligible_only", "true");
       if (f.has_priority) params.set("has_priority", "true");
+      if (f.min_gpa) params.set("min_gpa", f.min_gpa);
+      if (f.min_rating) params.set("min_rating", f.min_rating);
 
       try {
         const res = await api.get<ApiResponse<CatalogCourse[]>>(
@@ -315,6 +331,46 @@ export default function CatalogPage() {
           />
         </div>
 
+        <div className="relative">
+          <select
+            value={filters.min_gpa}
+            onChange={(e) => setFilter("min_gpa", e.target.value)}
+            className="appearance-none rounded-full bg-bg-card border border-border-primary
+              pl-3 pr-8 py-1.5 text-xs text-text-secondary
+              focus:outline-none focus:border-border-light cursor-pointer"
+          >
+            <option value="">Any GPA</option>
+            <option value="2.0">GPA ≥ 2.0</option>
+            <option value="2.5">GPA ≥ 2.5</option>
+            <option value="3.0">GPA ≥ 3.0</option>
+            <option value="3.5">GPA ≥ 3.5</option>
+          </select>
+          <ChevronDown
+            size={12}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+          />
+        </div>
+
+        <div className="relative">
+          <select
+            value={filters.min_rating}
+            onChange={(e) => setFilter("min_rating", e.target.value)}
+            className="appearance-none rounded-full bg-bg-card border border-border-primary
+              pl-3 pr-8 py-1.5 text-xs text-text-secondary
+              focus:outline-none focus:border-border-light cursor-pointer"
+          >
+            <option value="">Any rating</option>
+            <option value="3">★ 3+</option>
+            <option value="3.5">★ 3.5+</option>
+            <option value="4">★ 4+</option>
+            <option value="4.5">★ 4.5+</option>
+          </select>
+          <ChevronDown
+            size={12}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+          />
+        </div>
+
         {/* Toggle buttons for eligible_only and has_priority */}
         <button
           type="button"
@@ -344,7 +400,9 @@ export default function CatalogPage() {
           filters.academic_level ||
           filters.level_prefix ||
           filters.eligible_only ||
-          filters.has_priority) && (
+          filters.has_priority ||
+          filters.min_gpa ||
+          filters.min_rating) && (
           <button
             type="button"
             onClick={() =>
@@ -355,6 +413,8 @@ export default function CatalogPage() {
                 level_prefix: "",
                 eligible_only: false,
                 has_priority: false,
+                min_gpa: "",
+                min_rating: "",
               }))
             }
             className="text-xs text-text-muted hover:text-text-secondary transition-colors underline-offset-2 underline"
@@ -379,7 +439,9 @@ export default function CatalogPage() {
             filters.academic_level ||
             filters.level_prefix ||
             filters.eligible_only ||
-            filters.has_priority
+            filters.has_priority ||
+            filters.min_gpa ||
+            filters.min_rating
               ? "No courses match your filters."
               : "No courses found. Upload a schedule PDF first."}
           </p>

@@ -116,6 +116,15 @@ class ReviewForbiddenError(AppException):
         )
 
 
+class CourseDescriptionsFileError(AppException):
+    def __init__(self, message: str) -> None:
+        super().__init__(
+            message=message,
+            status_code=422,
+            error_code="COURSE_DESCRIPTIONS_FILE_ERROR",
+        )
+
+
 class ReviewInappropriateContentError(AppException):
     def __init__(self) -> None:
         super().__init__(

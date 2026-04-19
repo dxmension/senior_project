@@ -150,6 +150,7 @@ export interface CatalogCourse {
   credits_us: number | null;
   pass_grade: string | null;
   avg_gpa: number | null;
+  avg_review_rating: number | null;
   total_enrolled: number | null;
   terms_available: string[];
   sections: SectionGpaStats[];
@@ -256,6 +257,7 @@ export interface AuditRequirement {
   matched_courses: MatchedCourse[];
   ects_per_course: number;
   note: string;
+  terms_available: string[];
 }
 
 export interface AuditCategory {

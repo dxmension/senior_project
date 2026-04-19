@@ -83,6 +83,7 @@ class RequirementResult:
     matched_courses: list[MatchedCourse]
     ects_per_course: int = 6
     note: str = ""
+    patterns: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -965,6 +966,7 @@ def compute_audit(
                     matched_courses=matched[:req.required_count] if (req.is_elective and not _is_open_elective(req)) else matched[:req.required_count + 2],
                     ects_per_course=ects,
                     note=req.note,
+                    patterns=req.patterns,
                 )
             )
 
@@ -987,3 +989,24 @@ def compute_audit(
         actual_credits_earned=credits_earned,
         categories=category_results,
     )
+
+
+def get_terms_for_patterns(
+    patterns: list[str],
+    all_course_terms: list[tuple[str, str, str]],  # (code, level, term)
+) -> list[str]:
+    """
+    Return the distinct terms in which at least one course matching any of the
+    given patterns is offered.
+
+    Uses the same matching logic as the audit engine so the results are consistent.
+    `all_course_terms` should be pre-fetched once and reused across requirements.
+    """
+    if not patterns:
+        return []
+    terms: set[str] = set()
+    for code, level, term in all_course_terms:
+        course_code = f"{code} {level}"
+        if _course_matches_any(course_code, patterns):
+            terms.add(term)
+    return sorted(terms)
