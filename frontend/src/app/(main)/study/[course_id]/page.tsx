@@ -172,20 +172,9 @@ export default function StudyCoursePage({ params }: { params: PageParams }) {
           </div>
         )
       ) : activeTab === "flashcards" ? (
-        <GlassCard className="py-14 text-center">
-          <p className="text-lg font-semibold text-text-primary">
-            Flashcards are coming here next
-          </p>
-          <p className="mt-2 text-sm text-text-secondary">
-            This tab is a placeholder for course-specific flashcard study tools.
-          </p>
-        </GlassCard>
+        <FlashcardExamPicker exams={group.exams} />
       ) : enrollment ? (
         <CourseMindmapsPanel enrollment={enrollment} />
-      ) : (
-        <GlassCard className="py-14 text-center">
-          <p className="text-sm text-text-secondary">Enrollment data unavailable.</p>
-        </GlassCard>
       ) : (
         <FlashcardExamPicker exams={group.exams} />
       )}
