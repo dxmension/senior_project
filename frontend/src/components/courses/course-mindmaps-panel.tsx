@@ -311,7 +311,7 @@ export function CourseMindmapsPanel({ enrollment }: Props) {
             </div>
 
             {/* Scrollable mindmap */}
-            <div className="rounded-lg overflow-hidden">
+            <div className="rounded-lg overflow-hidden max-h-[85vh] overflow-y-auto">
               <MindmapTree
                 root={viewing.root}
                 filename={`mindmap-week${viewing.week}`}

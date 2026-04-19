@@ -14,7 +14,6 @@ import { useRouter } from "next/navigation";
 
 import { AddAssessmentModal } from "@/components/courses/add-assessment-modal";
 import { CourseMaterialsPanel } from "@/components/courses/course-materials-panel";
-import { CourseMindmapsPanel } from "@/components/courses/course-mindmaps-panel";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
@@ -216,7 +215,7 @@ function ScoreInput({
 }
 
 type FilterTab = "all" | "upcoming" | "completed" | "overdue";
-type CoursePageTab = "deadlines" | "materials" | "mindmaps";
+type CoursePageTab = "deadlines" | "materials";
 
 function findStudyGroup(
   groups: MockExamCourseGroup[],
@@ -438,7 +437,7 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
         </div>
 
         <div className="flex gap-2 border-b border-border-primary">
-          {(["deadlines", "materials", "mindmaps"] as const).map((tab) => (
+          {(["deadlines", "materials"] as const).map((tab) => (
             <button
               key={tab}
               type="button"
@@ -449,7 +448,7 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
                   : "border-transparent text-text-secondary hover:text-text-primary"
               }`}
             >
-              {tab === "deadlines" ? "Deadlines" : tab === "materials" ? "Materials" : "Mindmaps"}
+              {tab === "deadlines" ? "Deadlines" : "Materials"}
             </button>
           ))}
         </div>
@@ -738,10 +737,8 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
               )}
             </GlassCard>
           </>
-        ) : pageTab === "materials" ? (
-          <CourseMaterialsPanel enrollment={enrollment} />
         ) : (
-          <CourseMindmapsPanel enrollment={enrollment} />
+          <CourseMaterialsPanel enrollment={enrollment} />
         )}
       </div>
 
