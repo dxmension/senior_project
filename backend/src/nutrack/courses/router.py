@@ -100,8 +100,18 @@ async def list_catalog(
     current_user: User = Depends(get_current_user),
     service: CourseCatalogService = Depends(get_course_catalog_service),
 ):
-    params = {"skip": skip, "limit": limit, "search": q}
     user_major = getattr(current_user, "major", None)
+    user_kazakh_level = getattr(current_user, "kazakh_level", None)
+    params = {
+        "skip": skip,
+        "limit": limit,
+        "search": q,
+        "user_id": current_user.id,
+    }
+    if user_major is not None:
+        params["user_major"] = user_major
+    if user_kazakh_level is not None:
+        params["kazakh_level"] = user_kazakh_level
     optional_params = {
         "department": department,
         "school": school,
@@ -114,12 +124,8 @@ async def list_catalog(
             params[key] = value
     if eligible_only:
         params["eligible_only"] = True
-        params["user_id"] = current_user.id
     if has_priority:
         params["has_priority"] = True
-        params["user_id"] = current_user.id
-    if user_major is not None:
-        params["user_major"] = user_major
 
     courses, total = await service.list_courses(**params)
     return ApiResponse(data=courses, meta={"total": total, "skip": skip, "limit": limit})
@@ -237,7 +243,9 @@ async def check_eligibility(
     (must be PASSED with the required grade) and corequisites
     (must be PASSED or IN_PROGRESS) for the given course.
     """
-    result = await service.check_eligibility(course_id, current_user.id)
+    result = await service.check_eligibility(
+        course_id, current_user.id, getattr(current_user, "kazakh_level", None)
+    )
     return ApiResponse(data=result)
 
 

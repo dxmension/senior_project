@@ -6,6 +6,7 @@ from nutrack.dashboard.router import router as dashboard_router
 from nutrack.admin.router import router as admin_router
 
 from nutrack.auth.router import router as auth_router
+from nutrack.handbook.router import router as handbook_router
 from nutrack.calendar.router import router as calendar_router
 from nutrack.categories.router import router as categories_router
 from nutrack.events.router import router as events_router
@@ -33,3 +34,4 @@ api_router.include_router(study_router)
 api_router.include_router(flashcards_router)
 api_router.include_router(notifications_router)
 api_router.include_router(admin_router)
+api_router.include_router(handbook_router)

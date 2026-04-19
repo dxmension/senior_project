@@ -5,7 +5,9 @@ export interface User {
   last_name: string;
   avatar_url: string | null;
   major: string | null;
+  kazakh_level: string | null;
   study_year: number | null;
+  enrollment_year: number | null;
   cgpa: number | null;
   total_credits_earned: number | null;
   total_credits_enrolled: number | null;
@@ -142,6 +144,7 @@ export interface CatalogCourse {
   priority_3: string | null;
   priority_4: string | null;
   is_eligible: boolean | null;
+  ineligibility_reason: string | null;
   user_priority: number | null;
   credits_us: number | null;
   pass_grade: string | null;
@@ -217,6 +220,58 @@ export interface ReviewStats {
 export interface ReviewsPage {
   stats: ReviewStats;
   reviews: CourseReview[];
+}
+
+export interface HandbookUploadResult {
+  id: number;
+  enrollment_year: number;
+  filename: string;
+  status: "processing" | "completed" | "failed";
+  created_at: string;
+}
+
+export interface HandbookStatus {
+  id: number;
+  enrollment_year: number;
+  filename: string;
+  status: "processing" | "completed" | "failed";
+  majors_parsed: string[];
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MatchedCourse {
+  code: string;
+  status: "passed" | "in_progress";
+}
+
+export interface AuditRequirement {
+  name: string;
+  required_count: number;
+  completed_count: number;
+  in_progress_count: number;
+  status: "completed" | "in_progress" | "missing";
+  matched_courses: MatchedCourse[];
+  ects_per_course: number;
+  note: string;
+}
+
+export interface AuditCategory {
+  name: string;
+  requirements: AuditRequirement[];
+  total_ects: number;
+  completed_ects: number;
+}
+
+export interface AuditResult {
+  major: string;
+  supported: boolean;
+  total_ects: number;
+  completed_ects: number;
+  in_progress_ects: number;
+  actual_credits_earned: number;
+  categories: AuditCategory[];
 }
 
 export interface ApiResponse<T = null> {

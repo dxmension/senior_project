@@ -52,7 +52,7 @@ class SectionGpaStats(BaseModel):
     faculty: str | None = None
     avg_gpa: float | None = None
     total_enrolled: int | None = None
-    grade_distribution: dict[str, int] = Field(default_factory=dict)
+    grade_distribution: dict[str, float] = Field(default_factory=dict)
 
 
 class ProfessorStats(BaseModel):
@@ -114,6 +114,7 @@ class CourseDetailResponse(BaseModel):
     offerings: list[CourseOfferingInfo] = Field(default_factory=list)
     # Computed for authenticated user: eligibility and registration priority
     is_eligible: bool | None = None
+    ineligibility_reason: str | None = None
     user_priority: int | None = None  # 1, 2, 3, 4 = has that priority; None = open / no priority
 
 

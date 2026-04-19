@@ -209,15 +209,15 @@ class TranscriptService:
             raise FileValidationError("User not found")
 
         major = data.get("major")
+        kazakh_level = data.get("kazakh_level")
         courses = data.get("courses", [])
         if not courses:
             raise FileValidationError("At least one course is required")
 
-        await self.user_repo.update(
-            user,
-            major=major or user.major,
-            is_onboarded=True,
-        )
+        update_kwargs: dict = {"major": major or user.major, "is_onboarded": True}
+        if kazakh_level is not None:
+            update_kwargs["kazakh_level"] = kazakh_level
+        await self.user_repo.update(user, **update_kwargs)
 
         for course_data in courses:
             raw_code = course_data.get("code", "").strip()

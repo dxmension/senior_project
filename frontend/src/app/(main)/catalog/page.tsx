@@ -3,7 +3,6 @@
 import {
   BookOpen,
   ChevronDown,
-  Clock,
   Search,
   TrendingUp,
   Users,
@@ -15,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
-import type { ApiResponse, CatalogCourse, CourseOfferingInfo } from "@/types";
+import type { ApiResponse, CatalogCourse } from "@/types";
 
 const PAGE_SIZE = 30;
 const TERMS = ["Fall", "Spring", "Summer"];
@@ -43,47 +42,10 @@ function TermBadge({ term }: { term: string }) {
   );
 }
 
-function TimetableRow({ offerings }: { offerings: CourseOfferingInfo[] }) {
-  if (offerings.length === 0) return null;
-  return (
-    <div className="flex flex-col gap-1">
-      {offerings.map((o, i) => (
-        <div key={i} className="flex items-center gap-2 text-[11px] text-text-muted">
-          <Clock size={10} className="shrink-0" />
-          <span className="truncate">
-            {[o.section, o.days, o.meeting_time, o.room].filter(Boolean).join(" · ")}
-          </span>
-          {o.enrolled != null && o.capacity != null && (
-            <span className="shrink-0 ml-auto">
-              {o.enrolled}/{o.capacity}
-            </span>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ReqRow({
-  label,
-  text,
-}: {
-  label: string;
-  text: string;
-}) {
-  return (
-    <p className="text-[11px] text-text-muted leading-snug line-clamp-1">
-      <span className="font-semibold text-text-secondary">{label}: </span>
-      {text}
-    </p>
-  );
-}
 
 function CourseCard({ course }: { course: CatalogCourse }) {
   const hasPrioritySystem =
     course.priority_1 || course.priority_2 || course.priority_3 || course.priority_4;
-  const hasReqs =
-    course.prerequisites || course.corequisites || course.antirequisites;
 
   return (
     <Link
@@ -102,14 +64,21 @@ function CourseCard({ course }: { course: CatalogCourse }) {
             )}
             {/* Eligibility */}
             {course.is_eligible !== null && course.is_eligible !== undefined && (
-              <span
-                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border ${
-                  course.is_eligible
-                    ? "bg-green-500/10 text-green-400 border-green-500/25"
-                    : "bg-red-500/10 text-red-400 border-red-500/25"
-                }`}
-              >
-                {course.is_eligible ? "Eligible" : "Not eligible"}
+              <span className="relative group/elig">
+                <span
+                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border ${
+                    course.is_eligible
+                      ? "bg-green-500/10 text-green-400 border-green-500/25"
+                      : "bg-red-500/10 text-red-400 border-red-500/25"
+                  }`}
+                >
+                  {course.is_eligible ? "Eligible" : "Not eligible"}
+                </span>
+                {!course.is_eligible && course.ineligibility_reason && (
+                  <span className="pointer-events-none absolute left-0 top-full mt-1 z-20 w-max max-w-[220px] rounded bg-bg-card border border-border-primary px-2 py-1 text-[10px] text-text-secondary opacity-0 group-hover/elig:opacity-100 transition-opacity duration-150 whitespace-normal leading-snug">
+                    {course.ineligibility_reason}
+                  </span>
+                )}
               </span>
             )}
           </div>
@@ -135,26 +104,6 @@ function CourseCard({ course }: { course: CatalogCourse }) {
 
       {course.department && (
         <p className="text-xs text-text-secondary truncate">{course.department}</p>
-      )}
-
-      {/* ── Prerequisites / Corequisites / Antirequisites ── */}
-      {hasReqs && (
-        <div className="flex flex-col gap-0.5 border-l-2 border-border-primary pl-2">
-          {course.prerequisites && (
-            <ReqRow label="Pre" text={course.prerequisites} />
-          )}
-          {course.corequisites && (
-            <ReqRow label="Co" text={course.corequisites} />
-          )}
-          {course.antirequisites && (
-            <ReqRow label="Anti" text={course.antirequisites} />
-          )}
-        </div>
-      )}
-
-      {/* ── Timetable (latest offerings) ── */}
-      {course.offerings && course.offerings.length > 0 && (
-        <TimetableRow offerings={course.offerings} />
       )}
 
       {/* ── Terms available ── */}

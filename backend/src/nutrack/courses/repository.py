@@ -256,6 +256,7 @@ class CourseRepository(BaseRepository[Course]):
     async def get_user_course_history(self, user_id: int) -> list[dict]:
         stmt = (
             select(
+                Course.id,
                 Course.code,
                 Course.level,
                 Enrollment.grade,
@@ -271,6 +272,20 @@ class CourseRepository(BaseRepository[Course]):
         )
         result = await self.session.execute(stmt)
         return [dict(row) for row in result.mappings().all()]
+
+    async def get_ids_by_code_levels(
+        self, pairs: list[tuple[str, str]]
+    ) -> dict[tuple[str, str], int]:
+        """Batch-resolve (code, level) pairs to catalog course IDs."""
+        if not pairs:
+            return {}
+        conditions = [
+            (Course.code == code) & (Course.level == level)
+            for code, level in pairs
+        ]
+        stmt = select(Course.id, Course.code, Course.level).where(or_(*conditions))
+        result = await self.session.execute(stmt)
+        return {(row.code, row.level): row.id for row in result}
 
 
 class CourseOfferingRepository(BaseRepository[CourseOffering]):
