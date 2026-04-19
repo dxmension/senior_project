@@ -9,6 +9,7 @@ from nutrack.database import BaseRepository
 from nutrack.enrollments.models import Enrollment
 from nutrack.study.models import (
     MaterialCurationStatus,
+    MaterialUploadStatus,
     MockExam,
     MockExamAttempt,
     MockExamAttemptAnswer,
@@ -71,6 +72,25 @@ class StudyMaterialUploadRepository(BaseRepository[StudyMaterialUpload]):
         stmt = self._base_query().where(StudyMaterialUpload.id == upload_id)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def list_completed_uploads_for_week(
+        self,
+        user_id: int,
+        course_id: int,
+        week: int,
+    ) -> list[StudyMaterialUpload]:
+        stmt = (
+            self._base_query()
+            .where(
+                StudyMaterialUpload.uploader_id == user_id,
+                StudyMaterialUpload.course_id == course_id,
+                StudyMaterialUpload.user_week == week,
+                StudyMaterialUpload.upload_status == MaterialUploadStatus.COMPLETED,
+            )
+            .order_by(StudyMaterialUpload.created_at.asc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().unique().all())
 
     async def list_user_uploads(
         self,

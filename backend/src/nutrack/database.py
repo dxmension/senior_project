@@ -15,6 +15,7 @@ MODEL_MODULES = (
     "nutrack.courses.models",
     "nutrack.enrollments.models",
     "nutrack.events.models",
+    "nutrack.mindmaps.models",
     "nutrack.study.models",
     "nutrack.transcripts.models",
     "nutrack.users.models",

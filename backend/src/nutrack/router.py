@@ -13,6 +13,7 @@ from nutrack.courses.router import router as courses_router
 from nutrack.enrollments.router import router as enrollments_router
 from nutrack.flashcards.router import router as flashcards_router
 from nutrack.notifications.router import router as notifications_router
+from nutrack.mindmaps.router import router as mindmaps_router
 from nutrack.study.router import router as study_router
 from nutrack.transcripts.router import router as transcripts_router
 from nutrack.users.router import router as users_router
@@ -29,6 +30,7 @@ api_router.include_router(categories_router, prefix="/categories")
 api_router.include_router(events_router, prefix="/events")
 api_router.include_router(calendar_router, prefix="/calendar")
 api_router.include_router(dashboard_router, prefix="/dashboard")
+api_router.include_router(mindmaps_router)
 api_router.include_router(study_router)
 api_router.include_router(flashcards_router)
 api_router.include_router(notifications_router)
