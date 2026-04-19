@@ -53,3 +53,39 @@ async def test_get_dashboard_uses_derived_assessment_titles() -> None:
 
     assert result.course_progress[0].deadline_dots[0].title == "Midterm 2"
     assert result.upcoming_deadlines[0].title == "Midterm 2"
+
+
+@pytest.mark.asyncio
+async def test_get_dashboard_keeps_all_deadline_dots_for_course() -> None:
+    service = DashboardService(session=None)
+    service._fetch_enrollments = AsyncMock(return_value=[_enrollment()])  # type: ignore[method-assign]
+    service._fetch_user = AsyncMock(  # type: ignore[method-assign]
+        return_value=SimpleNamespace(cgpa=3.7, total_credits_earned=40)
+    )
+    assessments = [
+        SimpleNamespace(
+            id=index,
+            course_id=4,
+            assessment_type=assessment_type,
+            assessment_number=index,
+            deadline=datetime.now(timezone.utc) + timedelta(days=index),
+            is_completed=False,
+            course_offering=SimpleNamespace(course=_course()),
+        )
+        for index, assessment_type in enumerate(
+            [
+                AssessmentType.HOMEWORK,
+                AssessmentType.LAB,
+                AssessmentType.PROJECT,
+                AssessmentType.OTHER,
+                AssessmentType.QUIZ,
+            ],
+            start=1,
+        )
+    ]
+    service._fetch_assessments = AsyncMock(return_value=assessments)  # type: ignore[method-assign]
+
+    result = await service.get_dashboard(1, "Spring", 2026)
+
+    assert len(result.course_progress[0].deadline_dots) == 5
+    assert result.course_progress[0].deadline_dots[-1].title == "Quiz 5"

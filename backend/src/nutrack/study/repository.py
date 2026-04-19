@@ -220,7 +220,7 @@ class MockExamRepository(BaseRepository[MockExam]):
         result = await self.session.execute(stmt)
         return list(result.scalars().unique().all())
 
-    async def list_matching_active(
+    async def list_matching(
         self,
         course_ids: list[int],
     ) -> list[MockExam]:
@@ -229,7 +229,6 @@ class MockExamRepository(BaseRepository[MockExam]):
         stmt = (
             select(MockExam)
             .options(_mock_exam_loader(), _mock_exam_question_loader())
-            .where(MockExam.is_active.is_(True))
             .order_by(
                 MockExam.course_id.asc(),
                 MockExam.created_at.desc(),

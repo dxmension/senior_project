@@ -69,10 +69,39 @@ export default function StudyPage() {
           </p>
         </GlassCard>
       ) : (
-        <div className="space-y-4">
-          {groups.map((group) => (
-            <StudyCourseCard key={group.route_course_id} group={group} />
-          ))}
+        <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+          <GlassCard className="min-h-[420px] p-8">
+            <div className="space-y-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-green">
+                AI Recommendations
+              </p>
+              <div>
+                <h2 className="text-2xl font-semibold text-text-primary">
+                  Study Assistant recommendations will appear here
+                </h2>
+                <p className="mt-3 max-w-xl text-sm leading-6 text-text-secondary">
+                  This panel is reserved for AI-generated study recommendations,
+                  priority suggestions, and next best actions across your current
+                  courses.
+                </p>
+              </div>
+              <div className="rounded-3xl border border-dashed border-border-primary bg-white/[0.03] p-6">
+                <p className="text-sm font-medium text-text-primary">
+                  Placeholder
+                </p>
+                <p className="mt-2 text-sm text-text-secondary">
+                  Upcoming recommendations can summarize weak areas, suggest which
+                  mock family to open next, and help sequence your study time.
+                </p>
+              </div>
+            </div>
+          </GlassCard>
+
+          <div className="flex min-w-0 flex-col gap-5">
+            {groups.map((group) => (
+              <StudyCourseCard key={group.route_course_id} group={group} />
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -86,15 +115,14 @@ function StudyCourseCard({ group }: { group: StudyCourseGroup }) {
   );
 
   return (
-    <Link href={`/study/${group.route_course_id}`}>
+    <Link href={`/study/${group.route_course_id}`} className="block w-full">
       <GlassCard
         padding={false}
-        className="overflow-hidden border-border-primary transition-all duration-200
-          hover:border-accent-green hover:bg-[#2d3e14]
-          hover:shadow-[0_0_0_1px_rgba(163,230,53,0.28)]"
+        className="w-full cursor-pointer overflow-hidden border-border-primary !bg-white/[0.03]
+          transition-all duration-200 hover:border-accent-green/40 hover:!bg-white/[0.05]"
       >
-        <div className="flex flex-wrap items-center justify-between gap-4 p-6">
-          <div className="min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-5 px-7 py-6">
+          <div className="min-w-0 flex-1">
             <p className="font-mono text-sm font-semibold text-accent-green">
               {group.course_code}
             </p>
@@ -102,12 +130,12 @@ function StudyCourseCard({ group }: { group: StudyCourseGroup }) {
               {group.course_title}
             </h2>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right">
+          <div className="flex shrink-0 items-center gap-4">
+            <div className="flex min-w-[140px] flex-col items-end text-right">
               <p className="text-[11px] uppercase tracking-[0.18em] text-text-secondary">
                 Predicted Grade
               </p>
-              <div className="mt-1 flex items-center justify-end gap-2">
+              <div className="mt-1 flex items-center gap-2">
                 <span
                   className={`rounded-full px-3 py-1 text-sm font-semibold ring-1 ${grade.badgeClass}`}
                 >

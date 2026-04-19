@@ -160,7 +160,7 @@ class DashboardService:
                 ),
                 default=None,
             )
-            dots_sorted = sorted(course_assessments, key=lambda a: a.deadline)[:4]
+            dots_sorted = sorted(course_assessments, key=lambda a: a.deadline)
             deadline_dots = [
                 DeadlineDotItem(
                     assessment_id=a.id,

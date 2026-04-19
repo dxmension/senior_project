@@ -476,7 +476,7 @@ function CourseRoadmapRow({
 }) {
   const router = useRouter();
   // Local dot state for optimistic completion toggling
-  const [dots, setDots] = useState(course.deadline_dots.slice(0, 4));
+  const [dots, setDots] = useState(course.deadline_dots);
 
   function handleToggled(assessmentId: number, completed: boolean) {
     setDots((prev) =>
@@ -504,26 +504,28 @@ function CourseRoadmapRow({
       {dots.length === 0 ? (
         <p className="text-xs text-text-secondary">No deadlines</p>
       ) : (
-        <div className="flex items-center pb-4">
-          {dots.map((dot, idx) => (
-            <div key={dot.assessment_id} className="flex items-center">
-              {/* Circle + label pinned absolutely below — label never affects circle height */}
-              <div className="relative">
-                <DeadlineDot
-                  dot={dot}
-                  now={now}
-                  courseId={course.course_id}
-                  onToggled={handleToggled}
-                />
-                <span className="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap text-center text-[10px] leading-tight text-text-secondary">
-                  {dot.assessment_type.charAt(0).toUpperCase() + dot.assessment_type.slice(1)}
-                </span>
+        <div className="overflow-x-auto pb-2">
+          <div className="flex min-w-max items-center pb-4">
+            {dots.map((dot, idx) => (
+              <div key={dot.assessment_id} className="flex items-center">
+                {/* Circle + label pinned absolutely below — label never affects circle height */}
+                <div className="relative">
+                  <DeadlineDot
+                    dot={dot}
+                    now={now}
+                    courseId={course.course_id}
+                    onToggled={handleToggled}
+                  />
+                  <span className="absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap text-center text-[10px] leading-tight text-text-secondary">
+                    {dot.assessment_type.charAt(0).toUpperCase() + dot.assessment_type.slice(1)}
+                  </span>
+                </div>
+                {idx < dots.length - 1 && (
+                  <div className="mx-1 h-px w-8 shrink-0 bg-[#3a3a3a]" />
+                )}
               </div>
-              {idx < dots.length - 1 && (
-                <div className="mx-1 h-px w-8 shrink-0 bg-[#3a3a3a]" />
-              )}
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
     </li>

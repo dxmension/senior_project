@@ -310,15 +310,17 @@ async def test_list_mock_exams_returns_available_course_exams_by_type() -> None:
         id=3,
         course_id=7,
         title="Midterm 1",
+        assessment_number=1,
         assessment_type=SimpleNamespace(value="midterm"),
         deadline=datetime(2026, 4, 20, tzinfo=timezone.utc),
         course_offering=SimpleNamespace(
             course=SimpleNamespace(id=2, code="CSCI", level="151", title="Programming")
         ),
     )
-    exam = SimpleNamespace(
+    latest_exam = SimpleNamespace(
         id=4,
         course_id=2,
+        assessment_number=1,
         assessment_type=SimpleNamespace(value="midterm"),
         title="Midterm 1 Mock 2",
         version=2,
@@ -330,6 +332,24 @@ async def test_list_mock_exams_returns_available_course_exams_by_type() -> None:
             SimpleNamespace(
                 position=1,
                 question=SimpleNamespace(source=MockExamQuestionSource.HISTORIC),
+            )
+        ],
+    )
+    older_exam = SimpleNamespace(
+        id=3,
+        course_id=2,
+        assessment_number=1,
+        assessment_type=SimpleNamespace(value="midterm"),
+        title="Midterm 1 Mock 1",
+        version=1,
+        question_count=20,
+        time_limit_minutes=35,
+        created_at=datetime(2026, 4, 12, tzinfo=timezone.utc),
+        course=SimpleNamespace(id=2, code="CSCI", level="151", title="Programming"),
+        question_links=[
+            SimpleNamespace(
+                position=1,
+                question=SimpleNamespace(source=MockExamQuestionSource.AI),
             )
         ],
     )
@@ -353,7 +373,7 @@ async def test_list_mock_exams_returns_available_course_exams_by_type() -> None:
         )
     )
     service.mock_exam_repo = SimpleNamespace(
-        list_matching_active=AsyncMock(return_value=[exam]),
+        list_matching=AsyncMock(return_value=[latest_exam, older_exam]),
     )
     service.mock_exam_attempt_repo = SimpleNamespace(
         get_attempt_stats=AsyncMock(
@@ -366,6 +386,15 @@ async def test_list_mock_exams_returns_available_course_exams_by_type() -> None:
                     "predicted_score_pct": 86.7,
                     "completed_attempts": 2,
                     "has_active_attempt": True,
+                },
+                3: {
+                    "attempts_count": 1,
+                    "best_score_pct": 70.0,
+                    "average_score_pct": 70.0,
+                    "latest_score_pct": 70.0,
+                    "predicted_score_pct": 72.0,
+                    "completed_attempts": 1,
+                    "has_active_attempt": False,
                 }
             }
         ),
@@ -376,6 +405,12 @@ async def test_list_mock_exams_returns_available_course_exams_by_type() -> None:
                     score_pct=88.5,
                     started_at=datetime(2026, 4, 16, tzinfo=timezone.utc),
                     submitted_at=datetime(2026, 4, 16, tzinfo=timezone.utc),
+                ),
+                SimpleNamespace(
+                    mock_exam_id=3,
+                    score_pct=70.0,
+                    started_at=datetime(2026, 4, 12, tzinfo=timezone.utc),
+                    submitted_at=datetime(2026, 4, 12, tzinfo=timezone.utc),
                 ),
                 SimpleNamespace(
                     mock_exam_id=4,
@@ -390,16 +425,19 @@ async def test_list_mock_exams_returns_available_course_exams_by_type() -> None:
     result = await service.list_mock_exams(1)
 
     assert result[0]["course_code"] == "CSCI 151"
-    assert result[0]["predicted_score_pct"] == 86.8
-    assert result[0]["predicted_grade_letter"] == "B+"
-    assert result[0]["assessment_predictions"][0]["predicted_score_pct"] == 86.8
-    assert result[0]["assessment_predictions"][0]["predicted_grade_letter"] == "B+"
+    assert result[0]["predicted_score_pct"] == 81.2
+    assert result[0]["predicted_grade_letter"] == "B"
+    assert result[0]["assessment_predictions"][0]["predicted_score_pct"] == 81.2
+    assert result[0]["assessment_predictions"][0]["predicted_grade_letter"] == "B"
+    assert len(result[0]["exams"]) == 2
     assert result[0]["exams"][0]["id"] == 4
     assert result[0]["exams"][0]["has_active_attempt"] is True
     assert result[0]["exams"][0]["predicted_score_pct"] == 86.7
     assert result[0]["exams"][0]["predicted_grade_letter"] == "B+"
     assert result[0]["exams"][0]["title"] == "Midterm 1 Mock 2"
     assert result[0]["exams"][0]["sources"][0]["label"] == "Historic"
+    assert result[0]["exams"][1]["id"] == 3
+    assert result[0]["exams"][1]["title"] == "Midterm 1 Mock 1"
 
 
 def test_dashboard_payload_builds_best_and_trend() -> None:
