@@ -7,7 +7,6 @@ import {
   BookOpen,
   Search,
   Brain,
-  Layers,
   UserCircle,
   Settings,
   X,
@@ -20,7 +19,6 @@ const mainNav = [
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/catalog", label: "Catalog", icon: Search },
   { href: "/study", label: "Study Assistant", icon: Brain },
-  { href: "/flashcards", label: "Flashcards", icon: Layers },
 ];
 
 const bottomNav = [

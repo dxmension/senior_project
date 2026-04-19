@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Layers } from "lucide-react";
+import { ArrowLeft, GitFork, Layers } from "lucide-react";
 
+import { CourseMindmapsPanel } from "@/components/courses/course-mindmaps-panel";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
@@ -14,7 +15,7 @@ import { groupMockExamFamilies } from "@/lib/study-mock-families";
 import type { ApiResponse, EnrollmentItem, MockExamCourseGroup } from "@/types";
 
 type PageParams = Promise<{ course_id: string }>;
-type StudyTab = "mock_exams" | "flashcards";
+type StudyTab = "mock_exams" | "flashcards" | "mindmaps";
 
 function scoreTone(score: number | null) {
   if (score == null) return "text-text-secondary";
@@ -36,6 +37,7 @@ export default function StudyCoursePage({ params }: { params: PageParams }) {
   const router = useRouter();
   const courseId = Number(course_id);
   const [group, setGroup] = useState<MockExamCourseGroup | null>(null);
+  const [enrollment, setEnrollment] = useState<EnrollmentItem | null>(null);
   const [activeTab, setActiveTab] = useState<StudyTab>("mock_exams");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,15 +51,18 @@ export default function StudyCoursePage({ params }: { params: PageParams }) {
           api.get<ApiResponse<MockExamCourseGroup[]>>("/study/mock-exams"),
           api.get<ApiResponse<EnrollmentItem[]>>("/enrollments?status=in_progress"),
         ]);
+        const enrollments = enrollmentResponse.data ?? [];
         const next = findStudyGroupByRouteCourseId(
           studyResponse.data ?? [],
-          enrollmentResponse.data ?? [],
+          enrollments,
           courseId,
         );
         if (!next) {
           throw new Error("Study course not found");
         }
         setGroup(next);
+        const foundEnrollment = enrollments.find((e) => e.course_id === courseId) ?? null;
+        setEnrollment(foundEnrollment);
       } catch (err) {
         const message = err instanceof Error
           ? err.message
@@ -135,6 +140,11 @@ export default function StudyCoursePage({ params }: { params: PageParams }) {
           label="Flashcards"
           onClick={() => setActiveTab("flashcards")}
         />
+        <TabButton
+          active={activeTab === "mindmaps"}
+          label="Mindmaps"
+          onClick={() => setActiveTab("mindmaps")}
+        />
       </div>
 
       {activeTab === "mock_exams" ? (
@@ -158,7 +168,7 @@ export default function StudyCoursePage({ params }: { params: PageParams }) {
             ))}
           </div>
         )
-      ) : (
+      ) : activeTab === "flashcards" ? (
         <GlassCard className="py-14 text-center">
           <p className="text-lg font-semibold text-text-primary">
             Flashcards are coming here next
@@ -166,6 +176,12 @@ export default function StudyCoursePage({ params }: { params: PageParams }) {
           <p className="mt-2 text-sm text-text-secondary">
             This tab is a placeholder for course-specific flashcard study tools.
           </p>
+        </GlassCard>
+      ) : enrollment ? (
+        <CourseMindmapsPanel enrollment={enrollment} />
+      ) : (
+        <GlassCard className="py-14 text-center">
+          <p className="text-sm text-text-secondary">Enrollment data unavailable.</p>
         </GlassCard>
       )}
     </div>
@@ -191,7 +207,7 @@ function TabButton({
           : "border border-border-primary bg-white/[0.03] text-text-secondary hover:border-accent-green/40 hover:text-text-primary"
       }`}
     >
-      {label === "Flashcards" ? <Layers size={15} /> : null}
+      {label === "Flashcards" ? <Layers size={15} /> : label === "Mindmaps" ? <GitFork size={15} /> : null}
       {label}
     </button>
   );
