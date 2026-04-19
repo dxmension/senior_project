@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+from typing import Self
 
 from nutrack.assessments.models import AssessmentType
 
@@ -31,6 +32,13 @@ class UpdateAssessmentRequest(BaseModel):
     score: float | None = Field(default=None, ge=0.0)
     max_score: float | None = Field(default=None, ge=0.0)
     is_completed: bool | None = None
+
+    @model_validator(mode="after")
+    def score_within_max(self) -> Self:
+        if self.score is not None and self.max_score is not None:
+            if self.score > self.max_score:
+                raise ValueError("score cannot exceed max_score")
+        return self
 
 
 class AssessmentResponse(BaseModel):

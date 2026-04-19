@@ -396,7 +396,7 @@ class StudyService:
         allowed_types = self._eligible_exam_types(items)
         courses = self._current_study_courses(enrollments)
         course_ids = list(courses)
-        exams = await self.mock_exam_repo.list_matching_active(course_ids)
+        exams = await self.mock_exam_repo.list_matching(course_ids)
         available = self._available_mock_exams(exams, allowed_types)
         stats_map = await self._student_attempt_stats(user_id, available)
         prediction_map = await self._student_prediction_map(user_id, available)
