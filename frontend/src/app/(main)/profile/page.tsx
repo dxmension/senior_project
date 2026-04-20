@@ -7,23 +7,43 @@ import { Spinner } from "@/components/ui/spinner";
 import { ProfileHeader } from "@/components/profile/profile-header";
 import { StatsGrid } from "@/components/profile/stats-grid";
 import { EnrollmentHistory } from "@/components/profile/enrollment-history";
-import type { ApiResponse, UserStats, EnrollmentItem } from "@/types";
+import { AuditSection } from "@/components/profile/audit-section";
+import { DegreePlanSection } from "@/components/profile/degree-plan";
+import { GpaCalculator } from "@/components/profile/gpa-calculator";
+import type { ApiResponse, UserStats, EnrollmentItem, AuditResult, DegreePlan } from "@/types";
+
+type Tab = "audit" | "plan" | "history" | "gpa";
+
+const TAB_LABELS: Record<Tab, string> = {
+  audit: "Audit",
+  plan: "Degree Plan",
+  history: "History",
+  gpa: "GPA Calculator",
+};
 
 export default function ProfilePage() {
   const { user } = useAuthStore();
   const [stats, setStats] = useState<UserStats | null>(null);
   const [enrollments, setEnrollments] = useState<EnrollmentItem[]>([]);
+  const [audit, setAudit] = useState<AuditResult | null>(null);
+  const [plan, setPlan] = useState<DegreePlan | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<Tab>("audit");
 
   useEffect(() => {
     async function load() {
       try {
-        const [statsRes, enrollRes] = await Promise.all([
+        const [statsRes, enrollRes, auditRes, planRes] = await Promise.allSettled([
           api.get<ApiResponse<UserStats>>("/profile/stats"),
           api.get<ApiResponse<EnrollmentItem[]>>("/profile/enrollments"),
+          api.get<ApiResponse<AuditResult>>("/profile/audit"),
+          api.get<ApiResponse<DegreePlan>>("/profile/degree-plan"),
         ]);
-        setStats(statsRes.data);
-        setEnrollments(enrollRes.data);
+
+        if (statsRes.status === "fulfilled") setStats(statsRes.value.data);
+        if (enrollRes.status === "fulfilled") setEnrollments(enrollRes.value.data);
+        if (auditRes.status === "fulfilled") setAudit(auditRes.value.data);
+        if (planRes.status === "fulfilled") setPlan(planRes.value.data);
       } catch {
         // silently fail, components handle empty state
       } finally {
@@ -47,11 +67,52 @@ export default function ProfilePage() {
 
       {stats && <StatsGrid stats={stats} />}
 
+      {/* Tabs */}
       <div>
-        <h2 className="text-lg font-semibold text-text-primary mb-4">
-          Course History
-        </h2>
-        <EnrollmentHistory enrollments={enrollments} />
+        <div className="flex gap-1 border-b border-border-primary mb-6">
+          {(["audit", "plan", "history", "gpa"] as Tab[]).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                activeTab === tab
+                  ? "border-accent-green text-text-primary"
+                  : "border-transparent text-text-muted hover:text-text-secondary"
+              }`}
+            >
+              {TAB_LABELS[tab]}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === "audit" && (
+          audit
+            ? <AuditSection audit={audit} studyYear={user?.study_year} />
+            : (
+              <p className="text-sm text-text-muted text-center py-10">
+                No audit data available. Upload your transcript to get started.
+              </p>
+            )
+        )}
+
+        {activeTab === "plan" && (
+          plan
+            ? <DegreePlanSection plan={plan} />
+            : (
+              <p className="text-sm text-text-muted text-center py-10">
+                No plan available. Upload your transcript and set your major to generate a registration plan.
+              </p>
+            )
+        )}
+
+        {activeTab === "history" && (
+          <EnrollmentHistory enrollments={enrollments} />
+        )}
+
+        {activeTab === "gpa" && (
+          <GpaCalculator enrollments={enrollments} />
+        )}
       </div>
     </div>
   );

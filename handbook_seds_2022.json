@@ -1,0 +1,461 @@
+{
+  "civil and environmental engineering": {
+    "total_ects": 248,
+    "categories": [
+      {
+        "name": "University Core — Mathematics & Science",
+        "requirements": [
+          {"name": "Calculus I",  "patterns": ["MATH 161"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Calculus II", "patterns": ["MATH 162"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Physics I",   "patterns": ["PHYS 161"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Physics II",  "patterns": ["PHYS 162"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Introduction to Engineering",   "patterns": ["ENG 100"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Programming for Engineers",      "patterns": ["ENG 101"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Engineering Materials I",        "patterns": ["ENG 102"], "required_count": 1, "ects_per_course": 6}
+        ]
+      },
+      {
+        "name": "Major Core — Civil Engineering",
+        "requirements": [
+          {"name": "Differential Equations and Linear Algebra", "patterns": ["ENG 200"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Applied Probability and Statistics",         "patterns": ["ENG 201"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Numerical Methods in Engineering",           "patterns": ["ENG 202"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Technical and Professional Writing",         "patterns": ["WCS 210"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Structural Mechanics I",                     "patterns": ["CEE 200", "MAE 200"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Civil Engineering Materials",                "patterns": ["CEE 204"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Geotechnical Engineering",                   "patterns": ["CEE 205"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Managerial Economics",                       "patterns": ["ECON 120"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Structural Design — Concrete",               "patterns": ["CEE 301"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Structural Design — Steel",                  "patterns": ["CEE 302"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Geotechnical Engineering Design",            "patterns": ["CEE 303"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Fluid Mechanics I",                          "patterns": ["CEE 304"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Hydraulics and Hydrology",                   "patterns": ["CEE 305"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Transportation Engineering",                 "patterns": ["CEE 400"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Construction Technology and Management",     "patterns": ["CEE 411"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Capstone Project I",                         "patterns": ["ENG 400"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Capstone Project II",                        "patterns": ["ENG 400"], "required_count": 1, "ects_per_course": 6, "note": "Second Capstone semester"}
+        ]
+      },
+      {
+        "name": "University Core",
+        "requirements": [
+          {"name": "History of Kazakhstan",   "patterns": ["HST 100"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Writing in Context I",     "patterns": ["WCS 150"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Kazakh Language",          "patterns": ["KAZ"], "required_count": 2, "ects_per_course": 6, "note": "2 Kazakh Language courses"},
+          {"name": "Business Essentials",      "patterns": ["BUS 101"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Ethics",                   "patterns": ["PHIL 200", "PHIL 210", "PHIL 211", "PHIL 213"], "required_count": 1, "ects_per_course": 6}
+        ]
+      },
+      {
+        "name": "CEE Electives",
+        "requirements": [
+          {
+            "name": "CEE Technical Electives",
+            "patterns": ["CEE 3", "CEE 4"],
+            "required_count": 6,
+            "ects_per_course": 6,
+            "is_elective": true,
+            "note": "6 CEE elective courses (300–400 level): Structural, Geotechnical, Environmental, Construction, Water Resources, or Transportation tracks"
+          },
+          {
+            "name": "Natural Science Elective",
+            "patterns": ["BIO", "BIOL", "CHEM", "PHYS", "ENV", "ENVS", "GEOL"],
+            "required_count": 1,
+            "ects_per_course": 6,
+            "is_elective": true,
+            "note": "1 Natural Science elective"
+          }
+        ]
+      }
+    ]
+  },
+
+  "chemical and materials engineering": {
+    "total_ects": 248,
+    "categories": [
+      {
+        "name": "University Core — Mathematics & Science",
+        "requirements": [
+          {"name": "Calculus I",  "patterns": ["MATH 161"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Calculus II", "patterns": ["MATH 162"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Physics I",   "patterns": ["PHYS 161"], "required_count": 1, "ects_per_course": 9},
+          {"name": "Introduction to Engineering", "patterns": ["ENG 100"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Programming for Engineers",   "patterns": ["ENG 101"], "required_count": 1, "ects_per_course": 6}
+        ]
+      },
+      {
+        "name": "Major Core — Chemical and Materials Engineering",
+        "requirements": [
+          {"name": "Basic Principles and Calculations in ChE", "patterns": ["CHME 200"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Differential Equations and Linear Algebra",  "patterns": ["ENG 200"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Inorganic and Analytical Chemistry",         "patterns": ["CHME 222"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Chemical Engineering Thermodynamics",        "patterns": ["CHME 205"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Technical and Professional Writing",         "patterns": ["WCS 210", "WCS 2"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Applied Probability and Statistics",         "patterns": ["ENG 201", "CHME 201"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Numerical Methods in Engineering",           "patterns": ["ENG 202"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Fluid Mechanics",                            "patterns": ["CHME 202"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Organic and Polymer Chemistry",              "patterns": ["CHME 203"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Heat and Mass Transfer",                     "patterns": ["CHME 300"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Applied Mathematics for Process Design",     "patterns": ["CHME 301"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Separation Processes",                       "patterns": ["CHME 302"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Instrumental Methods of Analysis",           "patterns": ["CHME 303"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Chemical Reaction Engineering",              "patterns": ["CHME 304"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Chemical Engineering Lab I",                 "patterns": ["CHME 305"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Research Practice",                          "patterns": ["CHME 312"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Managerial Economics",                       "patterns": ["ECON 120"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Process Design and Simulation",              "patterns": ["CHME 400"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Materials Chemistry",                        "patterns": ["CHME 401"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Process Control and Safety",                 "patterns": ["CHME 402"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Chemical Engineering Lab II",                "patterns": ["CHME 403"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Capstone Project I",                         "patterns": ["ENG 400"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Capstone Project II",                        "patterns": ["ENG 400"], "required_count": 1, "ects_per_course": 6, "note": "Second Capstone semester"}
+        ]
+      },
+      {
+        "name": "University Core",
+        "requirements": [
+          {"name": "History of Kazakhstan", "patterns": ["HST 100"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Writing in Context I",  "patterns": ["WCS 150"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Kazakh Language",       "patterns": ["KAZ"], "required_count": 2, "ects_per_course": 6, "note": "2 Kazakh Language courses"},
+          {"name": "Business Essentials",   "patterns": ["BUS 101"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Ethics",                "patterns": ["PHIL 200", "PHIL 210", "PHIL 211", "PHIL 213"], "required_count": 1, "ects_per_course": 6}
+        ]
+      },
+      {
+        "name": "CHME Electives",
+        "requirements": [
+          {
+            "name": "CHME Technical Electives",
+            "patterns": ["CHME 3", "CHME 4"],
+            "required_count": 4,
+            "ects_per_course": 6,
+            "is_elective": true,
+            "note": "4 elective courses (14 ECTS); choose from Chemical Engineering or Materials Engineering tracks (D = Depth, B = Breadth)"
+          }
+        ]
+      }
+    ]
+  },
+
+  "electrical and computer engineering": {
+    "total_ects": 248,
+    "categories": [
+      {
+        "name": "University Core — Mathematics & Science",
+        "requirements": [
+          {"name": "Calculus I",  "patterns": ["MATH 161"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Calculus II", "patterns": ["MATH 162"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Physics I",   "patterns": ["PHYS 161"], "required_count": 1, "ects_per_course": 9},
+          {"name": "Physics II",  "patterns": ["PHYS 162"], "required_count": 1, "ects_per_course": 9},
+          {"name": "Introduction to Engineering", "patterns": ["ENG 100"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Programming for Engineers",   "patterns": ["ENG 101"], "required_count": 1, "ects_per_course": 6}
+        ]
+      },
+      {
+        "name": "Major Core — Electrical and Computer Engineering",
+        "requirements": [
+          {"name": "Differential Equations and Linear Algebra", "patterns": ["ENG 300", "MATH 300"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Discrete Mathematics",                       "patterns": ["MATH 351", "ELCE 251"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Circuit Theory I",                           "patterns": ["ELCE 200"], "required_count": 1, "ects_per_course": 4},
+          {"name": "Signals and Systems",                        "patterns": ["ELCE 213"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Circuit Theory II",                          "patterns": ["ELCE 201"], "required_count": 1, "ects_per_course": 4},
+          {"name": "Digital Logic Design",                       "patterns": ["ELCE 202"], "required_count": 1, "ects_per_course": 4},
+          {"name": "Digital Logic Design Lab",                   "patterns": ["ELCE 202L"], "required_count": 1, "ects_per_course": 2},
+          {"name": "Technical and Professional Writing",         "patterns": ["WCS 210", "WCS 2"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Electronic Circuits",                        "patterns": ["ELCE 301"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Microprocessor Systems",                     "patterns": ["ELCE 300"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Solid State Devices / Computer Networks",   "patterns": ["ELCE 302", "ELCE 303"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Linear Control Theory or Digital Signal Processing", "patterns": ["ELCE 346", "ELCE 303"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Instrumentation and Measurement",           "patterns": ["ELCE 310"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Capstone Project I",                         "patterns": ["ENG 400"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Capstone Project II",                        "patterns": ["ENG 400"], "required_count": 1, "ects_per_course": 6, "note": "Second Capstone semester"}
+        ]
+      },
+      {
+        "name": "University Core",
+        "requirements": [
+          {"name": "History of Kazakhstan", "patterns": ["HST 100"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Writing in Context I",  "patterns": ["WCS 150"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Kazakh Language",       "patterns": ["KAZ"], "required_count": 2, "ects_per_course": 6, "note": "2 Kazakh Language courses"},
+          {"name": "Business Essentials",   "patterns": ["BUS 101"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Ethics",                "patterns": ["PHIL 200", "PHIL 210", "PHIL 211", "PHIL 213"], "required_count": 1, "ects_per_course": 6}
+        ]
+      },
+      {
+        "name": "ELCE Electives",
+        "requirements": [
+          {
+            "name": "ELCE Technical Electives",
+            "patterns": ["ELCE 3", "ELCE 4"],
+            "required_count": 5,
+            "ects_per_course": 6,
+            "is_elective": true,
+            "note": "5 technical electives from Devices & Circuits, Power Engineering & Control Systems, Signal Processing & Communications, or Computer Engineering tracks"
+          },
+          {
+            "name": "Social Science Elective",
+            "patterns": ["SOC", "ANT", "PSY", "ECON", "ECO", "PLS", "HST"],
+            "required_count": 1,
+            "ects_per_course": 6,
+            "is_elective": true,
+            "note": "1 Social Science elective"
+          },
+          {
+            "name": "Natural Science Elective",
+            "patterns": ["BIO", "BIOL", "CHEM", "PHYS", "ENV", "ENVS", "GEOL"],
+            "required_count": 1,
+            "ects_per_course": 6,
+            "is_elective": true,
+            "note": "1 Natural Science elective"
+          }
+        ]
+      }
+    ]
+  },
+
+  "mechanical and aerospace engineering": {
+    "total_ects": 248,
+    "categories": [
+      {
+        "name": "University Core — Mathematics & Science",
+        "requirements": [
+          {"name": "Calculus I",  "patterns": ["MATH 161"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Calculus II", "patterns": ["MATH 162"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Physics I",   "patterns": ["PHYS 161"], "required_count": 1, "ects_per_course": 9},
+          {"name": "Physics II",  "patterns": ["PHYS 162"], "required_count": 1, "ects_per_course": 9},
+          {"name": "Introduction to Engineering", "patterns": ["ENG 100"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Programming for Engineers",   "patterns": ["ENG 101"], "required_count": 1, "ects_per_course": 6}
+        ]
+      },
+      {
+        "name": "Major Core — Mechanical and Aerospace Engineering",
+        "requirements": [
+          {"name": "Differential Equations and Linear Algebra", "patterns": ["ENG 200"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Applied Probability and Statistics",         "patterns": ["ENG 201"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Numerical Methods in Engineering",           "patterns": ["ENG 202"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Technical and Professional Writing",         "patterns": ["WCS 210", "WCS 2"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Environmental Chemistry",                    "patterns": ["CEE 201"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Structural Mechanics I",                     "patterns": ["MAE 201"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Materials and Manufacturing I",              "patterns": ["MAE 206"], "required_count": 1, "ects_per_course": 3},
+          {"name": "Engineering Dynamics I",                     "patterns": ["MAE 208"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Materials and Manufacturing II",             "patterns": ["MAE 207"], "required_count": 1, "ects_per_course": 3},
+          {"name": "Computer Aided Design",                      "patterns": ["MAE 203"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Engineering Dynamics II",                    "patterns": ["MAE 209"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Fluid Mechanics I",                          "patterns": ["MAE 300"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Fluid Mechanics II",                         "patterns": ["MAE 301"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Engineering Thermodynamics",                 "patterns": ["MAE 302"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Engineering Dynamics II (Advanced)",         "patterns": ["MAE 303"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Machine Elements Design",                    "patterns": ["MAE 305"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Control Systems",                            "patterns": ["MAE 307"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Computer Aided Engineering",                 "patterns": ["MAE 306"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Managerial Economics",                       "patterns": ["ECON 120"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Heat Transfer",                              "patterns": ["MAE 400"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Mechanical Systems Design",                  "patterns": ["MAE 410"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Capstone Project I",                         "patterns": ["ENG 400"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Capstone Project II",                        "patterns": ["ENG 400"], "required_count": 1, "ects_per_course": 6, "note": "Second Capstone semester"}
+        ]
+      },
+      {
+        "name": "University Core",
+        "requirements": [
+          {"name": "History of Kazakhstan", "patterns": ["HST 100"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Writing in Context I",  "patterns": ["WCS 150"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Kazakh Language",       "patterns": ["KAZ"], "required_count": 2, "ects_per_course": 6, "note": "2 Kazakh Language courses"},
+          {"name": "Business Essentials",   "patterns": ["BUS 101"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Ethics",                "patterns": ["PHIL 200", "PHIL 210", "PHIL 211", "PHIL 213"], "required_count": 1, "ects_per_course": 6}
+        ]
+      },
+      {
+        "name": "MAE Electives",
+        "requirements": [
+          {
+            "name": "MAE Technical Electives",
+            "patterns": ["MAE 3", "MAE 4"],
+            "required_count": 6,
+            "ects_per_course": 6,
+            "is_elective": true,
+            "note": "6 MAE electives from Materials & Manufacturing, Aerospace Engineering, Thermofluids & Energy, or Systems Dynamics & Control tracks"
+          },
+          {
+            "name": "Natural Science Elective",
+            "patterns": ["BIO", "BIOL", "CHEM", "PHYS", "ENV", "ENVS", "GEOL"],
+            "required_count": 1,
+            "ects_per_course": 6,
+            "is_elective": true,
+            "note": "1 Natural Science elective"
+          }
+        ]
+      }
+    ]
+  },
+
+  "computer science": {
+    "total_ects": 240,
+    "categories": [
+      {
+        "name": "University Core — Mathematics & Science",
+        "requirements": [
+          {"name": "Calculus I",          "patterns": ["MATH 161"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Calculus II",         "patterns": ["MATH 162"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Physics I",           "patterns": ["PHYS 161"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Physics II",          "patterns": ["PHYS 162"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Linear Algebra with Applications", "patterns": ["MATH 273"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Discrete Mathematics",             "patterns": ["MATH 251"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Probability",                      "patterns": ["MATH 321"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Microcontrollers with Lab",        "patterns": ["ROBT 206"], "required_count": 1, "ects_per_course": 8}
+        ]
+      },
+      {
+        "name": "Major Core — Computer Science",
+        "requirements": [
+          {"name": "Programming for Scientists and Engineers I", "patterns": ["CSCI 151"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Performance and Data Structures",            "patterns": ["CSCI 152"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Computer Systems and Organization",          "patterns": ["CSCI 231"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Programming Languages",                      "patterns": ["CSCI 235"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Formal Languages",                           "patterns": ["CSCI 272"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Algorithms",                                 "patterns": ["CSCI 270"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Research Methods",                           "patterns": ["CSCI 307"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Operating Systems",                          "patterns": ["CSCI 332"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Computer Networks",                          "patterns": ["CSCI 333"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Database Systems",                           "patterns": ["CSCI 341"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Software Engineering",                       "patterns": ["CSCI 361"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Artificial Intelligence",                    "patterns": ["CSCI 390"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Senior Project I",                           "patterns": ["CSCI 408"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Senior Project II",                          "patterns": ["CSCI 409"], "required_count": 1, "ects_per_course": 6}
+        ]
+      },
+      {
+        "name": "University Core",
+        "requirements": [
+          {"name": "History of Kazakhstan", "patterns": ["HST 100"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Writing in Context I",  "patterns": ["WCS 150"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Writing in Context I",  "patterns": ["WCS 2"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Kazakh Language",       "patterns": ["KAZ"], "required_count": 2, "ects_per_course": 6, "note": "2 Kazakh Language courses"},
+          {"name": "Business Essentials",   "patterns": ["BUS 101"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Ethics",                "patterns": ["PHIL 210"], "required_count": 1, "ects_per_course": 6}
+        ]
+      },
+      {
+        "name": "CS Electives",
+        "requirements": [
+          {
+            "name": "Technical Electives",
+            "patterns": [
+              "CSCI 2", "CSCI 3", "CSCI 4",
+              "MATH 351", "MATH 407", "MATH 417",
+              "PHYS 270", "ROBT 310", "ROBT 407"
+            ],
+            "required_count": 4,
+            "ects_per_course": 6,
+            "is_elective": true,
+            "note": "4 technical electives: any non-required CSCI 200+ course, or MATH 351/407/417, PHYS 270, ROBT 310/407"
+          },
+          {
+            "name": "Natural Science Electives",
+            "patterns": ["BIO", "BIOL", "CHEM", "PHYS", "ENV", "ENVS", "GEOL"],
+            "required_count": 2,
+            "ects_per_course": 6,
+            "is_elective": true,
+            "note": "2 Natural Science electives (beyond required PHYS 161/162)"
+          },
+          {
+            "name": "Social Science Elective",
+            "patterns": ["SOC", "ANT", "PSY", "ECON", "ECO", "PLS", "HST"],
+            "required_count": 1,
+            "ects_per_course": 6,
+            "is_elective": true,
+            "note": "1 Social Science elective"
+          },
+          {
+            "name": "Open Elective",
+            "patterns": ["*"],
+            "required_count": 1,
+            "ects_per_course": 6,
+            "is_elective": true,
+            "note": "1 Open Elective (any department)"
+          }
+        ]
+      }
+    ]
+  },
+
+  "robotics engineering": {
+    "total_ects": 246,
+    "categories": [
+      {
+        "name": "University Core — Mathematics & Science",
+        "requirements": [
+          {"name": "Calculus I",  "patterns": ["MATH 161"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Calculus II", "patterns": ["MATH 162"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Physics I",   "patterns": ["PHYS 161"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Physics II",  "patterns": ["PHYS 162"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Linear Algebra with Applications",   "patterns": ["MATH 273"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Introduction to Differential Equations", "patterns": ["MATH 274"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Probability",                           "patterns": ["MATH 321"], "required_count": 1, "ects_per_course": 8}
+        ]
+      },
+      {
+        "name": "Major Core — Robotics Engineering",
+        "requirements": [
+          {"name": "Programming for Scientists and Engineers I", "patterns": ["CSCI 151", "CSCI 110"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Performance and Data Structures",            "patterns": ["CSCI 152"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Technical and Professional Writing",         "patterns": ["WCS 210", "WCS 2"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Mechanics",                                  "patterns": ["ROBT 201"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Electrical and Electronic Circuits I with Lab", "patterns": ["ROBT 203"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Signals and Sensing with Laboratory",        "patterns": ["ROBT 205"], "required_count": 1, "ects_per_course": 8},
+          {"name": "System Dynamics and Modeling",               "patterns": ["ROBT 211"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Electrical and Electronic Circuits II with Lab", "patterns": ["ROBT 204"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Microcontrollers with Lab",                  "patterns": ["ROBT 106", "ROBT 206"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Mechanical Design with CAD and Machining",   "patterns": ["ROBT 301"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Robotics I: Kinematics and Dynamics",        "patterns": ["ROBT 332"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Linear Control Theory with Lab",             "patterns": ["ROBT 321"], "required_count": 1, "ects_per_course": 8},
+          {"name": "Electromechanical Systems with Lab",         "patterns": ["ROBT 304"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Research Methods",                           "patterns": ["ROBT 391"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Robotics II: Control, Modeling and Learning","patterns": ["ROBT 423"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Robotic/Mechatronic System Design",          "patterns": ["ROBT 400"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Capstone Project I",                         "patterns": ["ROBT 420"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Graduation Capstone Project II",             "patterns": ["ROBT 421"], "required_count": 1, "ects_per_course": 6}
+        ]
+      },
+      {
+        "name": "University Core",
+        "requirements": [
+          {"name": "History of Kazakhstan", "patterns": ["HST 100"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Writing in Context I",  "patterns": ["WCS 150"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Kazakh Language",       "patterns": ["KAZ"], "required_count": 2, "ects_per_course": 6, "note": "2 Kazakh Language courses"},
+          {"name": "Business Essentials",   "patterns": ["BUS 101"], "required_count": 1, "ects_per_course": 6},
+          {"name": "Ethics",                "patterns": ["PHIL 201", "PHIL 210", "PHIL 211", "PHIL 213"], "required_count": 1, "ects_per_course": 6}
+        ]
+      },
+      {
+        "name": "ROBT Electives",
+        "requirements": [
+          {
+            "name": "Technical Electives",
+            "patterns": ["ROBT 3", "ROBT 4", "ELCE 3", "ELCE 4", "MAE 3", "MAE 4", "CSCI 3", "CSCI 4"],
+            "required_count": 2,
+            "ects_per_course": 6,
+            "is_elective": true,
+            "note": "Technical Electives (see Robotics Engineering Elective Courses list)"
+          },
+          {
+            "name": "Natural Science Electives",
+            "patterns": ["BIO", "BIOL", "CHEM", "PHYS", "ENV", "ENVS", "GEOL"],
+            "required_count": 2,
+            "ects_per_course": 6,
+            "is_elective": true,
+            "note": "2 Natural Science electives (any Physics/Chemistry/Biology/Geology 100-level+ not for non-science majors)"
+          },
+          {
+            "name": "Social Science Elective",
+            "patterns": ["SOC", "ANT", "PSY", "ECON", "ECO", "PLS", "HST"],
+            "required_count": 1,
+            "ects_per_course": 6,
+            "is_elective": true,
+            "note": "1 Social Science elective"
+          }
+        ]
+      }
+    ]
+  }
+}

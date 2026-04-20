@@ -19,6 +19,14 @@ class WeeklyWorkloadItem(BaseModel):
     assessments: list[WorkloadAssessmentItem]
 
 
+class DeadlineDotItem(BaseModel):
+    assessment_id: int
+    title: str
+    assessment_type: str
+    deadline: datetime
+    is_completed: bool
+
+
 class CourseProgressItem(BaseModel):
     course_id: int
     course_code: str
@@ -30,6 +38,7 @@ class CourseProgressItem(BaseModel):
     completed_assessments: int
     progress_pct: float
     upcoming_deadline: datetime | None
+    deadline_dots: list[DeadlineDotItem]
 
 
 class UpcomingDeadlineItem(BaseModel):
@@ -55,10 +64,3 @@ class DashboardResponse(BaseModel):
     course_progress: list[CourseProgressItem]
     upcoming_deadlines: list[UpcomingDeadlineItem]
     weekly_workload: list[WeeklyWorkloadItem]
-
-
-class AISummaryResponse(BaseModel):
-    summary: str
-    recommendations: list[str]
-    motivation: str
-    generated_at: datetime

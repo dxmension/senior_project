@@ -13,15 +13,30 @@ from nutrack.admin.schemas import (
 )
 from nutrack.admin.service import AdminService
 from nutrack.auth.dependencies import get_current_admin_user
-from nutrack.study.dependencies import get_study_service
-from nutrack.study.models import MaterialCurationStatus, MaterialUploadStatus
-from nutrack.study.schemas import (
+from nutrack.course_materials.dependencies import get_course_material_service
+from nutrack.course_materials.models import MaterialCurationStatus, MaterialUploadStatus
+from nutrack.course_materials.schemas import (
     AdminMaterialUploadResponse,
     MaterialUploadResponse,
     PublishMaterialRequest,
     SharedMaterialResponse,
 )
-from nutrack.study.service import StudyService
+from nutrack.course_materials.service import CourseMaterialService
+from nutrack.mock_exams.dependencies import get_mock_exam_service
+from nutrack.mock_exams.schemas import (
+    AdminCourseOfferingResponse,
+    AdminMockExamListItem,
+    CreateMockExamQuestionRequest,
+    CreateMockExamRequest,
+    MockExamGenerationJobResponse,
+    MockExamGenerationSettingsResponse,
+    MockExamAdminDetailResponse,
+    MockExamQuestionAdminResponse,
+    UpdateMockExamGenerationSettingsRequest,
+    UpdateMockExamQuestionRequest,
+    UpdateMockExamRequest,
+)
+from nutrack.mock_exams.service import MockExamService
 from nutrack.utils import ApiResponse
 from nutrack.users.models import User
 
@@ -155,7 +170,20 @@ async def update_course(
 
 
 @router.get(
-    "/materials/uploads",
+    "/courses/{course_id}/offerings",
+    response_model=ApiResponse[list[AdminCourseOfferingResponse]],
+)
+async def list_course_offerings(
+    course_id: int,
+    _: User = Depends(get_current_admin_user),
+    service: AdminService = Depends(get_admin_service),
+):
+    offerings = await service.list_course_offerings(course_id)
+    return ApiResponse(data=offerings)
+
+
+@router.get(
+    "/course-materials/uploads",
     response_model=ApiResponse[list[AdminMaterialUploadResponse]],
 )
 async def list_material_uploads(
@@ -164,7 +192,7 @@ async def list_material_uploads(
     upload_status: MaterialUploadStatus | None = Query(default=None),
     curation_status: MaterialCurationStatus | None = Query(default=None),
     _: User = Depends(get_current_admin_user),
-    service: StudyService = Depends(get_study_service),
+    service: CourseMaterialService = Depends(get_course_material_service),
 ):
     uploads = await service.list_admin_uploads(
         course_id=course_id,
@@ -176,14 +204,14 @@ async def list_material_uploads(
 
 
 @router.post(
-    "/materials/uploads/{upload_id}/publish",
+    "/course-materials/uploads/{upload_id}/publish",
     response_model=ApiResponse[SharedMaterialResponse],
 )
 async def publish_material_upload(
     upload_id: int,
     body: PublishMaterialRequest,
     admin: User = Depends(get_current_admin_user),
-    service: StudyService = Depends(get_study_service),
+    service: CourseMaterialService = Depends(get_course_material_service),
 ):
     entry = await service.publish_upload(
         admin.id,
@@ -194,34 +222,208 @@ async def publish_material_upload(
     return ApiResponse(data=entry)
 
 
-@router.post("/materials/uploads/{upload_id}/reject", response_model=ApiResponse)
+@router.post("/course-materials/uploads/{upload_id}/reject", response_model=ApiResponse)
 async def reject_material_upload(
     upload_id: int,
     _: User = Depends(get_current_admin_user),
-    service: StudyService = Depends(get_study_service),
+    service: CourseMaterialService = Depends(get_course_material_service),
 ):
     result = await service.reject_upload(upload_id)
     return ApiResponse(data=result)
 
 
 @router.post(
-    "/materials/uploads/{upload_id}/unpublish",
+    "/course-materials/uploads/{upload_id}/unpublish",
     response_model=ApiResponse[MaterialUploadResponse],
 )
 async def unpublish_material_upload(
     upload_id: int,
     _: User = Depends(get_current_admin_user),
-    service: StudyService = Depends(get_study_service),
+    service: CourseMaterialService = Depends(get_course_material_service),
 ):
     upload = await service.unpublish_upload(upload_id)
     return ApiResponse(data=upload)
 
 
-@router.delete("/materials/uploads/{upload_id}", response_model=ApiResponse)
+@router.delete("/course-materials/uploads/{upload_id}", response_model=ApiResponse)
 async def delete_material_upload(
     upload_id: int,
     _: User = Depends(get_current_admin_user),
-    service: StudyService = Depends(get_study_service),
+    service: CourseMaterialService = Depends(get_course_material_service),
 ):
     result = await service.delete_upload(upload_id)
+    return ApiResponse(data=result)
+
+
+@router.get(
+    "/mock-exams",
+    response_model=ApiResponse[list[AdminMockExamListItem]],
+)
+async def list_admin_mock_exams(
+    course_id: int = Query(..., ge=1),
+    _: User = Depends(get_current_admin_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    exams = await service.list_admin_mock_exams(course_id)
+    return ApiResponse(data=exams)
+
+
+@router.get(
+    "/mock-exams/ai-settings",
+    response_model=ApiResponse[MockExamGenerationSettingsResponse],
+)
+async def get_mock_exam_generation_settings(
+    _: User = Depends(get_current_admin_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    settings_payload = await service.get_generation_settings()
+    return ApiResponse(data=settings_payload)
+
+
+@router.put(
+    "/mock-exams/ai-settings",
+    response_model=ApiResponse[MockExamGenerationSettingsResponse],
+)
+async def update_mock_exam_generation_settings(
+    body: UpdateMockExamGenerationSettingsRequest,
+    _: User = Depends(get_current_admin_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    settings_payload = await service.update_generation_settings(body)
+    return ApiResponse(data=settings_payload)
+
+
+@router.get(
+    "/mock-exams/generation-jobs",
+    response_model=ApiResponse[list[MockExamGenerationJobResponse]],
+)
+async def list_mock_exam_generation_jobs(
+    limit: int = Query(default=50, ge=1, le=200),
+    _: User = Depends(get_current_admin_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    jobs = await service.list_generation_jobs(limit)
+    return ApiResponse(data=jobs)
+
+
+@router.post(
+    "/mock-exams/generation-jobs/{job_id}/retry",
+    response_model=ApiResponse[MockExamGenerationJobResponse],
+)
+async def retry_mock_exam_generation_job(
+    job_id: int,
+    _: User = Depends(get_current_admin_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    job = await service.retry_generation_job(job_id)
+    return ApiResponse(data=job)
+
+
+@router.get(
+    "/mock-exams/{mock_exam_id}",
+    response_model=ApiResponse[MockExamAdminDetailResponse],
+)
+async def get_admin_mock_exam_detail(
+    mock_exam_id: int,
+    _: User = Depends(get_current_admin_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    exam = await service.get_admin_mock_exam_detail(mock_exam_id)
+    return ApiResponse(data=exam)
+
+
+@router.post(
+    "/mock-exams",
+    response_model=ApiResponse[MockExamAdminDetailResponse],
+)
+async def create_admin_mock_exam(
+    body: CreateMockExamRequest,
+    admin: User = Depends(get_current_admin_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    exam = await service.create_mock_exam(admin.id, body)
+    return ApiResponse(data=exam)
+
+
+@router.patch(
+    "/mock-exams/{mock_exam_id}",
+    response_model=ApiResponse[MockExamAdminDetailResponse],
+)
+async def update_admin_mock_exam(
+    mock_exam_id: int,
+    body: UpdateMockExamRequest,
+    admin: User = Depends(get_current_admin_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    exam = await service.update_mock_exam(admin.id, mock_exam_id, body)
+    return ApiResponse(data=exam)
+
+
+@router.post("/mock-exams/{mock_exam_id}/deactivate", response_model=ApiResponse)
+async def deactivate_admin_mock_exam(
+    mock_exam_id: int,
+    _: User = Depends(get_current_admin_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    result = await service.deactivate_mock_exam(mock_exam_id)
+    return ApiResponse(data=result)
+
+
+@router.delete("/mock-exams/{mock_exam_id}", response_model=ApiResponse)
+async def delete_admin_mock_exam(
+    mock_exam_id: int,
+    _: User = Depends(get_current_admin_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    result = await service.delete_mock_exam(mock_exam_id)
+    return ApiResponse(data=result)
+
+
+@router.get(
+    "/mock-exam-questions",
+    response_model=ApiResponse[list[MockExamQuestionAdminResponse]],
+)
+async def list_admin_mock_exam_questions(
+    course_id: int = Query(..., ge=1),
+    _: User = Depends(get_current_admin_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    questions = await service.list_admin_mock_exam_questions(course_id)
+    return ApiResponse(data=questions)
+
+
+@router.post(
+    "/mock-exam-questions",
+    response_model=ApiResponse[MockExamQuestionAdminResponse],
+)
+async def create_admin_mock_exam_question(
+    body: CreateMockExamQuestionRequest,
+    admin: User = Depends(get_current_admin_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    question = await service.create_mock_exam_question(admin.id, body)
+    return ApiResponse(data=question)
+
+
+@router.patch(
+    "/mock-exam-questions/{question_id}",
+    response_model=ApiResponse[MockExamQuestionAdminResponse],
+)
+async def update_admin_mock_exam_question(
+    question_id: int,
+    body: UpdateMockExamQuestionRequest,
+    _: User = Depends(get_current_admin_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    question = await service.update_mock_exam_question(question_id, body)
+    return ApiResponse(data=question)
+
+
+@router.delete("/mock-exam-questions/{question_id}", response_model=ApiResponse)
+async def delete_admin_mock_exam_question(
+    question_id: int,
+    _: User = Depends(get_current_admin_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    result = await service.delete_mock_exam_question(question_id)
     return ApiResponse(data=result)

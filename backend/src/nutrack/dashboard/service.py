@@ -1,5 +1,4 @@
 import asyncio
-import json
 from datetime import datetime, timedelta, timezone
 from math import floor
 
@@ -8,11 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from nutrack.assessments.models import Assessment
+from nutrack.assessments.utils import assessment_label
 from nutrack.courses.models import Course, CourseOffering
-from nutrack.dashboard.exceptions import AISummaryUnavailableError
 from nutrack.dashboard.schemas import (
-    AISummaryResponse,
     CourseProgressItem,
+    DeadlineDotItem,
     DashboardResponse,
     UpcomingDeadlineItem,
     WeeklyWorkloadItem,
@@ -25,6 +24,13 @@ from nutrack.users.models import User
 def _course_code(course: Course) -> str:
     level = (course.level or "").strip()
     return f"{course.code} {level}" if level and level != "0" else course.code
+
+
+def _assessment_title(assessment: Assessment) -> str:
+    return assessment_label(
+        assessment.assessment_type,
+        assessment.assessment_number,
+    )
 
 
 def _compute_gpa(
@@ -95,10 +101,8 @@ class DashboardService:
         today = now.date()
 
         # GPA
+        current_gpa = user.cgpa if user else None
         gpa_statuses = {EnrollmentStatus.PASSED, EnrollmentStatus.IN_PROGRESS}
-        current_gpa = _compute_gpa(enrollments, gpa_statuses)
-        if current_gpa is None and user and user.cgpa is not None:
-            current_gpa = user.cgpa
         semester_gpa = _compute_gpa(
             enrollments, gpa_statuses, current_term, current_year
         )
@@ -153,6 +157,17 @@ class DashboardService:
                 ),
                 default=None,
             )
+            dots_sorted = sorted(course_assessments, key=lambda a: a.deadline)
+            deadline_dots = [
+                DeadlineDotItem(
+                    assessment_id=a.id,
+                    title=_assessment_title(a),
+                    assessment_type=a.assessment_type.value,
+                    deadline=a.deadline,
+                    is_completed=a.is_completed,
+                )
+                for a in dots_sorted
+            ]
             course_progress.append(
                 CourseProgressItem(
                     course_id=e.course_id,
@@ -165,6 +180,7 @@ class DashboardService:
                     completed_assessments=completed,
                     progress_pct=round(progress_pct, 1),
                     upcoming_deadline=upcoming_dl,
+                    deadline_dots=deadline_dots,
                 )
             )
 
@@ -176,7 +192,7 @@ class DashboardService:
         upcoming_deadlines = [
             UpcomingDeadlineItem(
                 assessment_id=a.id,
-                title=a.title,
+                title=_assessment_title(a),
                 assessment_type=a.assessment_type.value,
                 deadline=a.deadline,
                 course_code=_course_code(a.course_offering.course),
@@ -213,7 +229,7 @@ class DashboardService:
                     assessments=[
                         WorkloadAssessmentItem(
                             assessment_id=a.id,
-                            title=a.title,
+                            title=_assessment_title(a),
                             assessment_type=a.assessment_type.value,
                             deadline=a.deadline,
                             course_code=_course_code(a.course_offering.course),
@@ -236,134 +252,4 @@ class DashboardService:
             course_progress=course_progress,
             upcoming_deadlines=upcoming_deadlines,
             weekly_workload=weekly_workload,
-        )
-
-    async def get_ai_summary(
-        self, user_id: int, current_term: str, current_year: int
-    ) -> AISummaryResponse:
-        from nutrack.config import settings
-
-        if not settings.OPENAI_API_KEY:
-            raise AISummaryUnavailableError("No API key configured")
-
-        enrollments, assessments, user = await asyncio.gather(
-            self._fetch_enrollments(user_id),
-            self._fetch_assessments(user_id),
-            self._fetch_user(user_id),
-        )
-
-        now = datetime.now(tz=timezone.utc)
-        gpa_statuses = {EnrollmentStatus.PASSED, EnrollmentStatus.IN_PROGRESS}
-        current_gpa = _compute_gpa(enrollments, gpa_statuses)
-        if current_gpa is None and user and user.cgpa is not None:
-            current_gpa = user.cgpa
-
-        active_enrollments = [
-            e
-            for e in enrollments
-            if e.status == EnrollmentStatus.IN_PROGRESS
-            and e.term == current_term
-            and e.year == current_year
-        ]
-
-        assessment_by_course: dict[int, list[Assessment]] = {}
-        for a in assessments:
-            assessment_by_course.setdefault(a.course_id, []).append(a)
-
-        active_courses_ctx = [
-            {
-                "code": _course_code(e.course_offering.course),
-                "title": e.course_offering.course.title,
-                "progress_pct": round(
-                    (
-                        sum(
-                            1
-                            for a in assessment_by_course.get(e.course_id, [])
-                            if a.is_completed
-                        )
-                        / len(assessment_by_course[e.course_id])
-                        * 100
-                    )
-                    if assessment_by_course.get(e.course_id)
-                    else 0.0,
-                    1,
-                ),
-                "ects": e.course_offering.course.ects,
-            }
-            for e in active_enrollments
-        ]
-
-        pending = sorted(
-            (a for a in assessments if not a.is_completed and a.deadline >= now),
-            key=lambda a: a.deadline,
-        )[:5]
-        upcoming_ctx = [
-            {
-                "title": a.title,
-                "type": a.assessment_type.value,
-                "course": _course_code(a.course_offering.course),
-                "deadline": a.deadline.isoformat(),
-                "days_until": max(
-                    0, floor((a.deadline - now).total_seconds() / 86400)
-                ),
-            }
-            for a in pending
-        ]
-
-        overdue_count = sum(
-            1 for a in assessments if not a.is_completed and a.deadline < now
-        )
-        active_course_ids = {e.course_id for e in active_enrollments}
-        completed_this_term = sum(
-            1 for a in assessments if a.is_completed and a.course_id in active_course_ids
-        )
-
-        system_prompt = (
-            "You are an academic advisor assistant for a university student.\n"
-            "Given a snapshot of the student's academic performance, generate a concise JSON response.\n"
-            "Be encouraging, specific, and actionable. Keep the tone warm and motivational.\n"
-            "Respond ONLY with valid JSON in this exact structure:\n"
-            "{\n"
-            '  "summary": "<3-5 sentence paragraph about their current academic standing>",\n'
-            '  "recommendations": ["<action item 1>", "<action item 2>", "<action item 3>"],\n'
-            '  "motivation": "<1-2 sentence motivational closer>"\n'
-            "}"
-        )
-        user_prompt = (
-            f"Student academic snapshot:\n"
-            f"- Semester: {current_term} {current_year}\n"
-            f"- Current GPA: {current_gpa}\n"
-            f"- Active courses ({len(active_courses_ctx)}): {json.dumps(active_courses_ctx)}\n"
-            f"- Upcoming deadlines (next 5): {json.dumps(upcoming_ctx)}\n"
-            f"- Overdue tasks: {overdue_count}\n"
-            f"- Completed assessments this semester: {completed_this_term}\n\n"
-            f"Generate the academic summary and recommendations."
-        )
-
-        try:
-            import openai
-
-            client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-            response = await client.chat.completions.create(
-                model="gpt-4o-mini",
-                temperature=0.7,
-                max_tokens=500,
-                response_format={"type": "json_object"},
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-            )
-            raw = response.choices[0].message.content
-            data = json.loads(raw)
-        except AISummaryUnavailableError:
-            raise
-        except Exception as exc:
-            raise AISummaryUnavailableError(str(exc)) from exc
-
-        return AISummaryResponse(
-            summary=data["summary"],
-            recommendations=data["recommendations"],
-            motivation=data["motivation"],
-            generated_at=datetime.now(tz=timezone.utc),
         )

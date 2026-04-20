@@ -155,7 +155,7 @@ export function CourseMaterialsPanel({
   const loadUploads = useCallback(async () => {
     const courseId = enrollment.course_id;
     const response = await api.get<ApiResponse<StudyMaterialUpload[]>>(
-      `/study/${courseId}/materials/uploads`
+      `/course-materials/${courseId}/uploads`
     );
     setUploads(response.data ?? []);
   }, [enrollment.course_id]);
@@ -163,7 +163,7 @@ export function CourseMaterialsPanel({
   const loadLibrary = useCallback(async () => {
     const courseId = enrollment.course_id;
     const response = await api.get<ApiResponse<SharedCourseMaterial[]>>(
-      `/study/${courseId}/materials/library`
+      `/course-materials/${courseId}/library`
     );
     setLibrary(response.data ?? []);
   }, [enrollment.course_id]);
@@ -254,7 +254,7 @@ export function CourseMaterialsPanel({
     setError(null);
     try {
       const response = await api.uploadFiles<ApiResponse<StudyMaterialUpload[]>>(
-        `/study/${enrollment.course_id}/materials/uploads`,
+        `/course-materials/${enrollment.course_id}/uploads`,
         files,
         {
           week,
@@ -266,6 +266,7 @@ export function CourseMaterialsPanel({
       setFiles([]);
       setTab("mine");
       await loadAll();
+      setUploadModalOpen(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Upload failed";
       setError(message);
@@ -280,7 +281,7 @@ export function CourseMaterialsPanel({
     setActingId(uploadId);
     try {
       await api.delete<ApiResponse>(
-        `/study/${enrollment.course_id}/materials/uploads/${uploadId}`
+        `/course-materials/${enrollment.course_id}/uploads/${uploadId}`
       );
       setDeleteTarget(null);
       await loadAll();
@@ -297,7 +298,7 @@ export function CourseMaterialsPanel({
     setError(null);
     try {
       await api.post<ApiResponse<StudyMaterialUpload>>(
-        `/study/${enrollment.course_id}/materials/uploads/${uploadId}/cancel-publish`
+        `/course-materials/${enrollment.course_id}/uploads/${uploadId}/cancel-publish`
       );
       await loadAll();
     } catch (err) {

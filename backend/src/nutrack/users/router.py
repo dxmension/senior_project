@@ -5,6 +5,8 @@ from nutrack.utils import ApiResponse
 from nutrack.users.dependencies import get_user_service
 from nutrack.users.models import User
 from nutrack.users.schemas import (
+    AuditResultResponse,
+    DegreePlanResponse,
     EnrollmentResponse,
     UserProfileResponse,
     UserProfileUpdate,
@@ -53,3 +55,21 @@ async def get_stats(
 ):
     stats = await service.get_stats(user.id)
     return ApiResponse(data=stats)
+
+
+@router.get("/audit", response_model=ApiResponse[AuditResultResponse])
+async def get_audit(
+    user: User = Depends(get_current_user),
+    service: UserService = Depends(get_user_service),
+):
+    audit = await service.get_audit(user.id)
+    return ApiResponse(data=audit)
+
+
+@router.get("/degree-plan", response_model=ApiResponse[DegreePlanResponse])
+async def get_degree_plan(
+    user: User = Depends(get_current_user),
+    service: UserService = Depends(get_user_service),
+):
+    plan = await service.get_degree_plan(user.id)
+    return ApiResponse(data=plan)

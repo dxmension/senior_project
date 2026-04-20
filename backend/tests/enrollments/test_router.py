@@ -13,6 +13,7 @@ def enrollment_item() -> EnrollmentItemResponse:
     return EnrollmentItemResponse(
         user_id=1,
         course_id=7,
+        catalog_course_id=4,
         course_code="CSCI 151",
         section="2",
         course_title="Programming",
@@ -22,6 +23,7 @@ def enrollment_item() -> EnrollmentItemResponse:
         term="Fall",
         year=2026,
         status="in_progress",
+        days="MWF",
         meeting_time="10:00-10:50",
         room="6.310",
     )
@@ -43,6 +45,7 @@ async def test_get_enrollments_returns_filtered_user_rows(
 
     assert response.status_code == 200
     assert response.json()["data"][0]["course_id"] == 7
+    assert response.json()["data"][0]["catalog_course_id"] == 4
     assert response.json()["data"][0]["term"] == "Fall"
     service.list_enrollments.assert_awaited_once()
 

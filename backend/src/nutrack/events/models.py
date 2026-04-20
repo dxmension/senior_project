@@ -1,15 +1,19 @@
 import enum
 from datetime import datetime
-from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from nutrack.models import Base, IDMixin, TimestampMixin
-
-if TYPE_CHECKING:
-    from nutrack.categories.models import Category
 
 
 class RecurrenceType(str, enum.Enum):
@@ -18,6 +22,22 @@ class RecurrenceType(str, enum.Enum):
     WEEKLY = "weekly"
     BIWEEKLY = "biweekly"
     MONTHLY = "monthly"
+
+
+class Category(Base, IDMixin, TimestampMixin):
+    __tablename__ = "categories"
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_categories_user_name"),
+        Index("ix_categories_user_id", "user_id"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    color: Mapped[str] = mapped_column(String(7), nullable=False)
 
 
 class Event(Base, IDMixin, TimestampMixin):
@@ -52,7 +72,7 @@ class Event(Base, IDMixin, TimestampMixin):
         DateTime(timezone=True), nullable=True
     )
 
-    category: Mapped["Category | None"] = relationship()
+    category: Mapped[Category | None] = relationship()
 
     def __repr__(self) -> str:
         return (

@@ -3,8 +3,8 @@
 import {
   BookOpen,
   ChevronDown,
-  Clock,
   Search,
+  Star,
   TrendingUp,
   Users,
 } from "lucide-react";
@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
-import type { ApiResponse, CatalogCourse, CourseOfferingInfo } from "@/types";
+import type { ApiResponse, CatalogCourse } from "@/types";
 
 const PAGE_SIZE = 30;
 const TERMS = ["Fall", "Spring", "Summer"];
@@ -43,47 +43,10 @@ function TermBadge({ term }: { term: string }) {
   );
 }
 
-function TimetableRow({ offerings }: { offerings: CourseOfferingInfo[] }) {
-  if (offerings.length === 0) return null;
-  return (
-    <div className="flex flex-col gap-1">
-      {offerings.map((o, i) => (
-        <div key={i} className="flex items-center gap-2 text-[11px] text-text-muted">
-          <Clock size={10} className="shrink-0" />
-          <span className="truncate">
-            {[o.section, o.days, o.meeting_time, o.room].filter(Boolean).join(" · ")}
-          </span>
-          {o.enrolled != null && o.capacity != null && (
-            <span className="shrink-0 ml-auto">
-              {o.enrolled}/{o.capacity}
-            </span>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ReqRow({
-  label,
-  text,
-}: {
-  label: string;
-  text: string;
-}) {
-  return (
-    <p className="text-[11px] text-text-muted leading-snug line-clamp-1">
-      <span className="font-semibold text-text-secondary">{label}: </span>
-      {text}
-    </p>
-  );
-}
 
 function CourseCard({ course }: { course: CatalogCourse }) {
   const hasPrioritySystem =
     course.priority_1 || course.priority_2 || course.priority_3 || course.priority_4;
-  const hasReqs =
-    course.prerequisites || course.corequisites || course.antirequisites;
 
   return (
     <Link
@@ -102,14 +65,21 @@ function CourseCard({ course }: { course: CatalogCourse }) {
             )}
             {/* Eligibility */}
             {course.is_eligible !== null && course.is_eligible !== undefined && (
-              <span
-                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border ${
-                  course.is_eligible
-                    ? "bg-green-500/10 text-green-400 border-green-500/25"
-                    : "bg-red-500/10 text-red-400 border-red-500/25"
-                }`}
-              >
-                {course.is_eligible ? "Eligible" : "Not eligible"}
+              <span className="relative group/elig">
+                <span
+                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border ${
+                    course.is_eligible
+                      ? "bg-green-500/10 text-green-400 border-green-500/25"
+                      : "bg-red-500/10 text-red-400 border-red-500/25"
+                  }`}
+                >
+                  {course.is_eligible ? "Eligible" : "Not eligible"}
+                </span>
+                {!course.is_eligible && course.ineligibility_reason && (
+                  <span className="pointer-events-none absolute left-0 top-full mt-1 z-20 w-max max-w-[220px] rounded bg-bg-card border border-border-primary px-2 py-1 text-[10px] text-text-secondary opacity-0 group-hover/elig:opacity-100 transition-opacity duration-150 whitespace-normal leading-snug">
+                    {course.ineligibility_reason}
+                  </span>
+                )}
               </span>
             )}
           </div>
@@ -137,26 +107,6 @@ function CourseCard({ course }: { course: CatalogCourse }) {
         <p className="text-xs text-text-secondary truncate">{course.department}</p>
       )}
 
-      {/* ── Prerequisites / Corequisites / Antirequisites ── */}
-      {hasReqs && (
-        <div className="flex flex-col gap-0.5 border-l-2 border-border-primary pl-2">
-          {course.prerequisites && (
-            <ReqRow label="Pre" text={course.prerequisites} />
-          )}
-          {course.corequisites && (
-            <ReqRow label="Co" text={course.corequisites} />
-          )}
-          {course.antirequisites && (
-            <ReqRow label="Anti" text={course.antirequisites} />
-          )}
-        </div>
-      )}
-
-      {/* ── Timetable (latest offerings) ── */}
-      {course.offerings && course.offerings.length > 0 && (
-        <TimetableRow offerings={course.offerings} />
-      )}
-
       {/* ── Terms available ── */}
       {course.terms_available.length > 0 && (
         <div className="flex flex-wrap gap-1">
@@ -166,7 +116,7 @@ function CourseCard({ course }: { course: CatalogCourse }) {
         </div>
       )}
 
-      {/* ── Footer: GPA + enrolled ── */}
+      {/* ── Footer: GPA + rating + enrolled ── */}
       <div className="flex items-center gap-3 mt-auto pt-2 border-t border-border-primary">
         {course.avg_gpa != null ? (
           <div className="flex items-center gap-1.5">
@@ -177,6 +127,15 @@ function CourseCard({ course }: { course: CatalogCourse }) {
           </div>
         ) : (
           <span className="text-xs text-text-muted italic">No GPA data</span>
+        )}
+
+        {course.avg_review_rating != null && (
+          <div className="flex items-center gap-1">
+            <Star size={11} className="text-yellow-400 fill-yellow-400" />
+            <span className="text-xs text-text-secondary font-mono">
+              {course.avg_review_rating.toFixed(1)}
+            </span>
+          </div>
         )}
 
         {course.total_enrolled != null && (
@@ -197,6 +156,8 @@ interface Filters {
   level_prefix: string;
   eligible_only: boolean;
   has_priority: boolean;
+  min_gpa: string;
+  min_rating: string;
 }
 
 export default function CatalogPage() {
@@ -209,6 +170,8 @@ export default function CatalogPage() {
     level_prefix: "",
     eligible_only: false,
     has_priority: false,
+    min_gpa: "",
+    min_rating: "",
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -228,6 +191,8 @@ export default function CatalogPage() {
       if (f.level_prefix) params.set("level_prefix", f.level_prefix);
       if (f.eligible_only) params.set("eligible_only", "true");
       if (f.has_priority) params.set("has_priority", "true");
+      if (f.min_gpa) params.set("min_gpa", f.min_gpa);
+      if (f.min_rating) params.set("min_rating", f.min_rating);
 
       try {
         const res = await api.get<ApiResponse<CatalogCourse[]>>(
@@ -366,6 +331,46 @@ export default function CatalogPage() {
           />
         </div>
 
+        <div className="relative">
+          <select
+            value={filters.min_gpa}
+            onChange={(e) => setFilter("min_gpa", e.target.value)}
+            className="appearance-none rounded-full bg-bg-card border border-border-primary
+              pl-3 pr-8 py-1.5 text-xs text-text-secondary
+              focus:outline-none focus:border-border-light cursor-pointer"
+          >
+            <option value="">Any GPA</option>
+            <option value="2.0">GPA ≥ 2.0</option>
+            <option value="2.5">GPA ≥ 2.5</option>
+            <option value="3.0">GPA ≥ 3.0</option>
+            <option value="3.5">GPA ≥ 3.5</option>
+          </select>
+          <ChevronDown
+            size={12}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+          />
+        </div>
+
+        <div className="relative">
+          <select
+            value={filters.min_rating}
+            onChange={(e) => setFilter("min_rating", e.target.value)}
+            className="appearance-none rounded-full bg-bg-card border border-border-primary
+              pl-3 pr-8 py-1.5 text-xs text-text-secondary
+              focus:outline-none focus:border-border-light cursor-pointer"
+          >
+            <option value="">Any rating</option>
+            <option value="3">★ 3+</option>
+            <option value="3.5">★ 3.5+</option>
+            <option value="4">★ 4+</option>
+            <option value="4.5">★ 4.5+</option>
+          </select>
+          <ChevronDown
+            size={12}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+          />
+        </div>
+
         {/* Toggle buttons for eligible_only and has_priority */}
         <button
           type="button"
@@ -395,7 +400,9 @@ export default function CatalogPage() {
           filters.academic_level ||
           filters.level_prefix ||
           filters.eligible_only ||
-          filters.has_priority) && (
+          filters.has_priority ||
+          filters.min_gpa ||
+          filters.min_rating) && (
           <button
             type="button"
             onClick={() =>
@@ -406,6 +413,8 @@ export default function CatalogPage() {
                 level_prefix: "",
                 eligible_only: false,
                 has_priority: false,
+                min_gpa: "",
+                min_rating: "",
               }))
             }
             className="text-xs text-text-muted hover:text-text-secondary transition-colors underline-offset-2 underline"
@@ -430,7 +439,9 @@ export default function CatalogPage() {
             filters.academic_level ||
             filters.level_prefix ||
             filters.eligible_only ||
-            filters.has_priority
+            filters.has_priority ||
+            filters.min_gpa ||
+            filters.min_rating
               ? "No courses match your filters."
               : "No courses found. Upload a schedule PDF first."}
           </p>

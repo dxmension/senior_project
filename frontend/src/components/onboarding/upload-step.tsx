@@ -2,11 +2,13 @@
 
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
-import { Upload, FileText, AlertCircle } from "lucide-react";
+import { Upload, FileText, AlertCircle, Languages } from "lucide-react";
 import { api } from "@/lib/api";
 import { Spinner } from "@/components/ui/spinner";
 import { GlassCard } from "@/components/ui/glass-card";
 import type { ApiResponse } from "@/types";
+
+const KLL_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"];
 
 interface UploadStepProps {
   onNext: () => void;
@@ -17,6 +19,11 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Phase 2: after upload succeeds, ask for Kazakh level
+  const [uploaded, setUploaded] = useState(false);
+  const [kazakhLevel, setKazakhLevel] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const onDrop = useCallback((accepted: File[]) => {
     setError(null);
@@ -40,15 +47,28 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
     if (!file) return;
     setUploading(true);
     setError(null);
-
     try {
       await api.uploadFile<ApiResponse>("/transcripts/uploads", file);
-      setUploading(false);
-      // Transcript is processed synchronously, just move to next step
-      onNext();
+      setUploaded(true);
     } catch (err) {
-      setUploading(false);
       setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleContinue = async () => {
+    setSaving(true);
+    try {
+      if (kazakhLevel) {
+        await api.patch<ApiResponse>("/profile", { kazakh_level: kazakhLevel });
+      }
+      onNext();
+    } catch {
+      // Non-critical — proceed anyway
+      onNext();
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -58,7 +78,56 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  
+  // ── Phase 2: transcript uploaded, ask for Kazakh level ──────────────────
+  if (uploaded) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-lg font-semibold text-text-primary mb-1">
+            One more thing
+          </h2>
+          <p className="text-sm text-text-secondary">
+            Your transcript was uploaded successfully. Do you have a Kazakh
+            language proficiency level? It determines eligibility for some courses.
+          </p>
+        </div>
+
+        <GlassCard>
+          <div className="flex items-start gap-3">
+            <Languages size={18} className="text-accent-green shrink-0 mt-0.5" />
+            <div className="flex-1 space-y-3">
+              <p className="text-sm font-medium text-text-primary">
+                Kazakh Language Level (KLL)
+              </p>
+              <select
+                value={kazakhLevel}
+                onChange={(e) => setKazakhLevel(e.target.value)}
+                className="glass-input w-full px-3 py-2 text-sm"
+              >
+                <option value="">Not set — skip this</option>
+                {KLL_LEVELS.map((lvl) => (
+                  <option key={lvl} value={lvl}>KLL {lvl}</option>
+                ))}
+              </select>
+              <p className="text-xs text-text-muted">
+                You can change this later in your profile settings.
+              </p>
+            </div>
+          </div>
+        </GlassCard>
+
+        <button
+          onClick={handleContinue}
+          disabled={saving}
+          className="btn-primary w-full"
+        >
+          {saving ? "Saving…" : "Continue to Dashboard"}
+        </button>
+      </div>
+    );
+  }
+
+  // ── Phase 1: file upload ─────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       <div>
@@ -101,7 +170,7 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
       )}
 
       {error && (
-        <div className="flex items-center gap-2 p-3 rounded-sm)] bg-accent-red-dim text-accent-red text-sm">
+        <div className="flex items-center gap-2 p-3 rounded-sm bg-accent-red-dim text-accent-red text-sm">
           <AlertCircle size={16} className="shrink-0" />
           {error}
         </div>
@@ -113,7 +182,7 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
           disabled={!file || uploading}
           className="btn-primary w-full"
         >
-          {uploading ? "Uploading..." : "Upload & Parse"}
+          {uploading ? <><Spinner />&nbsp;Uploading…</> : "Upload & Parse"}
         </button>
         <button
           onClick={onSkip}

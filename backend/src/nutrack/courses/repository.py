@@ -12,7 +12,7 @@ from nutrack.enrollments.models import Enrollment, EnrollmentStatus
 # Section helpers
 # ---------------------------------------------------------------------------
 
-_RECITATION_TYPES = frozenset({"R", "LAB", "LB", "PLB", "TUT", "T"})
+_RECITATION_TYPES = frozenset({"R", "LAB", "LB", "CLB", "PLB", "TUT", "T"})
 _TERM_ORDER = {"Spring": 1, "Summer": 2, "Fall": 3}
 
 
@@ -183,6 +183,91 @@ class CourseRepository(BaseRepository[Course]):
             out.setdefault(row.course_id, set()).add(row.term)
         return {k: sorted(v) for k, v in out.items()}
 
+    async def get_courses_by_patterns(
+        self,
+        patterns: list[str],
+        term_type: str,
+        all_course_terms: list[tuple[str, str, str]],
+        limit: int = 8,
+        required_ects: int | None = None,
+    ) -> list[Course]:
+        """Fetch courses matching audit patterns that are offered in the given term type."""
+        if not patterns:
+            return []
+
+        has_wildcard = "*" in patterns
+        non_wildcard = [p for p in patterns if p != "*"]
+
+        offered_in_term = {(c, lv) for c, lv, t in all_course_terms if t == term_type}
+        if not offered_in_term:
+            return []
+
+        if has_wildcard and not non_wildcard:
+            return []
+
+        conditions = []
+        for p in non_wildcard:
+            pn = p.strip().upper()
+            if " " in pn:
+                code_part, level_part = pn.split(" ", 1)
+                if len(level_part) < 3:
+                    conditions.append(
+                        (Course.code == code_part) & Course.level.like(f"{level_part}%")
+                    )
+                else:
+                    conditions.append((Course.code == code_part) & (Course.level == level_part))
+            else:
+                conditions.append(Course.code == pn)
+
+        if not conditions:
+            return []
+
+        stmt = select(Course).where(or_(*conditions)).order_by(Course.code, Course.level)
+        result = await self.session.execute(stmt)
+        courses = list(result.scalars().all())
+
+        filtered = [c for c in courses if (c.code, c.level) in offered_in_term]
+        if required_ects is not None:
+            filtered = [c for c in filtered if c.ects == required_ects]
+        return filtered[:limit]
+
+    async def get_courses_info_by_patterns(self, patterns: list[str], limit: int = 5) -> list[Course]:
+        """Fetch courses matching patterns without term filtering — used to show course details."""
+        if not patterns:
+            return []
+        non_wildcard = [p for p in patterns if p != "*"]
+        if not non_wildcard:
+            return []
+        conditions = []
+        for p in non_wildcard:
+            pn = p.strip().upper()
+            if " " in pn:
+                code_part, level_part = pn.split(" ", 1)
+                if len(level_part) < 3:
+                    conditions.append((Course.code == code_part) & Course.level.like(f"{level_part}%"))
+                else:
+                    conditions.append((Course.code == code_part) & (Course.level == level_part))
+            else:
+                conditions.append(Course.code == pn)
+        if not conditions:
+            return []
+        stmt = select(Course).where(or_(*conditions)).order_by(Course.code, Course.level).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_all_course_terms(self) -> list[tuple[str, str, str]]:
+        """
+        Return all distinct (code, level, term) triples from CourseOfferings.
+        Used to resolve term availability for audit requirement patterns.
+        """
+        stmt = (
+            select(Course.code, Course.level, CourseOffering.term)
+            .join(CourseOffering, Course.id == CourseOffering.course_id)
+            .distinct()
+        )
+        result = await self.session.execute(stmt)
+        return [(row.code, row.level, row.term) for row in result]
+
     async def get_stats(self, course_id: int) -> dict:
         """
         Aggregate enrollment statistics for a course across all offerings.
@@ -256,6 +341,7 @@ class CourseRepository(BaseRepository[Course]):
     async def get_user_course_history(self, user_id: int) -> list[dict]:
         stmt = (
             select(
+                Course.id,
                 Course.code,
                 Course.level,
                 Enrollment.grade,
@@ -272,10 +358,33 @@ class CourseRepository(BaseRepository[Course]):
         result = await self.session.execute(stmt)
         return [dict(row) for row in result.mappings().all()]
 
+    async def get_ids_by_code_levels(
+        self, pairs: list[tuple[str, str]]
+    ) -> dict[tuple[str, str], int]:
+        """Batch-resolve (code, level) pairs to catalog course IDs."""
+        if not pairs:
+            return {}
+        conditions = [
+            (Course.code == code) & (Course.level == level)
+            for code, level in pairs
+        ]
+        stmt = select(Course.id, Course.code, Course.level).where(or_(*conditions))
+        result = await self.session.execute(stmt)
+        return {(row.code, row.level): row.id for row in result}
+
 
 class CourseOfferingRepository(BaseRepository[CourseOffering]):
     def __init__(self, session: AsyncSession):
         super().__init__(session, CourseOffering)
+
+    async def get_by_id_with_course(self, offering_id: int) -> CourseOffering | None:
+        stmt = (
+            select(CourseOffering)
+            .where(CourseOffering.id == offering_id)
+            .options(joinedload(CourseOffering.course))
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def get_by_identity(
         self,
@@ -356,6 +465,25 @@ class CourseOfferingRepository(BaseRepository[CourseOffering]):
             if key == latest[offering.course_id]:
                 offerings[offering.course_id].append(offering)
         return offerings
+
+    async def list_by_term(
+        self,
+        term: str,
+        year: int,
+        limit: int | None = 200,
+    ) -> list[CourseOffering]:
+        """Return all offerings for a given term/year with Course eager-loaded."""
+        stmt = (
+            select(CourseOffering)
+            .join(CourseOffering.course)
+            .options(joinedload(CourseOffering.course))
+            .where(CourseOffering.term == term, CourseOffering.year == year)
+            .order_by(Course.code, Course.level, CourseOffering.section)
+        )
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
 
 class CourseGpaStatsRepository(BaseRepository[CourseGpaStats]):
@@ -531,6 +659,23 @@ class CourseReviewRepository(BaseRepository[CourseReview]):
             "avg_gpa_boost": _rounded(averages[3]),
             "avg_workload": _rounded(averages[4]),
         }
+
+    async def get_avg_overall_rating_by_course_ids(
+        self, course_ids: list[int]
+    ) -> dict[int, float | None]:
+        """Return {course_id: avg_overall_rating} for a batch of courses."""
+        if not course_ids:
+            return {}
+        stmt = (
+            select(
+                CourseReview.course_id,
+                func.avg(CourseReview.overall_rating).label("avg_rating"),
+            )
+            .where(CourseReview.course_id.in_(course_ids))
+            .group_by(CourseReview.course_id)
+        )
+        result = await self.session.execute(stmt)
+        return {row.course_id: _rounded(row.avg_rating) for row in result}
 
     async def get_by_user_and_course(
         self,

@@ -3,7 +3,7 @@ from celery import Celery
 from nutrack.config import settings
 from nutrack.database import load_model_modules
 
-celery_app = Celery("NU Learning")
+celery_app = Celery("nutrack")
 
 celery_app.config_from_object(
     {
@@ -27,3 +27,7 @@ load_model_modules()
 # Import task modules explicitly so workers register application tasks on boot.
 from nutrack.tasks import materials, parse_transcript  # noqa: F401,E402
 from nutrack.notifications import tasks as notification_tasks  # noqa: F401,E402
+from nutrack.course_materials import tasks as course_material_tasks  # noqa: F401,E402
+from nutrack.mock_exams import tasks as mock_exam_tasks  # noqa: F401,E402
+from nutrack.mindmaps import tasks as mindmap_tasks  # noqa: F401,E402
+from nutrack.transcripts import tasks as transcript_tasks  # noqa: F401,E402

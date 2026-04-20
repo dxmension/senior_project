@@ -2,22 +2,34 @@
 
 import {
   ArrowLeft,
+  Brain,
   CheckSquare,
   Edit2,
+  LoaderCircle,
   Plus,
   Square,
   Trash2,
 } from "lucide-react";
-import { Fragment, use, useEffect, useState } from "react";
+import { Fragment, use, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { AddAssessmentModal } from "@/components/courses/add-assessment-modal";
 import { CourseMaterialsPanel } from "@/components/courses/course-materials-panel";
+import { CurrentGradeCard } from "@/components/courses/current-grade-card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
+import { predictedGradeBadge } from "@/lib/predicted-grade";
 import { useAssessmentsStore } from "@/stores/assessments";
-import type { ApiResponse, Assessment, AssessmentType, EnrollmentItem } from "@/types";
+import type {
+  ApiResponse,
+  Assessment,
+  AssessmentType,
+  EnrollmentItem,
+  MockExamCourseGroup,
+  UpdateAssessmentPayload 
+} from "@/types";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -62,8 +74,182 @@ function formatDeadline(isoString: string): string {
   });
 }
 
+// Inline score slot — empty state or double-click to re-edit
+function ScoreInput({
+  initialScore,
+  assessment,
+  onSaved,
+}: {
+  initialScore: number | null;
+  assessment: Assessment;
+  onSaved: (id: number, score: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(initialScore != null ? String(initialScore) : "");
+  const [focused, setFocused] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { updateAssessment } = useAssessmentsStore();
+
+  function openEdit() {
+    setSaveError(null);
+    setEditing(true);
+    setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select(); }, 20);
+  }
+
+  async function submit() {
+    const num = parseFloat(value);
+    if (isNaN(num) || num < 0) { setEditing(false); return; }
+    setSaving(true);
+    setSaveError(null);
+    const STUDY_TYPES = new Set(["quiz", "midterm", "final", "presentation"]);
+    const isStudy = STUDY_TYPES.has(assessment.assessment_type);
+    try {
+      const patch: UpdateAssessmentPayload = { score: num };
+      if (isStudy) patch.is_completed = true;
+      await updateAssessment(assessment.id, patch);
+      onSaved(assessment.id, num);
+      setEditing(false);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleKey(e: React.KeyboardEvent) {
+    if (e.key === "Enter") void submit();
+    if (e.key === "Escape") { setValue(initialScore != null ? String(initialScore) : ""); setEditing(false); }
+  }
+
+  // Not editing — show filled value or clickable placeholder
+  if (!editing) {
+    if (initialScore != null) {
+      return (
+        <div
+          onDoubleClick={openEdit}
+          title="Double-click to edit"
+          style={{ display: "inline-flex", alignItems: "center", gap: 4, cursor: "default", userSelect: "none" }}
+        >
+          <span style={{
+            fontSize: 12, fontWeight: 500, color: "#f5f5f5",
+            padding: "2px 6px", borderRadius: 5,
+            border: "1px solid rgba(255,255,255,0.07)",
+            background: "rgba(255,255,255,0.04)",
+          }}>
+            {initialScore}
+          </span>
+          {assessment.max_score != null && (
+            <span style={{ fontSize: 11, color: "#555" }}>/ {assessment.max_score}</span>
+          )}
+        </div>
+      );
+    }
+    return (
+      <button
+        type="button"
+        onClick={openEdit}
+        title="Click to enter score"
+        style={{
+          fontSize: 12, color: "#444", cursor: "pointer",
+          padding: "2px 6px", borderRadius: 5,
+          border: "1px dashed rgba(255,255,255,0.08)",
+          background: "transparent",
+        }}
+      >
+        —
+      </button>
+    );
+  }
+
+  // Editing
+  return (
+    <>
+      <style>{`.score-no-arrows::-webkit-outer-spin-button,.score-no-arrows::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}.score-no-arrows{-moz-appearance:textfield}`}</style>
+      <div className="flex flex-col gap-0.5">
+        <div className="flex items-center gap-1.5">
+          <div
+            onClick={() => inputRef.current?.focus()}
+            style={{
+              display: "inline-flex", alignItems: "center",
+              padding: "3px 8px", borderRadius: 6,
+              border: focused ? "1px solid rgba(163,230,53,0.5)" : "1px dashed rgba(163,230,53,0.25)",
+              background: focused ? "rgba(163,230,53,0.06)" : "rgba(163,230,53,0.03)",
+              cursor: "text", transition: "all 0.15s ease",
+              boxShadow: focused ? "0 0 0 3px rgba(163,230,53,0.06)" : "none",
+            }}
+          >
+            <input
+              ref={inputRef}
+              className="score-no-arrows"
+              type="number"
+              min={0}
+              max={assessment.max_score ?? undefined}
+              step="any"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => { setFocused(false); void submit(); }}
+              onKeyDown={handleKey}
+              placeholder="—"
+              disabled={saving}
+              autoFocus
+              style={{
+                appearance: "textfield", background: "transparent",
+                border: "none", outline: "none",
+                width: `${String(assessment.max_score ?? "—").length + 0.5}ch`,
+                fontSize: 12, fontWeight: 500,
+                color: value ? "#f5f5f5" : "#a3e635",
+                textAlign: "center", opacity: saving ? 0.5 : 1,
+              }}
+            />
+          </div>
+          {assessment.max_score != null && (
+            <span style={{ fontSize: 11, color: "#555", userSelect: "none" }}>/ {assessment.max_score}</span>
+          )}
+        </div>
+        {saveError && (
+          <span style={{ fontSize: 10, color: "#f87171" }}>{saveError}</span>
+        )}
+      </div>
+    </>
+  );
+}
+
 type FilterTab = "all" | "upcoming" | "completed" | "overdue";
 type CoursePageTab = "deadlines" | "materials";
+
+function findStudyGroup(
+  groups: MockExamCourseGroup[],
+  catalogCourseId: number | null,
+) {
+  if (catalogCourseId == null) return null;
+  return groups.find((item) => item.course_id === catalogCourseId) ?? null;
+}
+
+function findAssessmentPrediction(
+  group: MockExamCourseGroup | null,
+  assessmentType: AssessmentType,
+) {
+  if (!group) return null;
+  return (
+    group.assessment_predictions.find((item) => item.assessment_type === assessmentType)
+    ?? null
+  );
+}
+
+function findAiMockExam(
+  group: MockExamCourseGroup | null,
+  assessment: Assessment,
+) {
+  if (!group) return null;
+  return group.exams.find((item) => (
+    item.assessment_type === assessment.assessment_type
+    && item.assessment_number === assessment.assessment_number
+    && item.origin === "ai"
+  )) ?? null;
+}
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -85,12 +271,24 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
     useState<Assessment | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
+  const [actingId, setActingId] = useState<number | null>(null);
+  const [generatingIds, setGeneratingIds] = useState<Set<number>>(new Set());
+  const [studyGroup, setStudyGroup] = useState<MockExamCourseGroup | null>(null);
 
-  const { byCourse, loadingCourseIds, fetchForCourse, toggleComplete, deleteAssessment } =
+  const {
+    byCourse,
+    loadingCourseIds,
+    fetchForCourse,
+    toggleComplete,
+    deleteAssessment,
+    generateMockExam,
+  } =
     useAssessmentsStore();
 
   const assessments = byCourse[courseId] ?? [];
   const assessmentsLoading = loadingCourseIds.has(courseId);
+  const catalogCourseId = enrollment?.catalog_course_id ?? null;
 
   // Load enrollment
   useEffect(() => {
@@ -120,6 +318,25 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
       void fetchForCourse(courseId);
     }
   }, [courseId, byCourse, fetchForCourse]);
+
+  useEffect(() => {
+    async function loadStudyGroup() {
+      if (catalogCourseId == null) {
+        setStudyGroup(null);
+        return;
+      }
+      try {
+        const response = await api.get<ApiResponse<MockExamCourseGroup[]>>(
+          "/mock-exams",
+        );
+        setStudyGroup(findStudyGroup(response.data ?? [], catalogCourseId));
+      } catch {
+        setStudyGroup(null);
+      }
+    }
+
+    void loadStudyGroup();
+  }, [catalogCourseId]);
 
   const now = new Date();
 
@@ -152,15 +369,29 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
     (a) => !a.is_completed && new Date(a.deadline) < now
   ).length;
 
-  async function handleDelete(id: number) {
-    setDeletingId(id);
+  async function handleDelete(target: { id: number; title: string } | null) {
+    if (!target) return;
+    setActingId(target.id);
     try {
-      await deleteAssessment(id, courseId);
-      setConfirmDeleteId(null);
+      await deleteAssessment(target.id, courseId);
+      setDeleteTarget(null);
     } catch {
       // error ignored, store keeps state
     } finally {
-      setDeletingId(null);
+      setActingId(null);
+    }
+  }
+
+  async function handleGenerateMock(assessment: Assessment) {
+    setGeneratingIds((current) => new Set(current).add(assessment.id));
+    try {
+      await generateMockExam(assessment.id);
+    } finally {
+      setGeneratingIds((current) => {
+        const next = new Set(current);
+        next.delete(assessment.id);
+        return next;
+      });
     }
   }
 
@@ -278,6 +509,8 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
               </GlassCard>
             </div>
 
+            <CurrentGradeCard assessments={assessments} />
+
             <GlassCard padding={false} className="overflow-hidden">
               <div className="flex items-center justify-between border-b border-[#2a2a2a] px-5 py-4">
                 <h2 className="text-sm font-semibold text-text-primary">
@@ -344,7 +577,7 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
                           Status
                         </th>
                         <th className="px-3 py-2.5 text-left font-medium">
-                          Title
+                          Assessment
                         </th>
                         <th className="px-3 py-2.5 text-left font-medium">Type</th>
                         <th className="px-3 py-2.5 text-left font-medium">
@@ -363,10 +596,23 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
                     </thead>
                     <tbody>
                       {filtered.map((assessment) => {
-                        const isConfirmingDelete = confirmDeleteId === assessment.id;
                         const badge = BADGE_STYLES[assessment.assessment_type];
                         const isPast = new Date(assessment.deadline) < now;
-
+                        const prediction = findAssessmentPrediction(
+                          studyGroup,
+                          assessment.assessment_type,
+                        );
+                        const predicted = predictedGradeBadge(
+                          prediction?.predicted_grade_letter ?? null,
+                          prediction?.predicted_score_pct ?? null,
+                        );
+                        const aiMockExam = findAiMockExam(studyGroup, assessment);
+                        const canOpenStudy =
+                          ["quiz", "midterm", "final"].includes(
+                            assessment.assessment_type
+                          ) &&
+                          !assessment.is_completed &&
+                          !isPast;
                         return (
                           <Fragment key={assessment.id}>
                             <tr className="border-b border-[#1e1e1e] transition-colors hover:bg-white/[0.02]">
@@ -431,13 +677,48 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
                                   : "—"}
                               </td>
                               <td className="px-3 py-3 text-xs text-text-secondary">
-                                {assessment.score != null &&
-                                assessment.max_score != null
-                                  ? `${assessment.score} / ${assessment.max_score}`
-                                  : "—"}
+                                {isPast ? (
+                                  <ScoreInput
+                                    initialScore={assessment.score}
+                                    assessment={assessment}
+                                    onSaved={() => {}}
+                                  />
+                                ) : assessment.score != null ? (
+                                  assessment.max_score != null
+                                    ? `${assessment.score} / ${assessment.max_score}`
+                                    : `${assessment.score}`
+                                ) : "—"}
                               </td>
                               <td className="px-3 py-3">
                                 <div className="flex items-center justify-end gap-1">
+                                  {canOpenStudy ? (
+                                    <>
+                                      <span
+                                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ${predicted.badgeClass}`}
+                                      >
+                                        Predicted {predicted.letter}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          router.push(
+                                            aiMockExam
+                                              ? `/study/${courseId}/${assessment.assessment_type}/${assessment.assessment_number}`
+                                              : `/study/${courseId}/${assessment.assessment_type}/${assessment.assessment_number}?generateMock=1`
+                                          );
+                                        }}
+                                        className="inline-flex items-center gap-1 rounded-md
+                                          border border-border-primary px-2 py-1 text-[11px]
+                                          text-text-secondary transition-colors
+                                          hover:border-accent-green hover:bg-[#243111]
+                                          hover:text-accent-green"
+                                        title={aiMockExam ? "Open AI mock exams" : "Generate AI mock exam"}
+                                      >
+                                        <Brain size={12} />
+                                        {aiMockExam ? "Go to AI Mock" : "Generate AI Mock"}
+                                      </button>
+                                    </>
+                                  ) : null}
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -451,12 +732,14 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
                                   </button>
                                   <button
                                     type="button"
+                                    disabled={actingId === assessment.id}
                                     onClick={() =>
-                                      setConfirmDeleteId(
-                                        isConfirmingDelete ? null : assessment.id
-                                      )
+                                      setDeleteTarget({
+                                        id: assessment.id,
+                                        title: assessment.title,
+                                      })
                                     }
-                                    className="rounded p-1.5 text-text-secondary transition-colors hover:bg-red-950/50 hover:text-red-400"
+                                    className="rounded p-1.5 text-text-secondary transition-colors hover:bg-red-950/50 hover:text-red-400 disabled:opacity-50"
                                     title="Delete"
                                   >
                                     <Trash2 size={13} />
@@ -465,34 +748,6 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
                               </td>
                             </tr>
 
-                            {isConfirmingDelete ? (
-                              <tr className="bg-red-950/20">
-                                <td colSpan={7} className="px-5 py-2">
-                                  <div className="flex items-center gap-3 text-xs">
-                                    <span className="text-red-400">
-                                      Delete &quot;{assessment.title}&quot;?
-                                    </span>
-                                    <button
-                                      type="button"
-                                      disabled={deletingId === assessment.id}
-                                      onClick={() => void handleDelete(assessment.id)}
-                                      className="rounded bg-red-600/80 px-3 py-1 text-white transition-opacity hover:opacity-80 disabled:opacity-50"
-                                    >
-                                      {deletingId === assessment.id
-                                        ? "Deleting..."
-                                        : "Confirm"}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setConfirmDeleteId(null)}
-                                      className="text-text-secondary hover:text-text-primary"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            ) : null}
                           </Fragment>
                         );
                       })}
@@ -518,6 +773,23 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
         initialData={editingAssessment ?? undefined}
         onSuccess={() => {
           void fetchForCourse(courseId);
+        }}
+      />
+
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        title="Delete assessment"
+        message={
+          deleteTarget
+            ? `Delete "${deleteTarget.title}" from assessments?`
+            : ""
+        }
+        confirmLabel={actingId ? "Deleting..." : "Delete"}
+        variant="danger"
+        onConfirm={() => void handleDelete(deleteTarget)}
+        onCancel={() => {
+          if (actingId) return;
+          setDeleteTarget(null);
         }}
       />
 

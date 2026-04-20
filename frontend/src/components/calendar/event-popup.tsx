@@ -1,13 +1,14 @@
 "use client";
 
-import { X, BookOpen, Calendar, MapPin, Clock, CheckCircle2, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { BookOpen, Calendar, MapPin, Clock, CheckCircle2, RefreshCw } from "lucide-react";
 import type { CalendarEntry } from "@/types";
 import { resolveEventColor } from "@/lib/calendar-colors";
 
 interface EventPopupProps {
   entry: CalendarEntry;
   position: { x: number; y: number };
-  onClose: () => void;
 }
 
 function formatDate(iso: string): string {
@@ -39,37 +40,28 @@ function relativeLabel(iso: string): { label: string; color: string } {
   return { label: `${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? "" : "s"} ago`, color: "#f87171" };
 }
 
-export function EventPopup({ entry, position, onClose }: EventPopupProps) {
+export function EventPopup({ entry, position }: EventPopupProps) {
   const colors = resolveEventColor(entry);
+  const [mounted, setMounted] = useState(false);
 
-  const handlePopupClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-  };
+  useEffect(() => { setMounted(true); }, []);
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <div
-      onClick={handlePopupClick}
-      style={{ left: position.x, top: position.y, zIndex: 50 }}
-      className="absolute w-80 glass-card p-4 shadow-2xl"
+      style={{ left: position.x, top: position.y, zIndex: 9999 }}
+      className="fixed w-80 glass-card p-4 shadow-2xl pointer-events-none"
     >
       {/* Header */}
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <span
-            className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-0.5"
-            style={{ backgroundColor: colors.border }}
-          />
-          <span className="text-sm font-semibold text-text-primary leading-tight">
-            {entry.title}
-          </span>
-        </div>
-        <button
-          onClick={onClose}
-          className="text-text-secondary hover:text-text-primary flex-shrink-0 transition-colors"
-          aria-label="Close"
-        >
-          <X size={14} />
-        </button>
+      <div className="flex items-center gap-2 min-w-0 mb-3">
+        <span
+          className="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-0.5"
+          style={{ backgroundColor: colors.border }}
+        />
+        <span className="text-sm font-semibold text-text-primary leading-tight">
+          {entry.title}
+        </span>
       </div>
 
       <div className="border-t border-border-primary mb-3" />
@@ -94,7 +86,8 @@ export function EventPopup({ entry, position, onClose }: EventPopupProps) {
           </p>
         </>
       )}
-    </div>
+    </div>,
+    document.body
   );
 }
 

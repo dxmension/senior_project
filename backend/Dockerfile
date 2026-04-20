@@ -2,6 +2,14 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+        tesseract-ocr-rus \
+        tesseract-ocr-kaz \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system app && useradd --system --create-home --gid app app
 RUN pip install uv
 

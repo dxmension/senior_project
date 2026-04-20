@@ -4,6 +4,7 @@ import type {
   ApiResponse,
   Assessment,
   CreateAssessmentPayload,
+  MockExamGenerationQueued,
   UpdateAssessmentPayload,
 } from "@/types";
 
@@ -16,6 +17,7 @@ interface AssessmentsState {
     id: number,
     payload: UpdateAssessmentPayload
   ) => Promise<Assessment>;
+  generateMockExam: (assessmentId: number) => Promise<MockExamGenerationQueued>;
   deleteAssessment: (id: number, courseId: number) => Promise<void>;
   toggleComplete: (id: number, courseId: number) => Promise<void>;
 }
@@ -80,6 +82,13 @@ export const useAssessmentsStore = create<AssessmentsState>((set, get) => ({
       };
     });
     return updated;
+  },
+
+  generateMockExam: async (assessmentId) => {
+    const res = await api.post<ApiResponse<MockExamGenerationQueued>>(
+      `/assessments/${assessmentId}/generate-mock-exam`
+    );
+    return res.data;
   },
 
   deleteAssessment: async (id, courseId) => {

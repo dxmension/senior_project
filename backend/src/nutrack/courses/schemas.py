@@ -21,6 +21,35 @@ class CourseSearchItem(BaseModel):
     room: str | None = None
 
 
+class CourseSearchOfferingOption(BaseModel):
+    offering_id: int
+    section: str | None = None
+    faculty: str | None = None
+    days: str | None = None
+    meeting_time: str | None = None
+    room: str | None = None
+    enrolled: int | None = None
+    capacity: int | None = None
+
+
+class CourseSearchComponentGroup(BaseModel):
+    component_type: str
+    label: str
+    required: bool = True
+    offerings: list[CourseSearchOfferingOption]
+
+
+class CourseSearchGroup(BaseModel):
+    course_id: int
+    code: str
+    level: str
+    title: str
+    ects: int
+    term: str
+    year: int
+    components: list[CourseSearchComponentGroup]
+
+
 class InvalidScheduleRow(BaseModel):
     row: int
     course_code: str | None = None
@@ -52,7 +81,7 @@ class SectionGpaStats(BaseModel):
     faculty: str | None = None
     avg_gpa: float | None = None
     total_enrolled: int | None = None
-    grade_distribution: dict[str, int] = Field(default_factory=dict)
+    grade_distribution: dict[str, float] = Field(default_factory=dict)
 
 
 class ProfessorStats(BaseModel):
@@ -112,8 +141,11 @@ class CourseDetailResponse(BaseModel):
     professors: list[ProfessorStats] = Field(default_factory=list)
     # Schedule offerings from the most recent term (list in catalog, detail in course page)
     offerings: list[CourseOfferingInfo] = Field(default_factory=list)
+    # Aggregated review rating (average overall_rating across all reviews)
+    avg_review_rating: float | None = None
     # Computed for authenticated user: eligibility and registration priority
     is_eligible: bool | None = None
+    ineligibility_reason: str | None = None
     user_priority: int | None = None  # 1, 2, 3, 4 = has that priority; None = open / no priority
 
 
@@ -241,6 +273,19 @@ class ReviewsPage(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Descriptions upload
+# ---------------------------------------------------------------------------
+
+
+class DescriptionsUploadResponse(BaseModel):
+    processed_rows: int
+    updated_count: int
+    skipped_empty: int
+    skipped_unchanged: int
+    not_found_count: int
+
+
+# ---------------------------------------------------------------------------
 # Requirements upload
 # ---------------------------------------------------------------------------
 
@@ -288,3 +333,39 @@ class EligibilityResponse(BaseModel):
     prerequisite_checks: list[PrerequisiteCheck] = Field(default_factory=list)
     corequisite_checks: list[CorequisiteCheck] = Field(default_factory=list)
     antirequisite_checks: list[AntirequisiteCheck] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Recommendations
+# ---------------------------------------------------------------------------
+
+
+class RecommendedOfferingSummary(BaseModel):
+    section: str | None = None
+    faculty: str | None = None
+    meeting_time: str | None = None
+    days: str | None = None
+    room: str | None = None
+    enrolled: int | None = None
+    capacity: int | None = None
+
+
+class RecommendedCourseItem(BaseModel):
+    course_id: int
+    offering_ids: list[int]
+    code: str
+    level: str
+    title: str
+    ects: int
+    description: str | None = None
+    department: str | None = None
+    avg_gpa: float | None = None
+    priority_match: bool
+    reason: str
+    offerings: list[RecommendedOfferingSummary]
+
+
+class RecommendationsResponse(BaseModel):
+    recommendations: list[RecommendedCourseItem]
+    term: str
+    year: int
