@@ -18,6 +18,7 @@ import type {
   Assessment,
   EnrollmentItem,
   GenerateMockOptions,
+  MockExamDifficulty,
   MockExamGenerationQueued,
   MockExamCourseGroup,
   MockExamListItem,

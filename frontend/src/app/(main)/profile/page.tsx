@@ -8,10 +8,18 @@ import { ProfileHeader } from "@/components/profile/profile-header";
 import { StatsGrid } from "@/components/profile/stats-grid";
 import { EnrollmentHistory } from "@/components/profile/enrollment-history";
 import { AuditSection } from "@/components/profile/audit-section";
+import { DegreePlanSection } from "@/components/profile/degree-plan";
 import { GpaCalculator } from "@/components/profile/gpa-calculator";
-import type { ApiResponse, UserStats, EnrollmentItem, AuditResult } from "@/types";
+import type { ApiResponse, UserStats, EnrollmentItem, AuditResult, DegreePlan } from "@/types";
 
-type Tab = "audit" | "history" | "gpa";
+type Tab = "audit" | "plan" | "history" | "gpa";
+
+const TAB_LABELS: Record<Tab, string> = {
+  audit: "Audit",
+  plan: "Degree Plan",
+  history: "History",
+  gpa: "GPA Calculator",
+};
 
 export default function ProfilePage() {
   const { user } = useAuthStore();
@@ -62,8 +70,7 @@ export default function ProfilePage() {
       {/* Tabs */}
       <div>
         <div className="flex gap-1 border-b border-border-primary mb-6">
-          {(["audit", "plan", "history"] as Tab[]).map((tab) => (
-          {(["audit", "history", "gpa"] as Tab[]).map((tab) => (
+          {(["audit", "plan", "history", "gpa"] as Tab[]).map((tab) => (
             <button
               key={tab}
               type="button"

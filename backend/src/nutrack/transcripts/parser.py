@@ -106,14 +106,17 @@ def parse_transcript_from_bytes(file_bytes: bytes) -> dict:
 def get_enrollment_status(grade: str | None) -> EnrollmentStatus:
     if not grade:
         return EnrollmentStatus.IN_PROGRESS
-    if grade.startswith("W"):
+    g = grade.strip().upper()
+    if g.startswith("W"):
         return EnrollmentStatus.WITHDRAWN
-    if grade.startswith("P"):
-        return EnrollmentStatus.PASSED
-    if grade.startswith("F"):
+    if g == "NP":  # No Pass (fail in P/F system)
         return EnrollmentStatus.FAILED
-    if grade.startswith("AU"):
+    if g.startswith("P"):  # P or PASS
+        return EnrollmentStatus.PASSED
+    if g.startswith("F"):
+        return EnrollmentStatus.FAILED
+    if g.startswith("AU"):
         return EnrollmentStatus.AUDIT
-    if grade.startswith("I"):
+    if g.startswith("I"):
         return EnrollmentStatus.INCOMPLETE
     return EnrollmentStatus.PASSED

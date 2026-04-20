@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
-import { LETTER_OPTIONS, LETTER_TO_POINTS, computeGpa } from "@/lib/grade-calc";
+import { LETTER_OPTIONS, LETTER_TO_POINTS, computeGpa, PASS_FAIL_POINTS } from "@/lib/grade-calc";
 import type { EnrollmentItem } from "@/types";
 
 interface Props {
@@ -71,11 +71,19 @@ export function GpaCalculator({ enrollments }: Props) {
                     className="rounded-lg border border-border-primary bg-bg-card px-2 py-1 text-sm text-text-primary"
                   >
                     <option value="">— pick grade —</option>
-                    {LETTER_OPTIONS.map((L) => (
-                      <option key={L} value={L}>
-                        {L} ({LETTER_TO_POINTS[L].toFixed(2)})
-                      </option>
-                    ))}
+                    {(e.course_title?.toLowerCase().includes("internship")
+                      ? LETTER_OPTIONS
+                      : LETTER_OPTIONS.filter((L) => L !== "P" && L !== "NP")
+                    ).map((L) => {
+                      const pts = LETTER_TO_POINTS[L] !== undefined
+                        ? LETTER_TO_POINTS[L].toFixed(2)
+                        : L === "P" ? "no GPA impact" : "0.00";
+                      return (
+                        <option key={L} value={L}>
+                          {L} ({pts})
+                        </option>
+                      );
+                    })}
                   </select>
                 </td>
               </tr>

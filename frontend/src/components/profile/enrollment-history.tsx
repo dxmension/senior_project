@@ -10,6 +10,8 @@ interface EnrollmentHistoryProps {
 
 function gradeVariant(grade: string | null): "green" | "muted" | "red" {
   if (!grade) return "muted";
+  if (grade === "P" || grade === "PASS") return "green";
+  if (grade === "NP" || grade === "F") return "red";
   if (grade.startsWith("A")) return "green";
   if (grade.startsWith("B")) return "muted";
   return "red";
@@ -73,13 +75,19 @@ export function EnrollmentHistory({ enrollments }: EnrollmentHistoryProps) {
             {group.label}
           </h3>
           <GlassCard padding={false}>
-            <table className="w-full text-sm">
+            <table className="w-full text-sm table-fixed">
+              <colgroup>
+                <col className="w-32" />
+                <col />
+                <col className="w-16" />
+                <col className="w-24" />
+              </colgroup>
               <thead>
                 <tr className="border-b border-border-primary text-text-muted">
                   <th className="text-left px-4 py-3 font-medium">Code</th>
                   <th className="text-left px-4 py-3 font-medium">Course</th>
-                  <th className="text-right px-4 py-3 font-medium w-20">ECTS</th>
-                  <th className="text-center px-4 py-3 font-medium w-24">Grade</th>
+                  <th className="text-right px-4 py-3 font-medium">ECTS</th>
+                  <th className="text-center px-4 py-3 font-medium">Grade</th>
                 </tr>
               </thead>
               <tbody>
@@ -91,7 +99,7 @@ export function EnrollmentHistory({ enrollments }: EnrollmentHistoryProps) {
                     <td className="px-4 py-3 font-mono text-xs text-accent-green">
                       {e.course_code}
                     </td>
-                    <td className="px-4 py-3 text-text-primary">
+                    <td className="px-4 py-3 text-text-primary truncate">
                       {e.course_title}
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-text-secondary">

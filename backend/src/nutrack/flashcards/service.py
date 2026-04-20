@@ -60,11 +60,12 @@ def _session_grade_pct(session_obj) -> float | None:
     cards = session_obj.session_cards
     if not cards:
         return None
-    total_easy = sum(c.times_easy for c in cards)
+    # Easy = full credit, medium = half credit, hard = no credit
+    score = sum(c.times_easy + c.times_medium * 0.5 for c in cards)
     total = sum(c.times_easy + c.times_medium + c.times_hard for c in cards)
     if total == 0:
         return None
-    return round(total_easy / total * 100, 1)
+    return round(score / total * 100, 1)
 
 
 def _deck_list_item(deck) -> FlashcardDeckListItem:
@@ -135,7 +136,9 @@ def _review_response(session_obj) -> FlashcardSessionReviewResponse:
     total_medium = sum(c.times_medium for c in session_obj.session_cards)
     total_hard = sum(c.times_hard for c in session_obj.session_cards)
     total_responses = total_easy + total_medium + total_hard
-    grade_pct = round((total_easy / total_responses * 100) if total_responses > 0 else 0, 1)
+    # Easy = full credit, medium = half credit, hard = no credit
+    score = total_easy + total_medium * 0.5
+    grade_pct = round((score / total_responses * 100) if total_responses > 0 else 0, 1)
 
     struggled = sorted(
         [sc for sc in session_obj.session_cards if sc.times_hard + sc.times_medium > 0],
@@ -356,7 +359,9 @@ class FlashcardsService:
             medium = sum(c.times_medium for c in s.session_cards)
             hard = sum(c.times_hard for c in s.session_cards)
             total = easy + medium + hard
-            pct = round(easy / total * 100, 1) if total > 0 else 0.0
+            # Easy = full credit, medium = half credit, hard = no credit
+            score = easy + medium * 0.5
+            pct = round(score / total * 100, 1) if total > 0 else 0.0
             grade_pcts.append(pct)
             history_items.append(FlashcardSessionHistoryItem(
                 session_id=s.id,
@@ -372,11 +377,14 @@ class FlashcardsService:
         avg_pct = round(sum(grade_pcts) / len(grade_pcts), 1) if grade_pcts else None
         best_pct = max(grade_pcts) if grade_pcts else None
 
-        # Weighted predicted grade: last 3 sessions (50%, 30%, 20%)
+        # Weighted predicted grade: last 3 sessions (most recent weighted highest)
+        # Weights are normalised so they always sum to 1.0 regardless of session count
         predicted_pct: float | None = None
         if grade_pcts:
             recent = grade_pcts[-3:]
-            weights = [0.2, 0.3, 0.5][3 - len(recent):]
+            raw_weights = [0.2, 0.3, 0.5][3 - len(recent):]
+            total_w = sum(raw_weights)
+            weights = [w / total_w for w in raw_weights]
             predicted_pct = round(sum(p * w for p, w in zip(recent, weights)), 1)
 
         return FlashcardDeckHistoryResponse(
