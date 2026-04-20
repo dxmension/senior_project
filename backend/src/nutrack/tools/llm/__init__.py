@@ -5,7 +5,7 @@ from nutrack.tools.llm.exceptions import (
     LLMRefusalError,
     LLMResponseError,
 )
-from nutrack.tools.llm.service import parse_structured_response
+from nutrack.tools.llm.service import parse_structured_response, run_tool_conversation
 
 __all__ = [
     "LLMConfigurationError",
@@ -14,5 +14,5 @@ __all__ = [
     "LLMRefusalError",
     "LLMResponseError",
     "parse_structured_response",
+    "run_tool_conversation",
 ]
-

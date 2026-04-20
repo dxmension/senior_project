@@ -1,7 +1,7 @@
 import re
-from math import ceil
 from datetime import datetime, timezone
 from datetime import timedelta
+from math import ceil
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +11,7 @@ from nutrack.assessments.utils import assessment_label, mock_exam_title
 from nutrack.courses.models import CourseOffering
 from nutrack.enrollments.models import EnrollmentStatus
 from nutrack.enrollments.repository import EnrollmentRepository
+from nutrack.mock_exams.generation import MockExamGenerationService
 from nutrack.mock_exams.exceptions import (
     MockExamAttemptNotFoundError,
     MockExamForbiddenError,
@@ -22,9 +23,13 @@ from nutrack.mock_exams.models import (
     MockExam,
     MockExamAttempt,
     MockExamAttemptStatus,
+    MockExamGenerationJob,
+    MockExamGenerationSettings,
+    MockExamOrigin,
     MockExamQuestion,
     MockExamQuestionLink,
     MockExamQuestionSource,
+    MockExamVisibilityScope,
 )
 from nutrack.mock_exams.repository import (
     MockExamAttemptAnswerRepository,
@@ -88,6 +93,49 @@ def _question_source_label(source: MockExamQuestionSource) -> str:
 def _attempt_status_value(attempt: MockExamAttempt) -> str:
     status = attempt.status
     return status.value if hasattr(status, "value") else str(status)
+
+
+def _generation_settings_response(
+    settings: MockExamGenerationSettings,
+) -> dict:
+    return {
+        "id": settings.id,
+        "setting_key": settings.setting_key,
+        "assessment_type": settings.assessment_type.value if settings.assessment_type else None,
+        "enabled": settings.enabled,
+        "model": settings.model,
+        "temperature": settings.temperature,
+        "question_count": settings.question_count,
+        "time_limit_minutes": settings.time_limit_minutes,
+        "max_source_files": settings.max_source_files,
+        "max_source_chars": settings.max_source_chars,
+        "regeneration_offset_hours": settings.regeneration_offset_hours,
+        "new_question_ratio": settings.new_question_ratio,
+        "tricky_question_ratio": settings.tricky_question_ratio,
+        "created_at": settings.created_at,
+        "updated_at": settings.updated_at,
+    }
+
+
+def _generation_job_response(job: MockExamGenerationJob) -> dict:
+    return {
+        "id": job.id,
+        "assessment_id": job.assessment_id,
+        "user_id": job.user_id,
+        "course_offering_id": job.course_offering_id,
+        "course_id": job.course_id,
+        "assessment_type": job.assessment_type.value,
+        "assessment_number": job.assessment_number,
+        "trigger": job.trigger.value,
+        "status": job.status.value,
+        "run_at": job.run_at,
+        "attempts": job.attempts,
+        "celery_task_id": job.celery_task_id,
+        "error_message": job.error_message,
+        "generated_mock_exam_id": job.generated_mock_exam_id,
+        "created_at": job.created_at,
+        "updated_at": job.updated_at,
+    }
 
 
 def _attempt_expires_at(
@@ -223,11 +271,11 @@ class MockExamService:
             completed=False,
         )
         items = self._eligible_assessments(assessments)
-        allowed_types = self._eligible_exam_types(items)
+        allowed_keys = self._eligible_exam_keys(items)
         courses = self._current_study_courses(enrollments)
         course_ids = list(courses)
-        exams = await self.mock_exam_repo.list_matching(course_ids)
-        available = self._available_mock_exams(exams, allowed_types)
+        exams = await self.mock_exam_repo.list_matching_for_user(user_id, course_ids)
+        available = self._available_mock_exams(exams, allowed_keys)
         active_attempts = await self._sync_active_attempts(user_id, available)
         stats_map = await self._student_attempt_stats(user_id, available)
         prediction_map = await self._student_prediction_map(user_id, available)
@@ -390,6 +438,36 @@ class MockExamService:
             "questions": self._question_links_payload(exam),
         }
 
+    async def get_generation_settings(self) -> dict:
+        rows = await self._generation_service().list_settings()
+        return {
+            key: _generation_settings_response(rows[key])
+            for key in ("default", "quiz", "midterm", "final")
+        }
+
+    async def update_generation_settings(self, payload) -> dict:
+        rows = await self._generation_service().update_settings(
+            {
+                key: getattr(payload, key).model_dump()
+                for key in ("default", "quiz", "midterm", "final")
+            }
+        )
+        return {
+            key: _generation_settings_response(rows[key])
+            for key in ("default", "quiz", "midterm", "final")
+        }
+
+    async def list_generation_jobs(self, limit: int = 50) -> list[dict]:
+        jobs = await self._generation_service().list_jobs(limit)
+        return [_generation_job_response(job) for job in jobs]
+
+    async def retry_generation_job(self, job_id: int) -> dict:
+        service = self._generation_service()
+        job = await service.retry_job(job_id)
+        task_id = self._enqueue_generation_job(job)
+        await service.set_celery_task_id(job.id, task_id)
+        return _generation_job_response(job)
+
     async def create_mock_exam(self, admin_id: int, payload) -> dict:
         await self._validated_questions(payload.course_id, payload.questions)
         number = payload.assessment_number
@@ -398,6 +476,9 @@ class MockExamService:
             payload.course_id,
             payload.assessment_type.value,
             number,
+            origin=MockExamOrigin.MANUAL,
+            visibility_scope=MockExamVisibilityScope.COURSE,
+            owner_user_id=None,
         )
         version = 1 if not latest else latest.version + 1
         title = mock_exam_title(payload.assessment_type, number, version)
@@ -406,6 +487,9 @@ class MockExamService:
                 payload.course_id,
                 payload.assessment_type.value,
                 number,
+                origin=MockExamOrigin.MANUAL,
+                visibility_scope=MockExamVisibilityScope.COURSE,
+                owner_user_id=None,
             )
         exam = await self.mock_exam_repo.create(
             course_id=payload.course_id,
@@ -418,6 +502,10 @@ class MockExamService:
             question_count=len(payload.questions),
             time_limit_minutes=payload.time_limit_minutes,
             instructions=payload.instructions,
+            origin=MockExamOrigin.MANUAL,
+            visibility_scope=MockExamVisibilityScope.COURSE,
+            owner_user_id=None,
+            assessment_id=None,
             is_active=payload.is_active,
             created_by_admin_id=admin_id,
         )
@@ -487,6 +575,8 @@ class MockExamService:
             answer_variant_6=self._clean_optional_text(payload.answer_variant_6),
             correct_option_index=payload.correct_option_index,
             explanation=self._clean_optional_text(payload.explanation),
+            visibility_scope=MockExamVisibilityScope.COURSE,
+            owner_user_id=None,
             created_by_admin_id=admin_id,
         )
         return {**_question_response(question), "usage_count": 0}
@@ -532,26 +622,29 @@ class MockExamService:
             if item.assessment_type.value in ELIGIBLE_ASSESSMENT_TYPES
         ]
 
-    def _eligible_exam_types(
+    def _eligible_exam_keys(
         self,
         assessments: list[Assessment],
-    ) -> dict[int, set[str]]:
-        allowed: dict[int, set[str]] = {}
+    ) -> dict[int, set[tuple[str, int]]]:
+        allowed: dict[int, set[tuple[str, int]]] = {}
         for assessment in assessments:
             course_id = assessment.course_offering.course.id
-            types = allowed.setdefault(course_id, set())
-            types.add(assessment.assessment_type.value)
+            items = allowed.setdefault(course_id, set())
+            items.add((assessment.assessment_type.value, assessment.assessment_number))
         return allowed
 
     def _available_mock_exams(
         self,
         exams: list[MockExam],
-        allowed_types: dict[int, set[str]],
+        allowed_keys: dict[int, set[tuple[str, int]]],
     ) -> list[MockExam]:
         available = [
             exam
             for exam in exams
-            if exam.assessment_type.value in allowed_types.get(exam.course_id, set())
+            if (
+                exam.assessment_type.value,
+                _assessment_number(exam),
+            ) in allowed_keys.get(exam.course_id, set())
         ]
         return sorted(
             available,
@@ -682,6 +775,7 @@ class MockExamService:
                     "assessment_number": _assessment_number(exam),
                     "title": exam.title,
                     "assessment_type": exam.assessment_type.value,
+                    "origin": exam.origin.value,
                     "version": exam.version,
                     "question_count": exam.question_count,
                     "time_limit_minutes": exam.time_limit_minutes,
@@ -733,11 +827,24 @@ class MockExamService:
         mock_exam_id: int,
     ) -> MockExam:
         exam = await self._load_mock_exam(mock_exam_id)
-        assessments = await self.assessment_repo.get_by_user(user_id)
+        if (
+            exam.visibility_scope == MockExamVisibilityScope.PERSONAL
+            and exam.owner_user_id == user_id
+        ):
+            return exam
+        if exam.visibility_scope == MockExamVisibilityScope.PERSONAL:
+            raise MockExamForbiddenError()
+        assessments = await self.assessment_repo.get_by_user(
+            user_id,
+            upcoming_only=True,
+            completed=False,
+        )
         for assessment in assessments:
             if assessment.course_offering.course.id != exam.course_id:
                 continue
-            if assessment.assessment_type.value == exam.assessment_type.value:
+            if assessment.assessment_type.value != exam.assessment_type.value:
+                continue
+            if assessment.assessment_number == _assessment_number(exam):
                 return exam
         raise MockExamForbiddenError()
 
@@ -1180,3 +1287,19 @@ class MockExamService:
             "created_at": exam.created_at,
             "updated_at": exam.updated_at,
         }
+
+    def _generation_service(self) -> MockExamGenerationService:
+        return MockExamGenerationService(self.session)
+
+    def _enqueue_generation_job(self, job: MockExamGenerationJob) -> str | None:
+        from nutrack.mock_exams.tasks import generate_assessment_mock_exam_task
+
+        now = datetime.now(timezone.utc)
+        if job.run_at <= now:
+            task = generate_assessment_mock_exam_task.delay(job.id)
+        else:
+            task = generate_assessment_mock_exam_task.apply_async(
+                args=[job.id],
+                eta=job.run_at,
+            )
+        return getattr(task, "id", None)

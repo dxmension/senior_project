@@ -343,6 +343,8 @@ export type AssessmentType =
   | "presentation"
   | "other";
 
+export type MockExamOrigin = "manual" | "ai";
+
 export interface Assessment {
   id: number;
   course_id: number;
@@ -443,6 +445,11 @@ export interface UpdateAssessmentPayload {
   score?: number;
   max_score?: number;
   is_completed?: boolean;
+}
+
+export interface MockExamGenerationQueued {
+  job_id: number;
+  status: string;
 }
 
 export type CalendarEventType =
@@ -620,6 +627,7 @@ export interface MockExamListItem {
   assessment_number: number;
   title: string;
   assessment_type: AssessmentType;
+  origin: MockExamOrigin;
   version: number;
   question_count: number;
   time_limit_minutes: number | null;

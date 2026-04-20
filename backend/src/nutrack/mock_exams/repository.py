@@ -1,4 +1,6 @@
-from sqlalchemy import func, select
+from datetime import datetime
+
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -9,8 +11,13 @@ from nutrack.mock_exams.models import (
     MockExamAttempt,
     MockExamAttemptAnswer,
     MockExamAttemptStatus,
+    MockExamGenerationJob,
+    MockExamGenerationSettings,
+    MockExamGenerationStatus,
+    MockExamOrigin,
     MockExamQuestion,
     MockExamQuestionLink,
+    MockExamVisibilityScope,
 )
 
 
@@ -68,13 +75,23 @@ class MockExamRepository(BaseRepository[MockExam]):
         result = await self.session.execute(stmt)
         return list(result.scalars().unique().all())
 
-    async def list_matching(self, course_ids: list[int]) -> list[MockExam]:
+    async def list_matching_for_user(
+        self,
+        user_id: int,
+        course_ids: list[int],
+    ) -> list[MockExam]:
         if not course_ids:
             return []
         stmt = (
             select(MockExam)
             .options(_mock_exam_loader(), _mock_exam_question_loader())
             .where(MockExam.course_id.in_(course_ids))
+            .where(
+                or_(
+                    MockExam.visibility_scope == MockExamVisibilityScope.COURSE,
+                    MockExam.owner_user_id == user_id,
+                )
+            )
             .order_by(MockExam.course_id.asc(), MockExam.created_at.desc())
         )
         result = await self.session.execute(stmt)
@@ -85,6 +102,10 @@ class MockExamRepository(BaseRepository[MockExam]):
         course_id: int,
         assessment_type: str,
         assessment_number: int,
+        *,
+        origin: MockExamOrigin | None = None,
+        visibility_scope: MockExamVisibilityScope | None = None,
+        owner_user_id: int | None = None,
     ) -> MockExam | None:
         stmt = (
             select(MockExam)
@@ -96,6 +117,12 @@ class MockExamRepository(BaseRepository[MockExam]):
             .order_by(MockExam.version.desc())
             .limit(1)
         )
+        stmt = _exam_scope_stmt(
+            stmt,
+            origin=origin,
+            visibility_scope=visibility_scope,
+            owner_user_id=owner_user_id,
+        )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -104,6 +131,10 @@ class MockExamRepository(BaseRepository[MockExam]):
         course_id: int,
         assessment_type: str,
         assessment_number: int,
+        *,
+        origin: MockExamOrigin | None = None,
+        visibility_scope: MockExamVisibilityScope | None = None,
+        owner_user_id: int | None = None,
     ) -> MockExam | None:
         stmt = (
             select(MockExam)
@@ -116,6 +147,12 @@ class MockExamRepository(BaseRepository[MockExam]):
             )
             .limit(1)
         )
+        stmt = _exam_scope_stmt(
+            stmt,
+            origin=origin,
+            visibility_scope=visibility_scope,
+            owner_user_id=owner_user_id,
+        )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -124,6 +161,10 @@ class MockExamRepository(BaseRepository[MockExam]):
         course_id: int,
         assessment_type: str,
         assessment_number: int,
+        *,
+        origin: MockExamOrigin | None = None,
+        visibility_scope: MockExamVisibilityScope | None = None,
+        owner_user_id: int | None = None,
     ) -> None:
         stmt = (
             select(MockExam)
@@ -133,6 +174,12 @@ class MockExamRepository(BaseRepository[MockExam]):
                 MockExam.assessment_number == assessment_number,
                 MockExam.is_active.is_(True),
             )
+        )
+        stmt = _exam_scope_stmt(
+            stmt,
+            origin=origin,
+            visibility_scope=visibility_scope,
+            owner_user_id=owner_user_id,
         )
         result = await self.session.execute(stmt)
         for exam in result.scalars().all():
@@ -156,6 +203,26 @@ class MockExamQuestionRepository(BaseRepository[MockExamQuestion]):
             select(MockExamQuestion)
             .options(_question_offering_loader())
             .where(MockExamQuestion.course_id == course_id)
+            .order_by(MockExamQuestion.updated_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_visible_for_user(
+        self,
+        course_id: int,
+        user_id: int,
+    ) -> list[MockExamQuestion]:
+        stmt = (
+            select(MockExamQuestion)
+            .options(_question_offering_loader())
+            .where(MockExamQuestion.course_id == course_id)
+            .where(
+                or_(
+                    MockExamQuestion.visibility_scope == MockExamVisibilityScope.COURSE,
+                    MockExamQuestion.owner_user_id == user_id,
+                )
+            )
             .order_by(MockExamQuestion.updated_at.desc())
         )
         result = await self.session.execute(stmt)
@@ -303,6 +370,88 @@ class MockExamAttemptRepository(BaseRepository[MockExamAttempt]):
         return _aggregate_attempt_stats(result.scalars().all())
 
 
+class MockExamGenerationSettingsRepository(
+    BaseRepository[MockExamGenerationSettings]
+):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, MockExamGenerationSettings)
+
+    async def list_all(self) -> list[MockExamGenerationSettings]:
+        stmt = select(MockExamGenerationSettings).order_by(
+            MockExamGenerationSettings.setting_key.asc()
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_by_key(self, setting_key: str) -> MockExamGenerationSettings | None:
+        stmt = (
+            select(MockExamGenerationSettings)
+            .where(MockExamGenerationSettings.setting_key == setting_key)
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+
+class MockExamGenerationJobRepository(BaseRepository[MockExamGenerationJob]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, MockExamGenerationJob)
+
+    async def list_by_assessment(self, assessment_id: int) -> list[MockExamGenerationJob]:
+        stmt = (
+            select(MockExamGenerationJob)
+            .where(MockExamGenerationJob.assessment_id == assessment_id)
+            .order_by(MockExamGenerationJob.run_at.asc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_recent(
+        self,
+        limit: int = 50,
+    ) -> list[MockExamGenerationJob]:
+        stmt = (
+            select(MockExamGenerationJob)
+            .order_by(MockExamGenerationJob.created_at.desc())
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def cancel_pending_for_assessment(self, assessment_id: int) -> int:
+        stmt = (
+            select(MockExamGenerationJob)
+            .where(MockExamGenerationJob.assessment_id == assessment_id)
+            .where(
+                MockExamGenerationJob.status.in_(
+                    (
+                        MockExamGenerationStatus.QUEUED,
+                        MockExamGenerationStatus.RUNNING,
+                    )
+                )
+            )
+        )
+        result = await self.session.execute(stmt)
+        jobs = list(result.scalars().all())
+        for job in jobs:
+            job.status = MockExamGenerationStatus.CANCELLED
+        await self.session.flush()
+        return len(jobs)
+
+    async def list_due(
+        self,
+        now: datetime,
+    ) -> list[MockExamGenerationJob]:
+        stmt = (
+            select(MockExamGenerationJob)
+            .where(MockExamGenerationJob.status == MockExamGenerationStatus.QUEUED)
+            .where(MockExamGenerationJob.run_at <= now)
+            .order_by(MockExamGenerationJob.run_at.asc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+
 class MockExamAttemptAnswerRepository(BaseRepository[MockExamAttemptAnswer]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, MockExamAttemptAnswer)
@@ -375,3 +524,19 @@ def _aggregate_attempt_stats(
         current.pop("_latest_completed_at", None)
         current.pop("_completed_scores", None)
     return stats
+
+
+def _exam_scope_stmt(
+    stmt,
+    *,
+    origin: MockExamOrigin | None,
+    visibility_scope: MockExamVisibilityScope | None,
+    owner_user_id: int | None,
+):
+    if origin is not None:
+        stmt = stmt.where(MockExam.origin == origin)
+    if visibility_scope is not None:
+        stmt = stmt.where(MockExam.visibility_scope == visibility_scope)
+    if owner_user_id is not None:
+        stmt = stmt.where(MockExam.owner_user_id == owner_user_id)
+    return stmt

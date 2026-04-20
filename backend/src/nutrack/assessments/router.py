@@ -4,6 +4,7 @@ from nutrack.assessments.dependencies import get_assessment_service
 from nutrack.assessments.schemas import (
     AssessmentResponse,
     CreateAssessmentRequest,
+    MockExamGenerationQueuedResponse,
     UpdateAssessmentRequest,
 )
 from nutrack.assessments.service import AssessmentService
@@ -64,6 +65,19 @@ async def update_assessment(
 ):
     assessment = await service.update_assessment(user.id, assessment_id, body)
     return ApiResponse(data=assessment)
+
+
+@router.post(
+    "/{assessment_id}/generate-mock-exam",
+    response_model=ApiResponse[MockExamGenerationQueuedResponse],
+)
+async def generate_mock_exam(
+    assessment_id: int,
+    user: User = Depends(get_current_user),
+    service: AssessmentService = Depends(get_assessment_service),
+):
+    job = await service.generate_mock_exam(user.id, assessment_id)
+    return ApiResponse(data=job)
 
 
 @router.delete("/{assessment_id}", response_model=ApiResponse[None])

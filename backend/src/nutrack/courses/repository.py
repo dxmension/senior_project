@@ -377,6 +377,15 @@ class CourseOfferingRepository(BaseRepository[CourseOffering]):
     def __init__(self, session: AsyncSession):
         super().__init__(session, CourseOffering)
 
+    async def get_by_id_with_course(self, offering_id: int) -> CourseOffering | None:
+        stmt = (
+            select(CourseOffering)
+            .where(CourseOffering.id == offering_id)
+            .options(joinedload(CourseOffering.course))
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def get_by_identity(
         self,
         course_id: int,

@@ -26,7 +26,7 @@ export function FlashcardExamPicker({ exams }: FlashcardExamPickerProps) {
     setError(null);
     try {
       const res = await api.get<ApiResponse<Flashcard[]>>(
-        `/study/mock-exams/${examId}/flashcards`,
+        `/flashcards/mock-exams/${examId}`,
       );
       setCards(res.data ?? []);
       setSelectedExamId(examId);

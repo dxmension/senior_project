@@ -36,6 +36,7 @@ export function MaterialsManagement({
   const [publishForm, setPublishForm] = useState(defaultForm());
   const [submittingId, setSubmittingId] = useState<number | null>(null);
   const [unpublishTarget, setUnpublishTarget] = useState<AdminMaterialUpload | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AdminMaterialUpload | null>(null);
 
   async function loadMaterials() {
     setLoading(true);
@@ -105,6 +106,7 @@ export function MaterialsManagement({
     setSubmittingId(item.id);
     try {
       await api.delete<ApiResponse>(`/admin/course-materials/uploads/${item.id}`);
+      setDeleteTarget(null);
       await loadMaterials();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete");
@@ -242,7 +244,7 @@ export function MaterialsManagement({
                           <button
                             type="button"
                             disabled={submittingId === item.id}
-                            onClick={() => void remove(item)}
+                            onClick={() => setDeleteTarget(item)}
                             className="rounded-lg border border-border-primary px-3 py-2 text-xs text-accent-red transition-colors hover:bg-accent-red-dim"
                           >
                             <span className="inline-flex items-center gap-1">
@@ -332,7 +334,7 @@ export function MaterialsManagement({
         title="Unpublish Material?"
         message={
           unpublishTarget
-            ? `This will remove "${unpublishTarget.shared_title ?? unpublishTarget.original_filename}" from the shared library.`
+            ? `This will remove "${unpublishTarget.shared_title ?? unpublishTarget.original_filename}" from shared library.`
             : ""
         }
         confirmLabel="Unpublish"
@@ -343,6 +345,27 @@ export function MaterialsManagement({
           if (!unpublishTarget) return;
           void unpublish(unpublishTarget);
           setUnpublishTarget(null);
+        }}
+      />
+
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        title="Delete Material"
+        message={
+          deleteTarget
+            ? `Delete "${deleteTarget.original_filename}" permanently? This action cannot be undone.`
+            : ""
+        }
+        confirmLabel={submittingId ? "Deleting..." : "Delete"}
+        cancelLabel="Cancel"
+        variant="danger"
+        onCancel={() => {
+          if (submittingId) return;
+          setDeleteTarget(null);
+        }}
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          void remove(deleteTarget);
         }}
       />
     </div>

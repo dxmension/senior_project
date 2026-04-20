@@ -37,23 +37,78 @@ class MockExamQuestionSource(str, enum.Enum):
     TUTOR_MADE = "tutor_made"
 
 
+class MockExamOrigin(str, enum.Enum):
+    MANUAL = "manual"
+    AI = "ai"
+
+
+class MockExamVisibilityScope(str, enum.Enum):
+    COURSE = "course"
+    PERSONAL = "personal"
+
+
+class MockExamGenerationTrigger(str, enum.Enum):
+    CREATE = "create"
+    UPDATE = "update"
+    DEADLINE_REMINDER = "deadline_reminder"
+    RETRY = "retry"
+
+
+class MockExamGenerationStatus(str, enum.Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    SKIPPED = "skipped"
+
+
 class MockExam(Base, IDMixin, TimestampMixin):
     __tablename__ = "mock_exams"
     __table_args__ = (
-        UniqueConstraint(
+        Index(
+            "uq_mock_exams_version_course",
             "course_id",
             "assessment_type",
             "assessment_number",
+            "origin",
             "version",
-            name="uq_mock_exams_version",
+            unique=True,
+            postgresql_where=sa.text("visibility_scope = 'course'"),
         ),
         Index(
-            "uq_mock_exams_active",
+            "uq_mock_exams_version_personal",
             "course_id",
             "assessment_type",
             "assessment_number",
+            "origin",
+            "owner_user_id",
+            "version",
             unique=True,
-            postgresql_where=sa.text("is_active = true"),
+            postgresql_where=sa.text("visibility_scope = 'personal'"),
+        ),
+        Index(
+            "uq_mock_exams_active_course",
+            "course_id",
+            "assessment_type",
+            "assessment_number",
+            "origin",
+            unique=True,
+            postgresql_where=sa.text(
+                "is_active = true AND visibility_scope = 'course'"
+            ),
+        ),
+        Index(
+            "uq_mock_exams_active_personal",
+            "course_id",
+            "assessment_type",
+            "assessment_number",
+            "origin",
+            "owner_user_id",
+            unique=True,
+            postgresql_where=sa.text(
+                "is_active = true AND visibility_scope = 'personal'"
+            ),
         ),
         Index("ix_mock_exams_course_id", "course_id"),
     )
@@ -80,6 +135,34 @@ class MockExam(Base, IDMixin, TimestampMixin):
     question_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     time_limit_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    origin: Mapped[MockExamOrigin] = mapped_column(
+        sa.Enum(
+            MockExamOrigin,
+            name="mockexamorigin",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        nullable=False,
+        default=MockExamOrigin.MANUAL,
+    )
+    visibility_scope: Mapped[MockExamVisibilityScope] = mapped_column(
+        sa.Enum(
+            MockExamVisibilityScope,
+            name="mockexamvisibilityscope",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        nullable=False,
+        default=MockExamVisibilityScope.COURSE,
+    )
+    owner_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    assessment_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("assessments.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_by_admin_id: Mapped[int] = mapped_column(
         Integer,
@@ -88,7 +171,10 @@ class MockExam(Base, IDMixin, TimestampMixin):
     )
 
     course: Mapped["Course"] = relationship()
-    created_by_admin: Mapped["User"] = relationship()
+    created_by_admin: Mapped["User"] = relationship(
+        foreign_keys=[created_by_admin_id]
+    )
+    owner_user: Mapped["User | None"] = relationship(foreign_keys=[owner_user_id])
     question_links: Mapped[list["MockExamQuestionLink"]] = relationship(
         back_populates="mock_exam",
         cascade="all, delete-orphan",
@@ -147,6 +233,21 @@ class MockExamQuestion(Base, IDMixin, TimestampMixin):
     answer_variant_6: Mapped[str | None] = mapped_column(Text, nullable=True)
     correct_option_index: Mapped[int] = mapped_column(Integer, nullable=False)
     explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    visibility_scope: Mapped[MockExamVisibilityScope] = mapped_column(
+        sa.Enum(
+            MockExamVisibilityScope,
+            name="mockexamvisibilityscope",
+            values_callable=lambda obj: [e.value for e in obj],
+            create_type=False,
+        ),
+        nullable=False,
+        default=MockExamVisibilityScope.COURSE,
+    )
+    owner_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+    )
     created_by_admin_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -155,7 +256,10 @@ class MockExamQuestion(Base, IDMixin, TimestampMixin):
 
     course: Mapped["Course"] = relationship()
     historical_course_offering: Mapped["CourseOffering | None"] = relationship()
-    created_by_admin: Mapped["User"] = relationship()
+    created_by_admin: Mapped["User"] = relationship(
+        foreign_keys=[created_by_admin_id]
+    )
+    owner_user: Mapped["User | None"] = relationship(foreign_keys=[owner_user_id])
     mock_exam_links: Mapped[list["MockExamQuestionLink"]] = relationship(
         back_populates="question"
     )
@@ -277,3 +381,100 @@ class MockExamAttemptAnswer(Base, IDMixin, TimestampMixin):
 
     attempt: Mapped[MockExamAttempt] = relationship(back_populates="answers")
     question_link: Mapped[MockExamQuestionLink] = relationship(back_populates="answers")
+
+
+class MockExamGenerationSettings(Base, IDMixin, TimestampMixin):
+    __tablename__ = "mock_exam_generation_settings"
+    __table_args__ = (
+        UniqueConstraint("setting_key", name="uq_mock_exam_generation_settings_key"),
+    )
+
+    setting_key: Mapped[str] = mapped_column(String(32), nullable=False)
+    assessment_type: Mapped[AssessmentType | None] = mapped_column(
+        sa.Enum(
+            AssessmentType,
+            name="assessment_type",
+            values_callable=lambda obj: [e.value for e in obj],
+            create_type=False,
+        ),
+        nullable=True,
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    model: Mapped[str] = mapped_column(String(64), nullable=False)
+    temperature: Mapped[float] = mapped_column(Float, nullable=False, default=0.2)
+    question_count: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
+    time_limit_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_source_files: Mapped[int] = mapped_column(Integer, nullable=False, default=6)
+    max_source_chars: Mapped[int] = mapped_column(Integer, nullable=False, default=24000)
+    regeneration_offset_hours: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=24,
+    )
+    new_question_ratio: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
+    tricky_question_ratio: Mapped[float] = mapped_column(Float, nullable=False, default=0.3)
+
+
+class MockExamGenerationJob(Base, IDMixin, TimestampMixin):
+    __tablename__ = "mock_exam_generation_jobs"
+    __table_args__ = (
+        Index("ix_mock_exam_generation_jobs_assessment", "assessment_id"),
+        Index("ix_mock_exam_generation_jobs_status_run_at", "status", "run_at"),
+    )
+
+    assessment_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("assessments.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    course_offering_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("course_offerings.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    course_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    assessment_type: Mapped[AssessmentType] = mapped_column(
+        sa.Enum(
+            AssessmentType,
+            name="assessment_type",
+            values_callable=lambda obj: [e.value for e in obj],
+            create_type=False,
+        ),
+        nullable=False,
+    )
+    assessment_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    trigger: Mapped[MockExamGenerationTrigger] = mapped_column(
+        sa.Enum(
+            MockExamGenerationTrigger,
+            name="mockexamgenerationtrigger",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        nullable=False,
+    )
+    status: Mapped[MockExamGenerationStatus] = mapped_column(
+        sa.Enum(
+            MockExamGenerationStatus,
+            name="mockexamgenerationstatus",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        nullable=False,
+        default=MockExamGenerationStatus.QUEUED,
+    )
+    run_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    celery_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    generated_mock_exam_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("mock_exams.id", ondelete="SET NULL"),
+        nullable=True,
+    )

@@ -8,16 +8,10 @@ import { ProfileHeader } from "@/components/profile/profile-header";
 import { StatsGrid } from "@/components/profile/stats-grid";
 import { EnrollmentHistory } from "@/components/profile/enrollment-history";
 import { AuditSection } from "@/components/profile/audit-section";
-import { DegreePlanSection } from "@/components/profile/degree-plan";
-import type { ApiResponse, UserStats, EnrollmentItem, AuditResult, DegreePlan } from "@/types";
+import { GpaCalculator } from "@/components/profile/gpa-calculator";
+import type { ApiResponse, UserStats, EnrollmentItem, AuditResult } from "@/types";
 
-type Tab = "audit" | "plan" | "history";
-
-const TAB_LABELS: Record<Tab, string> = {
-  audit: "Degree Audit",
-  plan: "Registration Plan",
-  history: "Course History",
-};
+type Tab = "audit" | "history" | "gpa";
 
 export default function ProfilePage() {
   const { user } = useAuthStore();
@@ -69,6 +63,7 @@ export default function ProfilePage() {
       <div>
         <div className="flex gap-1 border-b border-border-primary mb-6">
           {(["audit", "plan", "history"] as Tab[]).map((tab) => (
+          {(["audit", "history", "gpa"] as Tab[]).map((tab) => (
             <button
               key={tab}
               type="button"
@@ -106,6 +101,10 @@ export default function ProfilePage() {
 
         {activeTab === "history" && (
           <EnrollmentHistory enrollments={enrollments} />
+        )}
+
+        {activeTab === "gpa" && (
+          <GpaCalculator enrollments={enrollments} />
         )}
       </div>
     </div>

@@ -14,7 +14,9 @@ from nutrack.course_materials.models import (
 from nutrack.course_materials.service import CourseMaterialService
 from nutrack.mock_exams.models import (
     MockExamAttemptStatus,
+    MockExamOrigin,
     MockExamQuestionSource,
+    MockExamVisibilityScope,
 )
 from nutrack.mock_exams.service import MockExamService
 
@@ -377,7 +379,7 @@ async def test_list_mock_exams_returns_available_course_exams_by_type() -> None:
         )
     )
     service.mock_exam_repo = SimpleNamespace(
-        list_matching=AsyncMock(return_value=[latest_exam, older_exam]),
+        list_matching_for_user=AsyncMock(return_value=[latest_exam, older_exam]),
     )
     service.mock_exam_attempt_repo = SimpleNamespace(
         list_active_for_user_exams=AsyncMock(
@@ -756,8 +758,22 @@ async def test_create_mock_exam_uses_assessment_number_family() -> None:
     result = await service.create_mock_exam(99, payload)
 
     assert result == {"exam": {"id": 44}}
-    service.mock_exam_repo.get_latest_version.assert_awaited_once_with(2, "quiz", 3)
-    service.mock_exam_repo.deactivate_family.assert_awaited_once_with(2, "quiz", 3)
+    service.mock_exam_repo.get_latest_version.assert_awaited_once_with(
+        2,
+        "quiz",
+        3,
+        origin=MockExamOrigin.MANUAL,
+        visibility_scope=MockExamVisibilityScope.COURSE,
+        owner_user_id=None,
+    )
+    service.mock_exam_repo.deactivate_family.assert_awaited_once_with(
+        2,
+        "quiz",
+        3,
+        origin=MockExamOrigin.MANUAL,
+        visibility_scope=MockExamVisibilityScope.COURSE,
+        owner_user_id=None,
+    )
     service.mock_exam_repo.create.assert_awaited_once_with(
         course_id=2,
         assessment_type=AssessmentType.QUIZ,
@@ -769,6 +785,10 @@ async def test_create_mock_exam_uses_assessment_number_family() -> None:
         question_count=2,
         time_limit_minutes=25,
         instructions="Answer everything.",
+        origin=MockExamOrigin.MANUAL,
+        visibility_scope=MockExamVisibilityScope.COURSE,
+        owner_user_id=None,
+        assessment_id=None,
         is_active=True,
         created_by_admin_id=99,
     )

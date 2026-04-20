@@ -70,6 +70,74 @@ def _mock_exam_dashboard() -> dict:
     }
 
 
+def _generation_settings_payload() -> dict:
+    row = {
+        "id": 1,
+        "enabled": True,
+        "model": "gpt-5.1-mini",
+        "temperature": 0.2,
+        "question_count": 20,
+        "time_limit_minutes": 40,
+        "max_source_files": 6,
+        "max_source_chars": 24000,
+        "regeneration_offset_hours": 24,
+        "new_question_ratio": 0.5,
+        "tricky_question_ratio": 0.3,
+        "created_at": "2026-04-19T10:00:00Z",
+        "updated_at": "2026-04-19T10:00:00Z",
+    }
+    return {
+        "default": {
+            **row,
+            "setting_key": "default",
+            "assessment_type": None,
+        },
+        "quiz": {
+            **row,
+            "id": 2,
+            "setting_key": "quiz",
+            "assessment_type": "quiz",
+            "question_count": 12,
+            "time_limit_minutes": 20,
+        },
+        "midterm": {
+            **row,
+            "id": 3,
+            "setting_key": "midterm",
+            "assessment_type": "midterm",
+        },
+        "final": {
+            **row,
+            "id": 4,
+            "setting_key": "final",
+            "assessment_type": "final",
+            "question_count": 30,
+            "time_limit_minutes": 60,
+        },
+    }
+
+
+def _generation_job_payload() -> dict:
+    return {
+        "id": 9,
+        "assessment_id": 7,
+        "user_id": 1,
+        "course_offering_id": 4,
+        "course_id": 2,
+        "assessment_type": "midterm",
+        "assessment_number": 1,
+        "trigger": "create",
+        "status": "queued",
+        "run_at": "2026-04-19T12:00:00Z",
+        "attempts": 0,
+        "celery_task_id": "task-123",
+        "error_message": None,
+        "generated_mock_exam_id": None,
+        "created_at": "2026-04-19T10:00:00Z",
+        "updated_at": "2026-04-19T10:00:00Z",
+    }
+
+
 def test_course_materials_router_keeps_prefix_and_tags() -> None:
     assert course_materials_router.prefix == "/course-materials"
     assert course_materials_router.tags == ["course_materials"]
@@ -463,3 +531,119 @@ async def test_admin_list_mock_exams_returns_items(client, test_app) -> None:
     assert response.status_code == 200
     assert response.json()["data"][0]["version"] == 2
     service.list_admin_mock_exams.assert_awaited_once_with(2)
+
+
+@pytest.mark.asyncio
+async def test_admin_get_mock_exam_generation_settings(client, test_app) -> None:
+    admin = SimpleNamespace(id=99, is_admin=True, email="admin@nu.edu.kz")
+    payload = _generation_settings_payload()
+    service = SimpleNamespace(get_generation_settings=AsyncMock(return_value=payload))
+    test_app.dependency_overrides[get_current_admin_user] = lambda: admin
+    test_app.dependency_overrides[get_mock_exam_service] = lambda: service
+
+    response = await client.get("/v1/admin/mock-exams/ai-settings")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["quiz"]["question_count"] == 12
+    service.get_generation_settings.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_admin_update_mock_exam_generation_settings(client, test_app) -> None:
+    admin = SimpleNamespace(id=99, is_admin=True, email="admin@nu.edu.kz")
+    payload = _generation_settings_payload()
+    service = SimpleNamespace(
+        update_generation_settings=AsyncMock(return_value=payload)
+    )
+    test_app.dependency_overrides[get_current_admin_user] = lambda: admin
+    test_app.dependency_overrides[get_mock_exam_service] = lambda: service
+
+    response = await client.put(
+        "/v1/admin/mock-exams/ai-settings",
+        json={
+            "default": {
+                "enabled": True,
+                "model": "gpt-5.1-mini",
+                "temperature": 0.2,
+                "question_count": 20,
+                "time_limit_minutes": 40,
+                "max_source_files": 6,
+                "max_source_chars": 24000,
+                "regeneration_offset_hours": 24,
+                "new_question_ratio": 0.5,
+                "tricky_question_ratio": 0.3,
+            },
+            "quiz": {
+                "enabled": True,
+                "model": "gpt-5.1-mini",
+                "temperature": 0.2,
+                "question_count": 12,
+                "time_limit_minutes": 20,
+                "max_source_files": 6,
+                "max_source_chars": 24000,
+                "regeneration_offset_hours": 24,
+                "new_question_ratio": 0.5,
+                "tricky_question_ratio": 0.3,
+            },
+            "midterm": {
+                "enabled": True,
+                "model": "gpt-5.1-mini",
+                "temperature": 0.2,
+                "question_count": 20,
+                "time_limit_minutes": 40,
+                "max_source_files": 6,
+                "max_source_chars": 24000,
+                "regeneration_offset_hours": 24,
+                "new_question_ratio": 0.5,
+                "tricky_question_ratio": 0.3,
+            },
+            "final": {
+                "enabled": True,
+                "model": "gpt-5.1-mini",
+                "temperature": 0.2,
+                "question_count": 30,
+                "time_limit_minutes": 60,
+                "max_source_files": 6,
+                "max_source_chars": 24000,
+                "regeneration_offset_hours": 24,
+                "new_question_ratio": 0.5,
+                "tricky_question_ratio": 0.3,
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["final"]["time_limit_minutes"] == 60
+    service.update_generation_settings.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_admin_list_mock_exam_generation_jobs(client, test_app) -> None:
+    admin = SimpleNamespace(id=99, is_admin=True, email="admin@nu.edu.kz")
+    payload = [_generation_job_payload()]
+    service = SimpleNamespace(list_generation_jobs=AsyncMock(return_value=payload))
+    test_app.dependency_overrides[get_current_admin_user] = lambda: admin
+    test_app.dependency_overrides[get_mock_exam_service] = lambda: service
+
+    response = await client.get("/v1/admin/mock-exams/generation-jobs?limit=25")
+
+    assert response.status_code == 200
+    assert response.json()["data"][0]["trigger"] == "create"
+    service.list_generation_jobs.assert_awaited_once_with(25)
+
+
+@pytest.mark.asyncio
+async def test_admin_retry_mock_exam_generation_job(client, test_app) -> None:
+    admin = SimpleNamespace(id=99, is_admin=True, email="admin@nu.edu.kz")
+    payload = {**_generation_job_payload(), "id": 10, "trigger": "retry"}
+    service = SimpleNamespace(
+        retry_generation_job=AsyncMock(return_value=payload)
+    )
+    test_app.dependency_overrides[get_current_admin_user] = lambda: admin
+    test_app.dependency_overrides[get_mock_exam_service] = lambda: service
+
+    response = await client.post("/v1/admin/mock-exams/generation-jobs/10/retry")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["id"] == 10
+    service.retry_generation_job.assert_awaited_once_with(10)

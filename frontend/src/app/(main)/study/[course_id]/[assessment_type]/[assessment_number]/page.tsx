@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, PlayCircle } from "lucide-react";
+import { ArrowLeft, Brain, LoaderCircle, PlayCircle } from "lucide-react";
 
 import { MockExamCountdown } from "@/components/study/mock-exam-countdown";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -14,7 +14,9 @@ import { findStudyGroupByRouteCourseId } from "@/lib/study-course-route";
 import { findMockExamFamily, sortMockExams } from "@/lib/study-mock-families";
 import type {
   ApiResponse,
+  Assessment,
   EnrollmentItem,
+  MockExamGenerationQueued,
   MockExamCourseGroup,
   MockExamListItem,
 } from "@/types";
@@ -58,17 +60,27 @@ export default function StudyAssessmentFamilyPage({
   const courseId = Number(course_id);
   const assessmentNumber = Number(assessment_number);
   const [group, setGroup] = useState<MockExamCourseGroup | null>(null);
+  const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const examsBeforeGenerate = useRef<number>(0);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   async function loadFamilyData(silent = false) {
     if (!silent) setLoading(true);
     setError(null);
     try {
-      const [studyResponse, enrollmentResponse] = await Promise.all([
-        api.get<ApiResponse<MockExamCourseGroup[]>>("/mock-exams"),
-        api.get<ApiResponse<EnrollmentItem[]>>("/enrollments?status=in_progress"),
-      ]);
+      const [studyResponse, enrollmentResponse, assessmentsResponse] =
+        await Promise.all([
+          api.get<ApiResponse<MockExamCourseGroup[]>>("/mock-exams"),
+          api.get<ApiResponse<EnrollmentItem[]>>(
+            "/enrollments?status=in_progress"
+          ),
+          api.get<ApiResponse<Assessment[]>>(
+            `/assessments?course_id=${courseId}`
+          ),
+        ]);
       const next = findStudyGroupByRouteCourseId(
         studyResponse.data ?? [],
         enrollmentResponse.data ?? [],
@@ -78,6 +90,7 @@ export default function StudyAssessmentFamilyPage({
         throw new Error("Study course not found");
       }
       setGroup(next);
+      setAssessments(assessmentsResponse.data ?? []);
     } catch (err) {
       const message = err instanceof Error
         ? err.message
@@ -104,10 +117,59 @@ export default function StudyAssessmentFamilyPage({
     () => (family ? sortMockExams(family.exams) : []),
     [family],
   );
+  const assessment = useMemo(
+    () => assessments.find((item) => (
+      item.assessment_type === assessment_type
+      && item.assessment_number === assessmentNumber
+    )) ?? null,
+    [assessmentNumber, assessment_type, assessments],
+  );
   const predicted = predictedGradeBadge(
     family?.predictedLetter ?? null,
     family?.predictedScore ?? null,
   );
+
+  function stopPolling() {
+    if (pollIntervalRef.current !== null) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  }
+
+  // Stop polling and mark done when a new exam appears
+  useEffect(() => {
+    if (!isGenerating) return;
+    if (familyExams.length > examsBeforeGenerate.current) {
+      stopPolling();
+      setIsGenerating(false);
+    }
+  }, [familyExams.length, isGenerating]);
+
+  useEffect(() => () => stopPolling(), []);
+
+  async function handleGenerateMock() {
+    if (!assessment) return;
+    examsBeforeGenerate.current = familyExams.length;
+    setIsGenerating(true);
+    try {
+      await api.post<ApiResponse<MockExamGenerationQueued>>(
+        `/assessments/${assessment.id}/generate-mock-exam`
+      );
+    } catch {
+      setIsGenerating(false);
+      return;
+    }
+    // Poll every 2.5s, max 60s
+    let elapsed = 0;
+    pollIntervalRef.current = setInterval(() => {
+      elapsed += 2500;
+      void loadFamilyData(true);
+      if (elapsed >= 60000) {
+        stopPolling();
+        setIsGenerating(false);
+      }
+    }, 2500);
+  }
 
   if (loading) {
     return (
@@ -145,16 +207,53 @@ export default function StudyAssessmentFamilyPage({
         Back to Course Study
       </button>
 
-      <div>
-        <p className="font-mono text-sm font-semibold text-accent-green">
-          {group.course_code}
-        </p>
-        <h1 className="mt-1 text-2xl font-bold text-text-primary">
-          {family.label}
-        </h1>
-        <p className="mt-2 text-sm text-text-secondary">
-          Stats and available mocks for this assessment family.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="font-mono text-sm font-semibold text-accent-green">
+            {group.course_code}
+          </p>
+          <h1 className="mt-1 text-2xl font-bold text-text-primary">
+            {family.label}
+          </h1>
+          <p className="mt-2 text-sm text-text-secondary">
+            Stats and available mocks for this assessment family.
+          </p>
+        </div>
+        {assessment ? (
+          familyExams.length > 0 && !isGenerating ? (
+            <Link
+              href={`/study/mock-exams/${familyExams[0].id}`}
+              className="inline-flex items-center gap-2 rounded-lg border border-accent-green
+                bg-[#243111] px-4 py-2 text-sm font-medium text-accent-green transition-colors
+                hover:bg-accent-green/20"
+            >
+              <PlayCircle size={15} />
+              See the mock exam
+            </Link>
+          ) : (
+            <button
+              type="button"
+              disabled={isGenerating}
+              onClick={() => void handleGenerateMock()}
+              className="inline-flex items-center gap-2 rounded-lg border border-border-primary
+                px-4 py-2 text-sm text-text-secondary transition-colors
+                hover:border-accent-green hover:bg-[#243111] hover:text-accent-green
+                disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isGenerating ? (
+                <>
+                  <LoaderCircle size={15} className="animate-spin" />
+                  Generating mock exam…
+                </>
+              ) : (
+                <>
+                  <Brain size={15} />
+                  Generate AI Mock
+                </>
+              )}
+            </button>
+          )
+        ) : null}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">

@@ -26,5 +26,6 @@ load_model_modules()
 
 # Import task modules explicitly so workers register application tasks on boot.
 from nutrack.course_materials import tasks as course_material_tasks  # noqa: F401,E402
+from nutrack.mock_exams import tasks as mock_exam_tasks  # noqa: F401,E402
 from nutrack.mindmaps import tasks as mindmap_tasks  # noqa: F401,E402
 from nutrack.transcripts import tasks as transcript_tasks  # noqa: F401,E402
