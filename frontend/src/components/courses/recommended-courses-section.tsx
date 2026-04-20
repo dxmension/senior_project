@@ -41,6 +41,31 @@ type SelectableOffering = RecommendedOffering & {
   conflictLabel: string | null;
 };
 
+// Mirrors backend _is_lecture_type / _RECITATION_TYPES
+const RECITATION_TYPES = new Set(["R", "LAB", "LB", "CLB", "PLB", "TUT", "T"]);
+
+function isLectureSection(section: string | null): boolean {
+  if (!section) return true;
+  const match = section.trim().match(/^\d+([A-Za-z]*)$/);
+  if (!match) return true;
+  return !RECITATION_TYPES.has(match[1].toUpperCase());
+}
+
+interface OfferingGroup {
+  componentType: "lecture" | "lab";
+  label: string;
+  offerings: SelectableOffering[];
+}
+
+function groupOfferings(offerings: SelectableOffering[]): OfferingGroup[] {
+  const lectures = offerings.filter((o) => isLectureSection(o.section));
+  const labs = offerings.filter((o) => !isLectureSection(o.section));
+  const groups: OfferingGroup[] = [];
+  if (lectures.length > 0) groups.push({ componentType: "lecture", label: "Lecture", offerings: lectures });
+  if (labs.length > 0) groups.push({ componentType: "lab", label: "Lab / Recitation", offerings: labs });
+  return groups;
+}
+
 export function RecommendedCoursesSection({
   enrollments,
   onEnrollmentCreated,
@@ -156,30 +181,30 @@ function RecommendedCourseCard({
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [overloadPendingId, setOverloadPendingId] = useState<number | null>(null);
+  const [overloadPendingIds, setOverloadPendingIds] = useState<number[] | null>(null);
   const [isSectionDialogOpen, setIsSectionDialogOpen] = useState(false);
   const isRegistered = enrollment !== null;
   const selectableOfferings = useMemo(
     () => buildSelectableOfferings(course, enrollments),
     [course, enrollments],
   );
+  const offeringGroups = useMemo(
+    () => groupOfferings(selectableOfferings),
+    [selectableOfferings],
+  );
 
-  async function createEnrollment(
-    offeringId: number,
-    overloadAcknowledged = false,
-  ) {
+  async function enrollBatch(ids: number[], overloadAcknowledged = false) {
     if (isSubmitting) return;
     setIsSubmitting(true);
     setErrorMessage(null);
     try {
-      const response = await api.post<ApiResponse<EnrollmentItem>>(
-        "/enrollments",
-        {
-          course_id: offeringId,
-          course_overload_acknowledged: overloadAcknowledged,
-        },
-      );
-      onEnrollmentCreated(response.data);
+      for (const offeringId of ids) {
+        const response = await api.post<ApiResponse<EnrollmentItem>>(
+          "/enrollments",
+          { course_id: offeringId, course_overload_acknowledged: overloadAcknowledged },
+        );
+        onEnrollmentCreated(response.data);
+      }
     } catch (error) {
       const code = (
         error as Error & {
@@ -187,7 +212,7 @@ function RecommendedCourseCard({
         }
       )?.response?.data?.error?.code;
       if (code === "ENROLLMENT_CREDITS_EXCEEDED") {
-        setOverloadPendingId(offeringId);
+        setOverloadPendingIds(ids);
         return;
       }
       setErrorMessage(getApiErrorMessage(error, "Failed to register course."));
@@ -205,8 +230,9 @@ function RecommendedCourseCard({
       setErrorMessage("No offering is available to register right now.");
       return;
     }
-    if (selectableOfferings.length === 1) {
-      void createEnrollment(selectableOfferings[0].id);
+    // Auto-register only if there is exactly one offering and no component split
+    if (selectableOfferings.length === 1 && offeringGroups.length === 1) {
+      void enrollBatch([selectableOfferings[0].id]);
       return;
     }
     setIsSectionDialogOpen(true);
@@ -279,35 +305,41 @@ function RecommendedCourseCard({
               <p className="text-sm text-accent-red">{errorMessage}</p>
             ) : null}
 
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-secondary">
-                Offered sections
-              </p>
-              <div className="space-y-2">
-                {selectableOfferings.slice(0, 3).map((offering, index) => (
-                  <div
-                    key={offering.section ?? `${course.course_id}-${index}`}
-                    className="rounded-2xl border border-border-primary bg-black/10 px-4 py-3"
-                  >
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                      <span className="font-medium text-text-primary">
-                        {offeringLabel(offering.section)}
-                      </span>
-                      {offering.faculty ? (
-                        <span className="text-text-secondary">{offering.faculty}</span>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-sm text-text-secondary">
-                      {formatOfferingDetails(offering)}
+            <div className="space-y-3">
+              {offeringGroups.slice(0, 2).map((group) => (
+                <div key={group.componentType}>
+                  {offeringGroups.length > 1 && (
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-text-secondary">
+                      {group.label}
                     </p>
-                    {offering.conflictLabel ? (
-                      <p className="mt-2 text-xs text-accent-red">
-                        Conflicts with {offering.conflictLabel}
-                      </p>
-                    ) : null}
+                  )}
+                  <div className="space-y-2">
+                    {group.offerings.slice(0, 2).map((offering, index) => (
+                      <div
+                        key={offering.section ?? `${course.course_id}-${group.componentType}-${index}`}
+                        className="rounded-2xl border border-border-primary bg-black/10 px-4 py-3"
+                      >
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                          <span className="font-medium text-text-primary">
+                            {offeringLabel(offering.section)}
+                          </span>
+                          {offering.faculty ? (
+                            <span className="text-text-secondary">{offering.faculty}</span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-sm text-text-secondary">
+                          {formatOfferingDetails(offering)}
+                        </p>
+                        {offering.conflictLabel ? (
+                          <p className="mt-2 text-xs text-accent-red">
+                            Conflicts with {offering.conflictLabel}
+                          </p>
+                        ) : null}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
           </div>
         </GlassCard>
@@ -316,28 +348,28 @@ function RecommendedCourseCard({
       <SectionPickerDialog
         isOpen={isSectionDialogOpen}
         course={course}
-        offerings={selectableOfferings}
+        offeringGroups={offeringGroups}
         isSubmitting={isSubmitting}
         onClose={() => setIsSectionDialogOpen(false)}
-        onSelect={(offeringId) => {
+        onSelect={(ids) => {
           setIsSectionDialogOpen(false);
-          void createEnrollment(offeringId);
+          void enrollBatch(ids);
         }}
       />
 
       <ConfirmDialog
-        isOpen={overloadPendingId !== null}
+        isOpen={overloadPendingIds !== null}
         title="Course overload?"
         message="Adding this course would exceed the 36 ECTS limit. If you've been approved for a course overload up to 42 ECTS, you can proceed."
         confirmLabel="Yes, register it"
         cancelLabel="Cancel"
         variant="default"
         onConfirm={() => {
-          const id = overloadPendingId!;
-          setOverloadPendingId(null);
-          void createEnrollment(id, true);
+          const ids = overloadPendingIds!;
+          setOverloadPendingIds(null);
+          void enrollBatch(ids, true);
         }}
-        onCancel={() => setOverloadPendingId(null)}
+        onCancel={() => setOverloadPendingIds(null)}
       />
     </>
   );
@@ -346,26 +378,35 @@ function RecommendedCourseCard({
 function SectionPickerDialog({
   isOpen,
   course,
-  offerings,
+  offeringGroups,
   isSubmitting,
   onClose,
   onSelect,
 }: {
   isOpen: boolean;
   course: RecommendedCourseItem;
-  offerings: SelectableOffering[];
+  offeringGroups: OfferingGroup[];
   isSubmitting: boolean;
   onClose: () => void;
-  onSelect: (offeringId: number) => void;
+  onSelect: (offeringIds: number[]) => void;
 }) {
-  if (!isOpen) {
-    return null;
+  const [selectedIds, setSelectedIds] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!isOpen) setSelectedIds({});
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const allSelected = offeringGroups.every((g) => selectedIds[g.componentType] != null);
+
+  function handleRegister() {
+    if (!allSelected) return;
+    onSelect(offeringGroups.map((g) => selectedIds[g.componentType]));
   }
 
   return (
-    <div
-      className="fixed inset-0 z-40 overflow-y-auto bg-black/70 p-4 backdrop-blur-sm"
-    >
+    <div className="fixed inset-0 z-40 overflow-y-auto bg-black/70 p-4 backdrop-blur-sm">
       <button
         type="button"
         onClick={onClose}
@@ -374,40 +415,73 @@ function SectionPickerDialog({
       />
       <div className="flex min-h-full items-center justify-center">
         <div
-          className="glass-card relative z-10 my-6 flex w-full max-w-2xl
-            flex-col p-5"
+          className="glass-card relative z-10 my-6 flex w-full max-w-2xl flex-col p-5"
           style={{ maxHeight: "min(90vh, 960px)" }}
         >
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-4 right-4 rounded-full border border-border-primary p-2 text-text-secondary transition-colors hover:text-text-primary"
-          aria-label="Close section picker"
-        >
-          <X size={16} />
-        </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute top-4 right-4 rounded-full border border-border-primary p-2
+              text-text-secondary transition-colors hover:text-text-primary"
+            aria-label="Close section picker"
+          >
+            <X size={16} />
+          </button>
 
-        <div className="mb-4 space-y-1 pr-10">
-          <p className="font-mono text-xs font-semibold text-accent-green">
-            {course.code} {course.level}
-          </p>
-          <h3 className="text-lg font-semibold text-text-primary">
-            Choose a section to register
-          </h3>
-          <p className="text-sm text-text-secondary">{course.title}</p>
-        </div>
+          <div className="mb-4 space-y-1 pr-10">
+            <p className="font-mono text-xs font-semibold text-accent-green">
+              {course.code} {course.level}
+            </p>
+            <h3 className="text-lg font-semibold text-text-primary">
+              Choose a section to register
+            </h3>
+            <p className="text-sm text-text-secondary">{course.title}</p>
+          </div>
 
-        <div className="space-y-3 overflow-y-auto pr-1">
-          {offerings.map((offering) => (
-            <SectionOptionCard
-              key={offering.id}
-              offering={offering}
-              isSubmitting={isSubmitting}
-              onSelect={onSelect}
-            />
-          ))}
+          <div className="space-y-5 overflow-y-auto pr-1">
+            {offeringGroups.map((group) => (
+              <div key={group.componentType}>
+                {offeringGroups.length > 1 && (
+                  <div className="mb-2 flex items-center gap-2">
+                    <h4 className="text-sm font-semibold text-text-primary">{group.label}</h4>
+                    <span className="rounded-full bg-accent-green/10 px-2 py-0.5 text-xs text-accent-green">
+                      Required
+                    </span>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  {group.offerings.map((offering) => (
+                    <SectionOptionCard
+                      key={offering.id}
+                      offering={offering}
+                      isSelected={selectedIds[group.componentType] === offering.id}
+                      isSubmitting={isSubmitting}
+                      showRadio={true}
+                      onSelect={() =>
+                        setSelectedIds((prev) => ({
+                          ...prev,
+                          [group.componentType]: offering.id,
+                        }))
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={handleRegister}
+                disabled={!allSelected || isSubmitting}
+                className="rounded-[var(--radius-md)] bg-accent-green px-5 py-2 text-sm
+                  font-medium text-bg-base transition-opacity disabled:opacity-40"
+              >
+                {isSubmitting ? "Registering…" : "Register"}
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
       </div>
     </div>
   );
@@ -415,21 +489,39 @@ function SectionPickerDialog({
 
 function SectionOptionCard({
   offering,
+  isSelected = false,
+  showRadio = false,
   isSubmitting,
   onSelect,
 }: {
   offering: SelectableOffering;
+  isSelected?: boolean;
+  showRadio?: boolean;
   isSubmitting: boolean;
-  onSelect: (offeringId: number) => void;
+  onSelect: () => void;
 }) {
   return (
     <button
       type="button"
       disabled={isSubmitting || offering.hasConflict}
-      onClick={() => onSelect(offering.id)}
-      className="w-full rounded-2xl border border-border-primary bg-black/10 p-4 text-left transition-colors hover:border-accent-green/40 disabled:cursor-not-allowed disabled:opacity-60"
+      onClick={onSelect}
+      className={`w-full rounded-2xl border bg-black/10 p-4 text-left transition-colors
+        disabled:cursor-not-allowed disabled:opacity-60 ${
+          isSelected
+            ? "border-accent-green bg-accent-green/5"
+            : "border-border-primary hover:border-accent-green/40"
+        }`}
     >
       <div className="flex flex-wrap items-center gap-2">
+        {showRadio && (
+          <div
+            className={`h-3.5 w-3.5 shrink-0 rounded-full border-2 transition-colors ${
+              isSelected
+                ? "border-accent-green bg-accent-green"
+                : "border-border-primary bg-transparent"
+            }`}
+          />
+        )}
         <span className="text-sm font-semibold text-text-primary">
           {offeringLabel(offering.section)}
         </span>

@@ -21,6 +21,35 @@ class CourseSearchItem(BaseModel):
     room: str | None = None
 
 
+class CourseSearchOfferingOption(BaseModel):
+    offering_id: int
+    section: str | None = None
+    faculty: str | None = None
+    days: str | None = None
+    meeting_time: str | None = None
+    room: str | None = None
+    enrolled: int | None = None
+    capacity: int | None = None
+
+
+class CourseSearchComponentGroup(BaseModel):
+    component_type: str
+    label: str
+    required: bool = True
+    offerings: list[CourseSearchOfferingOption]
+
+
+class CourseSearchGroup(BaseModel):
+    course_id: int
+    code: str
+    level: str
+    title: str
+    ects: int
+    term: str
+    year: int
+    components: list[CourseSearchComponentGroup]
+
+
 class InvalidScheduleRow(BaseModel):
     row: int
     course_code: str | None = None

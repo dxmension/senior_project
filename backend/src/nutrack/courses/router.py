@@ -16,7 +16,7 @@ from nutrack.courses.recommendation_service import CourseRecommendationService
 from nutrack.courses.schemas import (
     CourseDetailResponse,
     CourseScheduleUploadResponse,
-    CourseSearchItem,
+    CourseSearchGroup,
     CourseStatsResponse,
     DescriptionsUploadResponse,
     EligibilityResponse,
@@ -49,7 +49,7 @@ router = APIRouter(prefix="/courses", tags=["courses"])
 # ---------------------------------------------------------------------------
 
 
-@router.get("", response_model=ApiResponse[list[CourseSearchItem]])
+@router.get("", response_model=ApiResponse[list[CourseSearchGroup]])
 async def search_courses(
     q: str | None = Query(default=None),
     limit: int = Query(default=10, ge=1, le=20),

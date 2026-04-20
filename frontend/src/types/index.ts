@@ -84,6 +84,35 @@ export interface CourseOption {
   room: string | null;
 }
 
+export interface CourseSearchOfferingOption {
+  offering_id: number;
+  section: string | null;
+  faculty: string | null;
+  days: string | null;
+  meeting_time: string | null;
+  room: string | null;
+  enrolled: number | null;
+  capacity: number | null;
+}
+
+export interface CourseSearchComponentGroup {
+  component_type: string;
+  label: string;
+  required: boolean;
+  offerings: CourseSearchOfferingOption[];
+}
+
+export interface CourseSearchGroup {
+  course_id: number;
+  code: string;
+  level: string;
+  title: string;
+  ects: number;
+  term: string;
+  year: number;
+  components: CourseSearchComponentGroup[];
+}
+
 export interface CreditsBySemester {
   semester: string;
   term: string;
