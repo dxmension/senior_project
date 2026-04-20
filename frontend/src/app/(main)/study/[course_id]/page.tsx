@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, GitFork, Layers } from "lucide-react";
+import { ArrowLeft, BookOpen, GitFork, Layers } from "lucide-react";
 
 import { MockExamCountdown } from "@/components/study/mock-exam-countdown";
 import { CourseMindmapsPanel } from "@/components/courses/course-mindmaps-panel";
+import { StudyHelperPanel } from "@/components/study/study-helper-panel";
 import { FlashcardExamPicker } from "@/components/flashcards/flashcard-exam-picker";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
@@ -17,7 +18,7 @@ import { groupMockExamFamilies } from "@/lib/study-mock-families";
 import type { ApiResponse, EnrollmentItem, MockExamCourseGroup } from "@/types";
 
 type PageParams = Promise<{ course_id: string }>;
-type StudyTab = "mock_exams" | "flashcards" | "mindmaps";
+type StudyTab = "mock_exams" | "flashcards" | "mindmaps" | "study_helper";
 
 function scoreTone(score: number | null) {
   if (score == null) return "text-text-secondary";
@@ -147,6 +148,11 @@ export default function StudyCoursePage({ params }: { params: PageParams }) {
           label="Mindmaps"
           onClick={() => setActiveTab("mindmaps")}
         />
+        <TabButton
+          active={activeTab === "study_helper"}
+          label="Study Helper"
+          onClick={() => setActiveTab("study_helper")}
+        />
       </div>
 
       {activeTab === "mock_exams" ? (
@@ -173,10 +179,20 @@ export default function StudyCoursePage({ params }: { params: PageParams }) {
         )
       ) : activeTab === "flashcards" ? (
         <FlashcardExamPicker exams={group.exams} />
+      ) : activeTab === "mindmaps" ? (
+        enrollment ? (
+          <CourseMindmapsPanel enrollment={enrollment} />
+        ) : (
+          <FlashcardExamPicker exams={group.exams} />
+        )
       ) : enrollment ? (
-        <CourseMindmapsPanel enrollment={enrollment} />
+        <StudyHelperPanel enrollment={enrollment} />
       ) : (
-        <FlashcardExamPicker exams={group.exams} />
+        <GlassCard className="py-14 text-center">
+          <p className="text-sm text-text-secondary">
+            Enrollment data not available for Study Helper.
+          </p>
+        </GlassCard>
       )}
     </div>
   );
@@ -201,7 +217,7 @@ function TabButton({
           : "border border-border-primary bg-white/[0.03] text-text-secondary hover:border-accent-green/40 hover:text-text-primary"
       }`}
     >
-      {label === "Flashcards" ? <Layers size={15} /> : label === "Mindmaps" ? <GitFork size={15} /> : null}
+      {label === "Flashcards" ? <Layers size={15} /> : label === "Mindmaps" ? <GitFork size={15} /> : label === "Study Helper" ? <BookOpen size={15} /> : null}
       {label}
     </button>
   );
