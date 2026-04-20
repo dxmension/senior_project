@@ -1,7 +1,7 @@
 """Add user notification subscription field
 
 Revision ID: 20260418_0004
-Revises: 20260414_0003
+Revises: 20260420_0014
 Create Date: 2026-04-18 19:23:00.000000
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '20260418_0004'
-down_revision: Union[str, None] = '20260414_0003'
+down_revision: Union[str, None] = '20260420_0014'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
