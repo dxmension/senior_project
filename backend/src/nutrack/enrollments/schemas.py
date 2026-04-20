@@ -14,6 +14,7 @@ class EnrollmentItemResponse(BaseModel):
     term: str
     year: int
     status: str
+    days: str | None = None
     meeting_time: str | None = None
     room: str | None = None
 

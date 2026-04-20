@@ -66,6 +66,7 @@ export interface EnrollmentItem {
   term: string;
   year: number;
   status: string;
+  days: string | null;
   meeting_time: string | null;
   room: string | null;
 }
@@ -891,97 +892,33 @@ export interface AdminMockExamQuestion extends MockExamQuestionItem {
   usage_count: number;
 }
 
-export type FlashcardDifficulty = "easy" | "medium" | "hard";
-
-export interface GenerateFlashcardOptions {
-  course_id: number;
-  difficulty: FlashcardDifficulty;
-  card_count: number;
-  title?: string;
-  selected_upload_ids: number[];
-  selected_shared_material_ids: number[];
+export interface RecommendedOfferingSummary {
+  section: string | null;
+  faculty: string | null;
+  meeting_time: string | null;
+  days: string | null;
+  room: string | null;
+  enrolled: number | null;
+  capacity: number | null;
 }
 
-export interface FlashcardItem {
-  id: number;
-  position: number;
-  question: string;
-  answer: string;
-  topic: string | null;
-}
-
-export interface FlashcardDeckListItem {
-  id: number;
+export interface RecommendedCourseItem {
   course_id: number;
+  offering_ids: number[];
+  code: string;
+  level: string;
   title: string;
-  card_count: number;
-  difficulty: FlashcardDifficulty;
-  created_at: string;
-  completed_sessions: number;
-  latest_grade_pct: number | null;
-  latest_grade_letter: string | null;
-  average_grade_pct: number | null;
-  best_grade_pct: number | null;
-  latest_completed_session_id: number | null;
+  ects: number;
+  description: string | null;
+  department: string | null;
+  avg_gpa: number | null;
+  priority_match: boolean;
+  reason: string;
+  offerings: RecommendedOfferingSummary[];
 }
 
-export interface FlashcardDeck extends FlashcardDeckListItem {
-  cards: FlashcardItem[];
-}
-
-export interface FlashcardCardStats {
-  times_seen: number;
-  times_easy: number;
-  times_medium: number;
-  times_hard: number;
-  last_response: "easy" | "medium" | "hard" | null;
-}
-
-export interface FlashcardSession {
-  id: number;
-  deck_id: number;
-  deck_title: string;
-  status: "in_progress" | "completed";
-  started_at: string;
-  cards: FlashcardItem[];
-  card_stats: Record<number, FlashcardCardStats>;
-}
-
-export interface FlashcardSessionReview {
-  session_id: number;
-  deck_id: number;
-  deck_title: string;
-  total_cards: number;
-  total_responses: number;
-  easy_count: number;
-  medium_count: number;
-  hard_count: number;
-  grade_pct: number;
-  grade_letter: string;
-  top_struggled_cards: FlashcardItem[];
-  ai_summary: string;
-  ai_weak_topics: string[];
-  ai_study_plan: string;
-}
-
-export interface FlashcardSessionHistoryItem {
-  session_id: number;
-  completed_at: string;
-  grade_pct: number;
-  grade_letter: string;
-  easy_count: number;
-  medium_count: number;
-  hard_count: number;
-  total_responses: number;
-}
-
-export interface FlashcardDeckHistory {
-  deck_id: number;
-  deck_title: string;
-  total_completed: number;
-  average_grade_pct: number | null;
-  best_grade_pct: number | null;
-  predicted_grade_pct: number | null;
-  predicted_grade_letter: string | null;
-  sessions: FlashcardSessionHistoryItem[];
+export interface RecommendationsResponse {
+  recommendations: RecommendedCourseItem[];
+  term: string;
+  year: number;
 }

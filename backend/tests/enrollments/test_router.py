@@ -23,6 +23,7 @@ def enrollment_item() -> EnrollmentItemResponse:
         term="Fall",
         year=2026,
         status="in_progress",
+        days="MWF",
         meeting_time="10:00-10:50",
         room="6.310",
     )

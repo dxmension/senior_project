@@ -15,6 +15,7 @@ def course_offering_loader():
             CourseOffering.section,
             CourseOffering.term,
             CourseOffering.year,
+            CourseOffering.days,
             CourseOffering.meeting_time,
             CourseOffering.room,
         ),

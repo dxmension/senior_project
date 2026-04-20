@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 
 import { AddAssessmentModal } from "@/components/courses/add-assessment-modal";
 import { CourseCard } from "@/components/courses/course-card";
+import { RecommendedCoursesSection } from "@/components/courses/recommended-courses-section";
 import { CourseSearchDialog } from "@/components/courses/course-search-dialog";
+import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
 import { useAssessmentsStore } from "@/stores/assessments";
@@ -108,37 +110,59 @@ export default function CoursesPage() {
             <Spinner text="Loading courses..." />
           </div>
         ) : enrollments.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-            <p className="text-text-secondary">No courses enrolled this semester.</p>
-            <button
-              type="button"
-              onClick={() => setDialogOpen(true)}
-              className="btn-secondary rounded-lg px-4 py-2 text-sm"
-            >
-              + Add your first course
-            </button>
+          <div className="space-y-8">
+            <RecommendedCoursesSection
+              enrollments={enrollments}
+              onEnrollmentCreated={handleCreated}
+            />
+
+            <GlassCard className="flex flex-col items-start gap-4">
+              <div>
+                <p className="text-base font-semibold text-text-primary">
+                  No courses enrolled this semester.
+                </p>
+                <p className="mt-1 text-sm text-text-secondary">
+                  You can still add courses manually if you want to track
+                  deadlines for the current term.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDialogOpen(true)}
+                className="btn-secondary rounded-lg px-4 py-2 text-sm"
+              >
+                + Add your first course
+              </button>
+            </GlassCard>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {enrollments.map((enrollment) => (
-              <CourseCard
-                key={`${enrollment.course_id}:${enrollment.term}:${enrollment.year}`}
-                enrollment={enrollment}
-                assessments={byCourse[enrollment.course_id] ?? []}
-                assessmentsLoading={loadingCourseIds.has(enrollment.course_id)}
-                onAddAssessment={(e) => {
-                  e.stopPropagation();
-                  setSelectedEnrollment(enrollment);
-                  setModalOpen(true);
-                }}
-                onClick={() => router.push(`/courses/${enrollment.course_id}`)}
-                onRemove={() => void handleRemove(enrollment)}
-                isRemoving={
-                  deletingKey ===
-                  `${enrollment.course_id}:${enrollment.term}:${enrollment.year}`
-                }
-              />
-            ))}
+          <div className="space-y-8">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {enrollments.map((enrollment) => (
+                <CourseCard
+                  key={`${enrollment.course_id}:${enrollment.term}:${enrollment.year}`}
+                  enrollment={enrollment}
+                  assessments={byCourse[enrollment.course_id] ?? []}
+                  assessmentsLoading={loadingCourseIds.has(enrollment.course_id)}
+                  onAddAssessment={(e) => {
+                    e.stopPropagation();
+                    setSelectedEnrollment(enrollment);
+                    setModalOpen(true);
+                  }}
+                  onClick={() => router.push(`/courses/${enrollment.course_id}`)}
+                  onRemove={() => void handleRemove(enrollment)}
+                  isRemoving={
+                    deletingKey ===
+                    `${enrollment.course_id}:${enrollment.term}:${enrollment.year}`
+                  }
+                />
+              ))}
+            </div>
+
+            <RecommendedCoursesSection
+              enrollments={enrollments}
+              onEnrollmentCreated={handleCreated}
+            />
           </div>
         )}
       </div>
