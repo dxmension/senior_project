@@ -39,7 +39,8 @@ async def create_enrollment(
     service: EnrollmentService = Depends(get_enrollment_service),
 ):
     enrollment = await service.create_manual_enrollment(
-        user.id, body.course_id, body.course_overload_acknowledged
+        user.id, body.course_id, body.course_overload_acknowledged,
+        kazakh_level=getattr(user, "kazakh_level", None),
     )
     return ApiResponse(data=enrollment)
 

@@ -77,6 +77,7 @@ class EnrollmentService:
         user_id: int,
         course_id: int,
         course_overload_acknowledged: bool = False,
+        kazakh_level: str | None = None,
     ) -> EnrollmentItemResponse:
         offering = await self.course_offering_repo.get_by_id_with_course(course_id)
         if not offering:
@@ -84,7 +85,7 @@ class EnrollmentService:
 
         # 1. Eligibility check
         eligibility = await self.eligibility_service.check_eligibility(
-            offering.course_id, user_id
+            offering.course_id, user_id, kazakh_level
         )
         if not eligibility.can_register:
             reasons = []
