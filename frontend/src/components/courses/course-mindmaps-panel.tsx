@@ -3,6 +3,7 @@
 import { AlertTriangle, Download, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { MindmapTree } from "@/components/courses/mindmap-tree";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
@@ -48,8 +49,8 @@ export function CourseMindmapsPanel({ enrollment }: Props) {
   const downloadRef = useRef<(() => void) | null>(null);
 
   // Delete confirmation
-  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; topic: string } | null>(null);
+  const [actingId, setActingId] = useState<number | null>(null);
 
   // Weeks with uploaded materials
   const [weeksWithMaterials, setWeeksWithMaterials] = useState<Set<number>>(new Set());
@@ -189,17 +190,18 @@ export function CourseMindmapsPanel({ enrollment }: Props) {
     }
   }
 
-  async function handleDelete(id: number) {
-    setDeletingId(id);
+  async function handleDelete(target: { id: number; topic: string } | null) {
+    if (!target) return;
+    setActingId(target.id);
     try {
-      await api.delete(`/mindmaps/${courseId}/${id}`);
-      setMindmaps((prev) => prev.filter((m) => m.id !== id));
-      setConfirmDeleteId(null);
-      if (viewing?.id === id) setViewing(null);
+      await api.delete(`/mindmaps/${courseId}/${target.id}`);
+      setMindmaps((prev) => prev.filter((m) => m.id !== target.id));
+      setDeleteTarget(null);
+      if (viewing?.id === target.id) setViewing(null);
     } catch {
       // keep state, let user retry
     } finally {
-      setDeletingId(null);
+      setActingId(null);
     }
   }
 
@@ -292,11 +294,8 @@ export function CourseMindmapsPanel({ enrollment }: Props) {
                       key={mm.id}
                       mindmap={mm}
                       onView={() => setViewing(mm)}
-                      onDelete={() => setConfirmDeleteId(mm.id)}
-                      confirmingDelete={confirmDeleteId === mm.id}
-                      deleting={deletingId === mm.id}
-                      onConfirmDelete={() => void handleDelete(mm.id)}
-                      onCancelDelete={() => setConfirmDeleteId(null)}
+                      onDelete={() => setDeleteTarget({ id: mm.id, topic: mm.topic })}
+                      acting={actingId === mm.id}
                     />
                   ))}
                 </div>
@@ -393,6 +392,24 @@ export function CourseMindmapsPanel({ enrollment }: Props) {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        title="Delete mindmap"
+        message={
+          deleteTarget
+            ? `Delete "${deleteTarget.topic}" from mindmaps?`
+            : ""
+        }
+        confirmLabel={actingId ? "Deleting..." : "Delete"}
+        variant="danger"
+        onConfirm={() => void handleDelete(deleteTarget)}
+        onCancel={() => {
+          if (actingId) return;
+          setDeleteTarget(null);
+        }}
+      />
+
     </>
   );
 }
@@ -403,20 +420,14 @@ interface CardProps {
   mindmap: SavedMindmap;
   onView: () => void;
   onDelete: () => void;
-  confirmingDelete: boolean;
-  deleting: boolean;
-  onConfirmDelete: () => void;
-  onCancelDelete: () => void;
+  acting: boolean;
 }
 
 function MindmapCard({
   mindmap,
   onView,
   onDelete,
-  confirmingDelete,
-  deleting,
-  onConfirmDelete,
-  onCancelDelete,
+  acting,
 }: CardProps) {
   const date = new Date(mindmap.created_at).toLocaleDateString("en-US", {
     month: "short",
@@ -436,26 +447,6 @@ function MindmapCard({
         <p className="mt-1 text-xs text-text-secondary">{date}</p>
       </button>
 
-      {confirmingDelete ? (
-        <div className="flex items-center gap-2 border-t border-border-primary pt-2 text-xs">
-          <span className="text-red-400">Delete?</span>
-          <button
-            type="button"
-            disabled={deleting}
-            onClick={onConfirmDelete}
-            className="rounded bg-red-600/80 px-2 py-0.5 text-white disabled:opacity-50"
-          >
-            {deleting ? "…" : "Yes"}
-          </button>
-          <button
-            type="button"
-            onClick={onCancelDelete}
-            className="text-text-secondary hover:text-text-primary"
-          >
-            Cancel
-          </button>
-        </div>
-      ) : (
         <div className="flex items-center justify-between border-t border-border-primary pt-2">
           <button
             type="button"
@@ -466,14 +457,14 @@ function MindmapCard({
           </button>
           <button
             type="button"
+            disabled={acting}
             onClick={onDelete}
             className="rounded p-1 text-text-secondary transition-colors
-                       hover:bg-red-950/50 hover:text-red-400"
+                       hover:bg-red-950/50 hover:text-red-400 disabled:opacity-50"
           >
             <Trash2 size={13} />
           </button>
         </div>
-      )}
     </div>
   );
 }

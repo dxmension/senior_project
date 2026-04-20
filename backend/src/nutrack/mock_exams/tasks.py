@@ -15,8 +15,10 @@ async def _run_generation(job_id: int, task_id: str | None) -> None:
             await service.set_celery_task_id(job_id, task_id)
         try:
             job = await service.run_job(job_id)
-        finally:
             await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
         logger.info(
             "mock exam generation finished job_id=%s task_id=%s status=%s "
             "reason=%s generated_mock_exam_id=%s",

@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { use, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Brain, LoaderCircle, PlayCircle } from "lucide-react";
 
 import { MockExamCountdown } from "@/components/study/mock-exam-countdown";
+import { GenerateMockPopup } from "@/components/study/generate-mock-popup";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
@@ -16,6 +17,7 @@ import type {
   ApiResponse,
   Assessment,
   EnrollmentItem,
+  GenerateMockOptions,
   MockExamGenerationQueued,
   MockExamCourseGroup,
   MockExamListItem,
@@ -57,6 +59,7 @@ export default function StudyAssessmentFamilyPage({
 }) {
   const { course_id, assessment_type, assessment_number } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const courseId = Number(course_id);
   const assessmentNumber = Number(assessment_number);
   const [group, setGroup] = useState<MockExamCourseGroup | null>(null);
@@ -64,6 +67,9 @@ export default function StudyAssessmentFamilyPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isPopupOpen, setIsPopupOpen] = useState(
+    searchParams.get("generateMock") === "1"
+  );
   const examsBeforeGenerate = useRef<number>(0);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -108,7 +114,7 @@ export default function StudyAssessmentFamilyPage({
   const family = useMemo(
     () => (
       group
-        ? findMockExamFamily(group.exams, assessment_type, assessmentNumber)
+        ? findMockExamFamily(group.families, assessment_type, assessmentNumber)
         : null
     ),
     [assessmentNumber, assessment_type, group],
@@ -125,8 +131,8 @@ export default function StudyAssessmentFamilyPage({
     [assessmentNumber, assessment_type, assessments],
   );
   const predicted = predictedGradeBadge(
-    family?.predictedLetter ?? null,
-    family?.predictedScore ?? null,
+    family?.predicted_letter ?? null,
+    family?.predicted_score ?? null,
   );
 
   function stopPolling() {
@@ -147,13 +153,15 @@ export default function StudyAssessmentFamilyPage({
 
   useEffect(() => () => stopPolling(), []);
 
-  async function handleGenerateMock() {
+  async function handleGenerateWithOptions(opts: GenerateMockOptions) {
     if (!assessment) return;
+    setIsPopupOpen(false);
     examsBeforeGenerate.current = familyExams.length;
     setIsGenerating(true);
     try {
       await api.post<ApiResponse<MockExamGenerationQueued>>(
-        `/assessments/${assessment.id}/generate-mock-exam`
+        `/assessments/${assessment.id}/generate-mock-exam`,
+        opts,
       );
     } catch {
       setIsGenerating(false);
@@ -219,58 +227,28 @@ export default function StudyAssessmentFamilyPage({
             Stats and available mocks for this assessment family.
           </p>
         </div>
-        {assessment ? (
-          familyExams.length > 0 && !isGenerating ? (
-            <Link
-              href={`/study/mock-exams/${familyExams[0].id}`}
-              className="inline-flex items-center gap-2 rounded-lg border border-accent-green
-                bg-[#243111] px-4 py-2 text-sm font-medium text-accent-green transition-colors
-                hover:bg-accent-green/20"
-            >
-              <PlayCircle size={15} />
-              See the mock exam
-            </Link>
-          ) : (
-            <button
-              type="button"
-              disabled={isGenerating}
-              onClick={() => void handleGenerateMock()}
-              className="inline-flex items-center gap-2 rounded-lg border border-border-primary
-                px-4 py-2 text-sm text-text-secondary transition-colors
-                hover:border-accent-green hover:bg-[#243111] hover:text-accent-green
-                disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isGenerating ? (
-                <>
-                  <LoaderCircle size={15} className="animate-spin" />
-                  Generating mock exam…
-                </>
-              ) : (
-                <>
-                  <Brain size={15} />
-                  Generate AI Mock
-                </>
-              )}
-            </button>
-          )
-        ) : null}
+        <GenerateFamilyButton
+          assessment={assessment}
+          isGenerating={isGenerating}
+          onClick={() => setIsPopupOpen(true)}
+        />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="Mocks" value={String(family.mocksCount)} />
+        <MetricCard label="Mocks" value={String(family.mocks_count)} />
         <MetricCard
           label="Completed"
-          value={String(family.completedAttempts)}
+          value={String(family.completed_attempts)}
         />
         <MetricCard
           label="Best"
-          value={scoreLabel(family.bestScore)}
-          tone={scoreTone(family.bestScore)}
+          value={scoreLabel(family.best_score)}
+          tone={scoreTone(family.best_score)}
         />
         <MetricCard
           label="Latest"
-          value={scoreLabel(family.latestScore)}
-          tone={scoreTone(family.latestScore)}
+          value={scoreLabel(family.latest_score)}
+          tone={scoreTone(family.latest_score)}
         />
         <MetricCard
           label="Predicted"
@@ -279,19 +257,75 @@ export default function StudyAssessmentFamilyPage({
         />
       </div>
 
-      <div className="space-y-4">
-        {familyExams.map((item) => (
-          <MockExamCard
-            key={item.id}
-            courseId={courseId}
-            assessmentType={assessment_type}
-            assessmentNumber={assessmentNumber}
-            item={item}
-            onTimerExpire={() => void loadFamilyData(true)}
-          />
-        ))}
-      </div>
+      {familyExams.length === 0 ? (
+        <GlassCard className="py-14 text-center">
+          <p className="text-lg font-semibold text-text-primary">
+            No AI mocks available yet
+          </p>
+          <p className="mt-2 text-sm text-text-secondary">
+            Generate an AI mock for this assessment family to start studying here.
+          </p>
+        </GlassCard>
+      ) : (
+        <div className="space-y-4">
+          {familyExams.map((item) => (
+            <MockExamCard
+              key={item.id}
+              courseId={courseId}
+              assessmentType={assessment_type}
+              assessmentNumber={assessmentNumber}
+              item={item}
+              onTimerExpire={() => void loadFamilyData(true)}
+            />
+          ))}
+        </div>
+      )}
+
+      {assessment && (
+        <GenerateMockPopup
+          isOpen={isPopupOpen}
+          onClose={() => setIsPopupOpen(false)}
+          courseId={assessment.course_id}
+          assessmentType={assessment_type}
+          onGenerate={(opts) => void handleGenerateWithOptions(opts)}
+        />
+      )}
     </div>
+  );
+}
+
+function GenerateFamilyButton({
+  assessment,
+  isGenerating,
+  onClick,
+}: {
+  assessment: Assessment | null;
+  isGenerating: boolean;
+  onClick: () => void;
+}) {
+  if (!assessment) return null;
+  return (
+    <button
+      type="button"
+      disabled={isGenerating}
+      onClick={onClick}
+      className="inline-flex items-center gap-2 rounded-lg border border-border-primary
+        px-4 py-2 text-sm text-text-secondary transition-colors
+        hover:border-accent-green hover:bg-[#243111] hover:text-accent-green
+        disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {isGenerating ? (
+        <>
+          <LoaderCircle size={15} className="animate-spin" />
+          Generating...
+        </>
+      ) : (
+        <>
+          <Brain size={15} />
+          Generate AI Mock
+        </>
+      )}
+    </button>
   );
 }
 
@@ -346,6 +380,7 @@ function MockExamCard({
             <span className="text-sm font-semibold text-text-primary">
               {item.title}
             </span>
+            <DifficultyBadge difficulty={item.difficulty} />
             <span className="text-xs text-text-secondary">
               Created {formatDate(item.created_at)}
             </span>
@@ -401,6 +436,23 @@ function MockExamCard({
         </div>
       </GlassCard>
     </Link>
+  );
+}
+
+const DIFFICULTY_STYLES: Record<string, string> = {
+  easy: "bg-accent-green/10 text-accent-green",
+  medium: "bg-accent-orange/10 text-accent-orange",
+  hard: "bg-accent-red/10 text-accent-red",
+};
+
+function DifficultyBadge({ difficulty }: { difficulty: MockExamDifficulty | null }) {
+  if (!difficulty) return null;
+  return (
+    <span
+      className={`rounded-full px-2.5 py-1 text-xs font-medium capitalize ${DIFFICULTY_STYLES[difficulty] ?? "bg-white/5 text-text-secondary"}`}
+    >
+      {difficulty}
+    </span>
   );
 }
 

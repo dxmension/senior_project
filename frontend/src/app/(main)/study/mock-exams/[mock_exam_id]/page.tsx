@@ -23,6 +23,7 @@ import type {
   MockExamAttempt,
   MockExamAttemptSummary,
   MockExamDashboard,
+  MockExamDifficulty,
   MockExamTrendPoint,
   EnrollmentItem,
 } from "@/types";
@@ -56,6 +57,29 @@ function primaryLabel(data: MockExamDashboard) {
 
 function primaryIcon(data: MockExamDashboard) {
   return data.active_attempt ? <PlayCircle size={16} /> : <Brain size={16} />;
+}
+
+const DIFFICULTY_STYLES: Record<string, string> = {
+  easy: "bg-accent-green/15 text-accent-green",
+  medium: "bg-accent-orange/15 text-accent-orange",
+  hard: "bg-accent-red/15 text-accent-red",
+};
+
+function DifficultyBadge({
+  difficulty,
+}: {
+  difficulty: MockExamDifficulty | null;
+}) {
+  if (!difficulty) return null;
+  return (
+    <span
+      className={`rounded-full px-2.5 py-1 text-xs font-medium capitalize ${
+        DIFFICULTY_STYLES[difficulty] ?? "bg-white/5 text-text-secondary"
+      }`}
+    >
+      {difficulty}
+    </span>
+  );
 }
 
 export default function MockExamDetailPage({ params }: { params: PageParams }) {
@@ -194,6 +218,7 @@ export default function MockExamDetailPage({ params }: { params: PageParams }) {
             <span className="rounded-full bg-white/[0.05] px-2.5 py-1 text-[11px] uppercase tracking-wide text-text-secondary">
               {data.assessment_type}
             </span>
+            <DifficultyBadge difficulty={data.difficulty} />
           </div>
           <h1 className="mt-2 text-2xl font-bold text-text-primary">{data.title}</h1>
           <p className="mt-1 text-sm text-text-secondary">{data.course_title}</p>

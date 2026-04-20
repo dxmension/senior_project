@@ -418,7 +418,7 @@ class MockExamGenerationJobRepository(BaseRepository[MockExamGenerationJob]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def cancel_pending_for_assessment(self, assessment_id: int) -> int:
+    async def cancel_pending_for_assessment(self, assessment_id: int) -> list[str]:
         stmt = (
             select(MockExamGenerationJob)
             .where(MockExamGenerationJob.assessment_id == assessment_id)
@@ -433,10 +433,13 @@ class MockExamGenerationJobRepository(BaseRepository[MockExamGenerationJob]):
         )
         result = await self.session.execute(stmt)
         jobs = list(result.scalars().all())
+        task_ids: list[str] = []
         for job in jobs:
+            if job.celery_task_id is not None:
+                task_ids.append(job.celery_task_id)
             job.status = MockExamGenerationStatus.CANCELLED
         await self.session.flush()
-        return len(jobs)
+        return task_ids
 
     async def list_due(
         self,

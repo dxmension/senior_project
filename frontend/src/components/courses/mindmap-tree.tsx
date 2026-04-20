@@ -87,11 +87,28 @@ function collectSubtreeIds(p: Placed): string[] {
   return [p.node.id, ...p.children.flatMap(collectSubtreeIds)];
 }
 
-function bounds(p: Placed, offsets: Map<string, Offset>): { x1: number; y1: number; x2: number; y2: number } {
+function bounds(p: Placed, offsets: Map<string, Offset>, openNodes: MindmapNode[] = []): { x1: number; y1: number; x2: number; y2: number } {
   const o = off(p.node.id, offsets);
   let x1 = p.x + o.dx, y1 = p.y + o.dy - NH / 2, x2 = p.x + o.dx + NW, y2 = p.y + o.dy + NH / 2;
+  
+  // Include description bounds for open nodes
+  for (const node of openNodes) {
+    if (node.id === p.node.id) {
+      const descH = estimateDescH(node.label, node.description ?? "");
+      const descLeft = p.x + o.dx + NW / 2 - DESC_W / 2;
+      const descRight = p.x + o.dx + NW / 2 + DESC_W / 2;
+      const descTop = p.y + o.dy + NH / 2 + DESC_GAP;
+      const descBottom = descTop + descH;
+      
+      x1 = Math.min(x1, descLeft);
+      y1 = Math.min(y1, descTop);
+      x2 = Math.max(x2, descRight);
+      y2 = Math.max(y2, descBottom);
+    }
+  }
+  
   for (const c of p.children) {
-    const b = bounds(c, offsets);
+    const b = bounds(c, offsets, openNodes);
     x1 = Math.min(x1, b.x1); y1 = Math.min(y1, b.y1);
     x2 = Math.max(x2, b.x2); y2 = Math.max(y2, b.y2);
   }
@@ -306,17 +323,18 @@ function renderNodes(p: Placed, opts: NodeOpts): React.ReactNode[] {
 
 // ─── PNG download ─────────────────────────────────────────────────────────────
 
-function downloadAsPng(
-  root: MindmapNode, expanded: Set<string>, offsets: Map<string, Offset>, filename: string,
+function downloadAsPNG(
+  root: MindmapNode, expanded: Set<string>, offsets: Map<string, Offset>, filename: string, openNodes: MindmapNode[] = [],
 ) {
   const layout = place(root, 0, 0, 0, expanded);
-  const b = bounds(layout, offsets);
+  const b = bounds(layout, offsets, openNodes);
   const w = b.x2 - b.x1 + PAD * 2; const h = b.y2 - b.y1 + PAD * 2;
   const ox = PAD - b.x1; const oy = PAD - b.y1;
   const ns = "http://www.w3.org/2000/svg";
 
   const svg = document.createElementNS(ns, "svg");
   svg.setAttribute("width", String(w)); svg.setAttribute("height", String(h)); svg.setAttribute("xmlns", ns);
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   const bg = document.createElementNS(ns, "rect");
   bg.setAttribute("width", String(w)); bg.setAttribute("height", String(h)); bg.setAttribute("fill", "#0d0d0d");
   svg.appendChild(bg);
@@ -356,7 +374,92 @@ function downloadAsPng(
     for (const c of p.children) appendNodes(c);
   }
 
-  appendEdges(layout); appendNodes(layout);
+  function appendDescriptions() {
+    for (const node of openNodes) {
+      const placed = findPlaced(layout, node.id);
+      if (!placed) continue;
+      const po = off(node.id, offsets);
+      const nx = placed.x + po.dx;
+      const ny = placed.y + po.dy;
+      const descH = estimateDescH(node.label, node.description ?? "");
+      
+      // Create foreignObject for description
+      const foreignObj = document.createElementNS(ns, "foreignObject");
+      foreignObj.setAttribute("x", String(nx + NW / 2 - DESC_W / 2 + ox));
+      foreignObj.setAttribute("y", String(ny + NH / 2 + DESC_GAP + oy));
+      foreignObj.setAttribute("width", String(DESC_W));
+      foreignObj.setAttribute("height", String(descH));
+      
+      // Create HTML content for description
+      const div = document.createElement("div");
+      div.style.cssText = `
+        display: block;
+        background: #1a1a1a;
+        border: 1px solid #2e2e2e;
+        border-radius: 8px;
+        padding: 8px 10px;
+        width: 100%;
+        box-sizing: border-box;
+        font-family: system-ui, -apple-system, sans-serif;
+      `;
+      
+      // Title
+      const titleDiv = document.createElement("div");
+      titleDiv.style.cssText = `
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 4px;
+      `;
+      
+      const titleP = document.createElement("p");
+      titleP.style.cssText = `
+        font-size: 11px;
+        font-weight: 700;
+        color: #e0e0e0;
+        margin: 0;
+        flex: 1;
+      `;
+      titleP.textContent = node.label;
+      
+      // Close button (optional - could be omitted for export)
+      const closeBtn = document.createElement("button");
+      closeBtn.textContent = "×";
+      closeBtn.style.cssText = `
+        flex-shrink: 0;
+        margin-left: 6px;
+        background: transparent;
+        border: none;
+        color: #6b7280;
+        font-size: 13px;
+        line-height: 1;
+        padding: 0;
+      `;
+      
+      titleDiv.appendChild(titleP);
+      titleDiv.appendChild(closeBtn);
+      
+      // Description text
+      const descP = document.createElement("p");
+      descP.style.cssText = `
+        font-size: 10px;
+        color: #9ca3af;
+        line-height: 1.65;
+        margin: 0;
+      `;
+      descP.textContent = node.description || "No description available.";
+      
+      div.appendChild(titleDiv);
+      div.appendChild(descP);
+      foreignObj.appendChild(div);
+      svg.appendChild(foreignObj);
+    }
+  }
+
+  appendEdges(layout); 
+  appendNodes(layout);
+  appendDescriptions();
+  
   const svgData = new XMLSerializer().serializeToString(svg);
   const blob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -405,7 +508,7 @@ export function MindmapTree({ root, filename = "mindmap", downloadRef }: Mindmap
     if (!el) return;
     const { width: svgW, height: svgH } = el.getBoundingClientRect();
     if (!svgW || !svgH || !layoutRef.current) return;
-    const b = bounds(layoutRef.current, nodeOffsets);
+    const b = bounds(layoutRef.current, nodeOffsets, openNodes);
     const treeW = b.x2 - b.x1;
     const treeH = b.y2 - b.y1;
     if (!treeW || !treeH) return;
@@ -589,7 +692,7 @@ export function MindmapTree({ root, filename = "mindmap", downloadRef }: Mindmap
 
   if (downloadRef) {
     (downloadRef as React.MutableRefObject<(() => void) | null>).current =
-      () => downloadAsPng(root, expanded, nodeOffsets, filename);
+      () => downloadAsPNG(root, expanded, nodeOffsets, filename, openNodes);
   }
 
   const layout = place(root, 0, 0, 0, expanded);

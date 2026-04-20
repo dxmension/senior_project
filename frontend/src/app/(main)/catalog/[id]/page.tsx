@@ -451,7 +451,7 @@ export default function CourseDetailPage({
         {activeTab === "overview" && (
           <div className="space-y-6">
             {/* Description */}
-            {(course.description || course.prerequisites) && (
+            {(course.description || course.prerequisites || course.corequisites || course.antirequisites) && (
               <GlassCard>
                 <div className="space-y-4">
                   {course.description && (
@@ -468,6 +468,22 @@ export default function CourseDetailPage({
                         Prerequisites
                       </h2>
                       <p className="text-sm text-text-secondary">{course.prerequisites}</p>
+                    </div>
+                  )}
+                  {course.corequisites && (
+                    <div>
+                      <h2 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
+                        Corequisites
+                      </h2>
+                      <p className="text-sm text-text-secondary">{course.corequisites}</p>
+                    </div>
+                  )}
+                  {course.antirequisites && (
+                    <div>
+                      <h2 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
+                        Antirequisites
+                      </h2>
+                      <p className="text-sm text-text-secondary">{course.antirequisites}</p>
                     </div>
                   )}
                 </div>

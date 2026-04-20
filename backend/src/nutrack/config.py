@@ -7,7 +7,7 @@ from nutrack.semester import normalize_term
 
 
 class Settings(BaseSettings):
-    APP_NAME: str = "NU Learning"
+    APP_NAME: str = "nutrack"
     API_V1_PREFIX: str = "/v1"
 
     DATABASE_URL: str

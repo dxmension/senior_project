@@ -46,7 +46,7 @@ function LoginContent() {
         </div>
 
         <h1 className="text-2xl font-bold text-text-primary mb-2">
-          NU Learning
+          nutrack
         </h1>
         <p className="text-text-secondary mb-8">
           Educational platform for Nazarbayev University students

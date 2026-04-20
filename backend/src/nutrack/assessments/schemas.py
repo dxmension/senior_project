@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Self
 
 from nutrack.assessments.models import AssessmentType
+from nutrack.mock_exams.models import MockExamDifficulty
 
 
 class CreateAssessmentRequest(BaseModel):
@@ -62,3 +63,10 @@ class AssessmentResponse(BaseModel):
 class MockExamGenerationQueuedResponse(BaseModel):
     job_id: int
     status: str
+
+
+class GenerateMockExamRequest(BaseModel):
+    difficulty: MockExamDifficulty = MockExamDifficulty.MEDIUM
+    question_count: int | None = Field(default=None, ge=1, le=60)
+    selected_upload_ids: list[int] | None = None
+    selected_shared_material_ids: list[int] | None = None

@@ -82,3 +82,45 @@ class AuditResultResponse(BaseModel):
     in_progress_ects: int
     actual_credits_earned: int
     categories: list[CategoryResultResponse]
+
+
+class SuggestedCourseResponse(BaseModel):
+    code: str
+    level: str
+    full_code: str
+    title: str
+    ects: int
+    user_priority: int | None
+    terms_offered: list[str]
+
+
+class PlannedCourseResponse(BaseModel):
+    requirement_name: str
+    category: str
+    ects: int
+    note: str
+    terms_available: list[str]
+    status: str  # "in_progress" | "pending"
+    is_elective: bool = False
+    depends_on: str | None = None
+    matched_codes: list[str] = []  # in_progress: enrolled course codes; used for course lookup
+    suggested_courses: list[SuggestedCourseResponse] = []
+
+
+class PlannedTermResponse(BaseModel):
+    term: str
+    year: int
+    label: str
+    courses: list[PlannedCourseResponse]
+    total_ects: int
+    is_current: bool
+    study_year: int | None = None
+
+
+class DegreePlanResponse(BaseModel):
+    major: str
+    graduation_term: str | None
+    graduation_year: int | None
+    needs_extra_time: bool
+    enrollment_year: int | None
+    terms: list[PlannedTermResponse]

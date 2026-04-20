@@ -14,10 +14,12 @@ MODEL_MODULES = (
     "nutrack.courses.models",
     "nutrack.enrollments.models",
     "nutrack.events.models",
+    "nutrack.flashcards.models",
     "nutrack.handbook.models",
     "nutrack.mindmaps.models",
     "nutrack.course_materials.models",
     "nutrack.mock_exams.models",
+    "nutrack.study_helper.models",
     "nutrack.transcripts.models",
     "nutrack.users.models",
 )

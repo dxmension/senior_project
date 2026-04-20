@@ -278,6 +278,47 @@ export interface AuditResult {
   categories: AuditCategory[];
 }
 
+export interface SuggestedCourse {
+  code: string;
+  level: string;
+  full_code: string;
+  title: string;
+  ects: number;
+  user_priority: number | null;
+  terms_offered: string[];
+}
+
+export interface DegreePlanCourse {
+  requirement_name: string;
+  category: string;
+  ects: number;
+  note: string;
+  terms_available: string[];
+  status: "in_progress" | "pending";
+  is_elective: boolean;
+  matched_codes: string[];
+  suggested_courses: SuggestedCourse[];
+}
+
+export interface DegreePlanTerm {
+  term: string;
+  year: number;
+  label: string;
+  courses: DegreePlanCourse[];
+  total_ects: number;
+  is_current: boolean;
+  study_year: number | null;
+}
+
+export interface DegreePlan {
+  major: string;
+  graduation_term: string | null;
+  graduation_year: number | null;
+  needs_extra_time: boolean;
+  enrollment_year: number | null;
+  terms: DegreePlanTerm[];
+}
+
 export interface ApiResponse<T = null> {
   ok: boolean;
   data: T;
@@ -410,6 +451,15 @@ export interface UpdateAssessmentPayload {
 export interface MockExamGenerationQueued {
   job_id: number;
   status: string;
+}
+
+export type MockExamDifficulty = "easy" | "medium" | "hard";
+
+export interface GenerateMockOptions {
+  difficulty: MockExamDifficulty;
+  question_count: number;
+  selected_upload_ids: number[];
+  selected_shared_material_ids: number[];
 }
 
 export type CalendarEventType =
@@ -591,6 +641,7 @@ export interface MockExamListItem {
   version: number;
   question_count: number;
   time_limit_minutes: number | null;
+  difficulty: MockExamDifficulty | null;
   created_at: string;
   sources: MockExamSourceSummary[];
   best_score_pct: number | null;
@@ -610,6 +661,22 @@ export interface MockExamAssessmentPrediction {
   predicted_grade_letter: string | null;
 }
 
+export interface MockExamFamily {
+  assessment_type: AssessmentType;
+  assessment_number: number;
+  label: string;
+  mocks_count: number;
+  completed_attempts: number;
+  latest_created_at: string | null;
+  best_score: number | null;
+  latest_score: number | null;
+  predicted_score: number | null;
+  predicted_letter: string | null;
+  has_active_attempt: boolean;
+  active_attempt: MockExamAttemptSummary | null;
+  exams: MockExamListItem[];
+}
+
 export interface MockExamCourseGroup {
   course_id: number;
   course_code: string;
@@ -617,6 +684,7 @@ export interface MockExamCourseGroup {
   predicted_score_pct: number | null;
   predicted_grade_letter: string | null;
   assessment_predictions: MockExamAssessmentPrediction[];
+  families: MockExamFamily[];
   exams: MockExamListItem[];
 }
 
@@ -738,6 +806,7 @@ export interface MockExamDashboard {
   version: number;
   question_count: number;
   time_limit_minutes: number | null;
+  difficulty: MockExamDifficulty | null;
   instructions: string | null;
   created_at: string;
   sources: MockExamSourceSummary[];

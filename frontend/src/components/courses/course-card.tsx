@@ -13,6 +13,8 @@ import {
   Trash2,
 } from "lucide-react";
 
+import { Plus, Trash2, AlertTriangle, Clock, MapPin, BookOpen, AlertCircle, Timer, CheckCircle2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Spinner } from "@/components/ui/spinner";
 import type { Assessment, EnrollmentItem } from "@/types";
 
@@ -45,18 +47,17 @@ export function CourseCard({
 
   function handleTrashClick(e: React.MouseEvent) {
     e.stopPropagation();
-    setConfirming(true);
+    setShowDeleteDialog(true);
   }
 
-  function handleCancelConfirm(e: React.MouseEvent) {
-    e.stopPropagation();
-    setConfirming(false);
-  }
-
-  function handleConfirmRemove(e: React.MouseEvent) {
-    e.stopPropagation();
-    setConfirming(false);
+  function handleConfirmDelete() {
+    setShowDeleteDialog(false);
     onRemove?.();
+  }
+
+  function handleCancelDelete() {
+    if (isRemoving) return;
+    setShowDeleteDialog(false);
   }
 
   return (
@@ -202,6 +203,17 @@ export function CourseCard({
         </button>
       </div>
     </div>
+
+    <ConfirmDialog
+      isOpen={showDeleteDialog}
+      title="Remove course"
+      message={`Remove "${enrollment.course_code}: ${enrollment.course_title}" from your courses?`}
+      confirmLabel={isRemoving ? "Removing..." : "Remove"}
+      variant="danger"
+      onConfirm={handleConfirmDelete}
+      onCancel={handleCancelDelete}
+    />
+    </>
   );
 }
 

@@ -19,7 +19,7 @@ class _AsyncSessionContext:
 
 @pytest.mark.asyncio
 async def test_run_generation_updates_task_id_and_runs_job(monkeypatch) -> None:
-    session = SimpleNamespace(commit=AsyncMock())
+    session = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
     job = SimpleNamespace(
         status=SimpleNamespace(value="completed"),
         error_message=None,
@@ -46,6 +46,33 @@ async def test_run_generation_updates_task_id_and_runs_job(monkeypatch) -> None:
     service.set_celery_task_id.assert_awaited_once_with(7, "task-7")
     service.run_job.assert_awaited_once_with(7)
     session.commit.assert_awaited_once_with()
+    session.rollback.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_run_generation_rolls_back_on_error(monkeypatch) -> None:
+    session = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+    service = SimpleNamespace(
+        set_celery_task_id=AsyncMock(),
+        run_job=AsyncMock(side_effect=RuntimeError("boom")),
+    )
+
+    monkeypatch.setattr(
+        tasks,
+        "AsyncSessionLocal",
+        lambda: _AsyncSessionContext(session),
+    )
+    monkeypatch.setattr(
+        tasks,
+        "MockExamGenerationService",
+        lambda session: service,
+    )
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await tasks._run_generation(7, "task-7")
+
+    session.commit.assert_not_awaited()
+    session.rollback.assert_awaited_once_with()
 
 
 @pytest.mark.asyncio
