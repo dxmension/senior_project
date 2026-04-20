@@ -83,3 +83,18 @@ async def get_course_review_service(
         course_repository=CourseRepository(session),
         review_repository=CourseReviewRepository(session),
     )
+
+
+async def get_recommendation_service(
+    session: AsyncSession = Depends(get_async_session),
+):
+    from nutrack.courses.recommendation_service import CourseRecommendationService
+
+    return CourseRecommendationService(
+        course_repository=CourseRepository(session),
+        offering_repository=CourseOfferingRepository(session),
+        gpa_stats_repository=CourseGpaStatsRepository(session),
+        eligibility_service=CourseEligibilityService(
+            course_repository=CourseRepository(session)
+        ),
+    )
