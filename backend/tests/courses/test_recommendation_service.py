@@ -314,7 +314,7 @@ async def test_prefers_kaz_3xx_for_broad_kazakh_requirement(mock_service):
     result = await svc.get_recommendations(user)
 
     assert result.recommendations[0].code == "KAZ"
-    assert result.recommendations[0].level == "300"
+    assert result.recommendations[0].level.startswith("3")
 
 
 @pytest.mark.asyncio
@@ -368,3 +368,51 @@ async def test_returns_multiple_options_for_broad_requirements(mock_service):
     tech_codes = {(item.code, item.level) for item in result.recommendations}
     assert len(result.recommendations) >= 3
     assert ("CSCI", "245") in tech_codes or ("CSCI", "262") in tech_codes
+
+
+@pytest.mark.asyncio
+async def test_build_audit_passes_user_kazakh_level(monkeypatch, mock_service):
+    svc, course_repo, _, _, _, handbook_svc = mock_service
+    user = SimpleNamespace(
+        id=1,
+        major="Computer Science",
+        cgpa=3.1,
+        study_year=4,
+        total_credits_earned=220,
+        kazakh_level="B1",
+    )
+    history = [
+        {
+            "code": "CSCI",
+            "level": "151",
+            "status": "passed",
+        }
+    ]
+    course_repo.get_user_course_history.return_value = history
+    handbook_svc.get_plans_for_year.return_value = None
+
+    captured: dict[str, object] = {}
+
+    def fake_compute_audit(
+        major,
+        audit_input,
+        earned,
+        handbook_plans,
+        *,
+        kazakh_level=None,
+    ):
+        captured["major"] = major
+        captured["audit_input"] = audit_input
+        captured["earned"] = earned
+        captured["handbook_plans"] = handbook_plans
+        captured["kazakh_level"] = kazakh_level
+        return SimpleNamespace(supported=False, categories=[])
+
+    monkeypatch.setattr(
+        "nutrack.courses.recommendation_service.compute_audit",
+        fake_compute_audit,
+    )
+
+    await svc._build_audit(user, history)  # noqa: SLF001
+
+    assert captured["kazakh_level"] == "B1"

@@ -466,6 +466,28 @@ export interface DashboardData {
   weekly_workload: WeeklyWorkloadItem[];
 }
 
+export type InsightActionType =
+  | "take_mock"
+  | "start_flashcards"
+  | "view_mindmap"
+  | "take_quiz"
+  | "take_midterm";
+
+export interface InsightAction {
+  label: string;
+  description: string;
+  action_type: InsightActionType;
+  action_url: string;
+}
+
+export interface InsightsData {
+  short_summary: string;
+  long_summary: string;
+  actions: InsightAction[];
+  generated_at: string;
+  cached: boolean;
+}
+
 export interface UpdateAssessmentPayload {
   assessment_type?: AssessmentType;
   assessment_number?: number;
@@ -609,6 +631,107 @@ export interface SharedCourseMaterial {
   download_url: string | null;
   is_owned_by_current_user: boolean;
   published_at: string;
+}
+
+export type FlashcardDifficulty = "easy" | "medium" | "hard";
+
+export interface GenerateFlashcardOptions {
+  course_id: number;
+  difficulty: FlashcardDifficulty;
+  card_count: number;
+  title?: string;
+  selected_upload_ids?: number[];
+  selected_shared_material_ids?: number[];
+}
+
+export interface FlashcardItem {
+  id: number;
+  position: number;
+  question: string;
+  answer: string;
+  topic: string | null;
+}
+
+export interface FlashcardCardStats {
+  times_seen: number;
+  times_easy: number;
+  times_medium: number;
+  times_hard: number;
+  last_response: FlashcardDifficulty | null;
+}
+
+export interface FlashcardDeckListItem {
+  id: number;
+  course_id: number;
+  title: string;
+  card_count: number;
+  difficulty: string;
+  created_at: string;
+  completed_sessions: number;
+  latest_grade_pct: number | null;
+  latest_grade_letter: string | null;
+  average_grade_pct: number | null;
+  best_grade_pct: number | null;
+  latest_completed_session_id: number | null;
+}
+
+export interface FlashcardDeck {
+  id: number;
+  course_id: number;
+  title: string;
+  card_count: number;
+  difficulty: string;
+  created_at: string;
+  cards: FlashcardItem[];
+}
+
+export interface FlashcardSession {
+  id: number;
+  deck_id: number;
+  deck_title: string;
+  status: string;
+  started_at: string;
+  cards: FlashcardItem[];
+  card_stats: Record<number, FlashcardCardStats>;
+}
+
+export interface FlashcardSessionHistoryItem {
+  session_id: number;
+  completed_at: string;
+  grade_pct: number;
+  grade_letter: string;
+  easy_count: number;
+  medium_count: number;
+  hard_count: number;
+  total_responses: number;
+}
+
+export interface FlashcardDeckHistory {
+  deck_id: number;
+  deck_title: string;
+  total_completed: number;
+  average_grade_pct: number | null;
+  best_grade_pct: number | null;
+  predicted_grade_pct: number | null;
+  predicted_grade_letter: string | null;
+  sessions: FlashcardSessionHistoryItem[];
+}
+
+export interface FlashcardSessionReview {
+  session_id: number;
+  deck_id: number;
+  deck_title: string;
+  total_cards: number;
+  total_responses: number;
+  easy_count: number;
+  medium_count: number;
+  hard_count: number;
+  grade_pct: number;
+  grade_letter: string;
+  top_struggled_cards: FlashcardItem[];
+  ai_summary: string;
+  ai_weak_topics: string[];
+  ai_study_plan: string;
 }
 
 export interface MindmapNode {

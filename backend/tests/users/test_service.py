@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.exc import ProgrammingError
 
+from nutrack.courses.repository import CourseRepository
 from nutrack.enrollments.models import EnrollmentStatus
 from nutrack.users.exceptions import NotFoundError
 from nutrack.users.schemas import UserProfileUpdate
@@ -25,6 +26,7 @@ def _user() -> SimpleNamespace:
         last_name="Doe",
         avatar_url=None,
         major="Computer Science",
+        kazakh_level=None,
         study_year=3,
         cgpa=3.7,
         total_credits_earned=40,
@@ -116,6 +118,11 @@ async def test_get_audit_ignores_missing_handbook_table(monkeypatch) -> None:
     monkeypatch.setattr(
         "nutrack.users.service.HandbookService.get_plans_for_year",
         AsyncMock(side_effect=error),
+    )
+    monkeypatch.setattr(
+        CourseRepository,
+        "get_all_course_terms",
+        AsyncMock(return_value=[]),
     )
 
     result = await service.get_audit(1)

@@ -145,6 +145,7 @@ class CourseRecommendationService:
             audit_input,
             user.total_credits_earned or 0,
             handbook_plans,
+            kazakh_level=user.kazakh_level,
         )
 
     async def _load_handbook_plans(self, user: User):

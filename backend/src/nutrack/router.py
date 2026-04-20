@@ -10,6 +10,8 @@ from nutrack.auth.router import router as auth_router
 
 from nutrack.handbook.router import router as handbook_router
 
+from nutrack.insights.router import router as insights_router
+
 from nutrack.calendar.router import router as calendar_router
 
 from nutrack.config import settings
@@ -63,6 +65,8 @@ api_router.include_router(calendar_router, prefix="/calendar")
 
 api_router.include_router(dashboard_router, prefix="/dashboard")
 
+api_router.include_router(insights_router, prefix="/insights")
+
 api_router.include_router(mindmaps_router)
 
 api_router.include_router(course_materials_router)
@@ -78,4 +82,3 @@ api_router.include_router(admin_router)
 api_router.include_router(handbook_router)
 
 api_router.include_router(study_helper_router)
-

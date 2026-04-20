@@ -137,7 +137,7 @@ class UserService:
 
         credits_by_semester = [
             CreditsBySemester(
-                semester=format_term_year(term, year),
+                semester=_fmt_term_year(term, year),
                 term=term,
                 year=year,
                 credits=credits,

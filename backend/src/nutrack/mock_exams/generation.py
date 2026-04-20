@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import pdfplumber
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutrack.assessments.models import Assessment, AssessmentType
@@ -101,6 +101,33 @@ class GenerationResult(BaseModel):
     created_question_ids: list[int]
     coverage_summary: str
     warnings: list[str] = Field(default_factory=list)
+
+    @field_validator("coverage_summary", mode="before")
+    @classmethod
+    def normalize_coverage_summary(cls, value: Any) -> str:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, dict):
+            topics = value.get("topics_covered")
+            notes = value.get("notes")
+            missing = value.get("gaps") or value.get("missing_topics")
+            parts: list[str] = []
+            if isinstance(topics, list) and topics:
+                parts.append(
+                    "Topics covered: " + ", ".join(str(item) for item in topics[:8])
+                )
+            if isinstance(missing, list) and missing:
+                parts.append(
+                    "Gaps: " + ", ".join(str(item) for item in missing[:5])
+                )
+            if isinstance(notes, str) and notes.strip():
+                parts.append(notes.strip())
+            if parts:
+                return ". ".join(parts)
+            return json.dumps(value, ensure_ascii=True)
+        if isinstance(value, list):
+            return ", ".join(str(item) for item in value)
+        return str(value)
 
 
 @dataclass

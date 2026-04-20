@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { use, useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Brain, GitFork, Layers, LoaderCircle, PlayCircle, Trash2 } from "lucide-react";
 
 import { MockExamCountdown } from "@/components/study/mock-exam-countdown";
@@ -46,6 +46,7 @@ function formatDate(value: string) {
 export default function StudyCoursePage({ params }: { params: PageParams }) {
   const { course_id } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const courseId = Number(course_id);
   const [group, setGroup] = useState<MockExamCourseGroup | null>(null);
   const [enrollment, setEnrollment] = useState<EnrollmentItem | null>(null);
@@ -86,6 +87,13 @@ export default function StudyCoursePage({ params }: { params: PageParams }) {
   useEffect(() => {
     void loadCourseData();
   }, [courseId]);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "flashcards" || tab === "mindmaps") {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
 
   const families = useMemo(() => (
     group ? sortMockExamFamilies(group.families) : []

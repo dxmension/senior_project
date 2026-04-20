@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 
+import { AiInsightsWidget } from "@/components/dashboard/ai-insights-widget";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
@@ -29,6 +30,7 @@ import type {
   CourseProgressItem,
   DashboardData,
   DeadlineDotItem,
+  InsightsData,
   UpcomingDeadlineItem,
   WeeklyWorkloadItem,
 } from "@/types";
@@ -533,15 +535,17 @@ function CourseRoadmapRow({
 export default function DashboardPage() {
   const { user } = useAuthStore();
   const [data, setData] = useState<DashboardData | null>(null);
+  const [insightsData, setInsightsData] = useState<InsightsData | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const now = new Date();
 
   useEffect(() => {
-    async function load() {
+    async function loadDashboard() {
       try {
-        const res = await api.get<ApiResponse<DashboardData>>("/dashboard");
-        setData(res.data);
+        const dashboardResponse = await api.get<ApiResponse<DashboardData>>("/dashboard");
+        setData(dashboardResponse.data);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Failed to load dashboard."
@@ -550,7 +554,20 @@ export default function DashboardPage() {
         setLoading(false);
       }
     }
-    void load();
+
+    async function loadInsights() {
+      try {
+        const insightsResponse = await api.get<ApiResponse<InsightsData>>("/insights");
+        setInsightsData(insightsResponse.data);
+      } catch {
+        setInsightsData(null);
+      } finally {
+        setInsightsLoading(false);
+      }
+    }
+
+    void loadDashboard();
+    void loadInsights();
   }, []);
 
   return (
@@ -674,6 +691,7 @@ export default function DashboardPage() {
                   <DeadlinesList items={data.upcoming_deadlines} />
                 </div>
               </GlassCard>
+              <AiInsightsWidget data={insightsData} loading={insightsLoading} />
             </div>
           </div>
         </>
