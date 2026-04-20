@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
-import { LETTER_OPTIONS, LETTER_TO_POINTS, computeGpa, PASS_FAIL_POINTS } from "@/lib/grade-calc";
+import { LETTER_OPTIONS, INTERNSHIP_OPTIONS, LETTER_TO_POINTS, computeGpa } from "@/lib/grade-calc";
+import { useAuthStore } from "@/stores/auth";
 import type { EnrollmentItem } from "@/types";
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function GpaCalculator({ enrollments }: Props) {
+  const { user } = useAuthStore();
   const current = useMemo(
     () => enrollments.filter((e) => e.status === "in_progress"),
     [enrollments]
@@ -21,16 +23,25 @@ export function GpaCalculator({ enrollments }: Props) {
     letter: picked[e.catalog_course_id] ?? null,
   }));
   const { gpa, totalEcts } = computeGpa(items);
+  const cgpa = user?.cgpa ?? null;
 
   return (
     <div className="space-y-4">
       <GlassCard>
         <div className="flex items-end justify-between">
-          <div>
-            <p className="text-sm text-text-muted">Projected term GPA</p>
-            <p className="font-mono text-3xl font-bold text-accent-green">
-              {gpa != null ? gpa.toFixed(2) : "—"}
-            </p>
+          <div className="flex gap-8">
+            <div>
+              <p className="text-sm text-text-muted">Projected term GPA</p>
+              <p className="font-mono text-3xl font-bold text-accent-green">
+                {gpa != null ? gpa.toFixed(2) : "—"}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-text-muted">CGPA</p>
+              <p className="font-mono text-3xl font-bold text-text-primary">
+                {cgpa != null ? cgpa.toFixed(2) : "—"}
+              </p>
+            </div>
           </div>
           <p className="text-xs text-text-muted">{totalEcts} ECTS graded</p>
         </div>
@@ -72,12 +83,12 @@ export function GpaCalculator({ enrollments }: Props) {
                   >
                     <option value="">— pick grade —</option>
                     {(e.course_title?.toLowerCase().includes("internship")
-                      ? LETTER_OPTIONS
-                      : LETTER_OPTIONS.filter((L) => L !== "P" && L !== "NP")
+                      ? INTERNSHIP_OPTIONS
+                      : LETTER_OPTIONS
                     ).map((L) => {
                       const pts = LETTER_TO_POINTS[L] !== undefined
                         ? LETTER_TO_POINTS[L].toFixed(2)
-                        : L === "P" ? "no GPA impact" : "0.00";
+                        : L === "Pass" ? "no GPA impact" : "0.00";
                       return (
                         <option key={L} value={L}>
                           {L} ({pts})
