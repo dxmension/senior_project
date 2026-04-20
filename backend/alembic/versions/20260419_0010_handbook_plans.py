@@ -18,6 +18,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    if sa.inspect(op.get_bind()).has_table("handbook_plans"):
+        return
+
     op.create_table(
         "handbook_plans",
         sa.Column("enrollment_year", sa.Integer(), nullable=False),

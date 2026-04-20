@@ -18,6 +18,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    if sa.inspect(op.get_bind()).has_table("mindmaps"):
+        return
+
     op.create_table(
         "mindmaps",
         sa.Column("user_id", sa.Integer(), nullable=False),

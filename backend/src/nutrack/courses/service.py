@@ -1362,8 +1362,10 @@ def _build_kll_check(text: str, kazakh_level: str | None) -> "PrerequisiteCheck 
         return None
     required = m.group(1).upper()  # e.g. "B1", "C1"
     if kazakh_level:
+        # Normalize sub-levels (e.g. "C1.1" → "C1", "B1.2" → "B1") before lookup
+        normalized = kazakh_level.upper().split(".")[0]
         try:
-            met = KLL_LEVEL_ORDER.index(kazakh_level.upper()) >= KLL_LEVEL_ORDER.index(required)
+            met = KLL_LEVEL_ORDER.index(normalized) >= KLL_LEVEL_ORDER.index(required)
         except ValueError:
             met = False
     else:
@@ -1408,6 +1410,25 @@ def _build_prereq_checks(
 
     checks: list[PrerequisiteCheck] = []
     for code, level in courses:
+        # KAZ/KFL courses can be bypassed by sufficient KLL level
+        if code.upper() in ("KAZ", "KFL") and kazakh_level:
+            normalized_kll = kazakh_level.upper().split(".")[0]
+            kll_idx = KLL_LEVEL_ORDER.index(normalized_kll) if normalized_kll in KLL_LEVEL_ORDER else -1
+            try:
+                level_digit = int(str(level)[0])
+            except (ValueError, IndexError):
+                level_digit = 0
+            # 100-level → need A1+, 200-level → B1+, 300-level → C1+
+            min_kll_idx = {1: 0, 2: 2, 3: 4}.get(level_digit, 0)
+            if kll_idx >= min_kll_idx:
+                checks.append(PrerequisiteCheck(
+                    course_code=f"{code} {level}",
+                    required_grade=global_grade,
+                    met=True,
+                    your_grade=f"KLL {kazakh_level}",
+                ))
+                continue
+
         course_id = code_to_id.get((code.upper(), level))
         enrollment = passed.get(course_id) if course_id is not None else None
         if enrollment is None:

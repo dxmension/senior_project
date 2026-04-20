@@ -32,6 +32,10 @@ def _label_sql(column: str) -> str:
 
 
 def upgrade() -> None:
+    cols = {c["name"] for c in sa.inspect(op.get_bind()).get_columns("assessments")}
+    if "assessment_number" in cols:
+        return
+
     op.add_column(
         "assessments",
         sa.Column("assessment_number", sa.Integer(), nullable=True),

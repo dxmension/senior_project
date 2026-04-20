@@ -6,15 +6,26 @@ export const LETTER_TO_POINTS: Record<string, number> = {
   "F": 0.0,
 };
 
-export const LETTER_OPTIONS = Object.keys(LETTER_TO_POINTS) as string[];
+// Internship courses use Pass/Fail only
+export const INTERNSHIP_OPTIONS = ["Pass", "Fail"] as string[];
+
+export const LETTER_OPTIONS = [...Object.keys(LETTER_TO_POINTS)] as string[];
 
 export function computeGpa(
   items: { ects: number; letter: string | null }[]
 ): { gpa: number | null; totalEcts: number } {
-  const graded = items.filter((i) => i.letter && LETTER_TO_POINTS[i.letter] !== undefined);
+  // "Pass" is excluded from GPA; "Fail" counts as 0; letter grades use LETTER_TO_POINTS
+  const graded = items.filter((i) => {
+    if (!i.letter) return false;
+    if (LETTER_TO_POINTS[i.letter] !== undefined) return true;
+    return i.letter === "Fail";
+  });
   const totalEcts = graded.reduce((s, i) => s + i.ects, 0);
   if (totalEcts === 0) return { gpa: null, totalEcts: 0 };
-  const weighted = graded.reduce((s, i) => s + (LETTER_TO_POINTS[i.letter!] * i.ects), 0);
+  const weighted = graded.reduce((s, i) => {
+    const pts = i.letter === "Fail" ? 0.0 : LETTER_TO_POINTS[i.letter!];
+    return s + pts * i.ects;
+  }, 0);
   return { gpa: weighted / totalEcts, totalEcts };
 }
 

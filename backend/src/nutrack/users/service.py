@@ -274,7 +274,12 @@ class UserService:
             )
             courses.append((code, e.status.value))
             if e.status == EnrollmentStatus.PASSED:
-                passed_grade_pts[code] = e.grade_points or 1.0
+                grade_str = (e.grade or "").strip().upper()
+                if grade_str.startswith("P"):
+                    # P/PASS (pass-fail system) — satisfies any grade requirement
+                    passed_grade_pts[code] = 4.0
+                else:
+                    passed_grade_pts[code] = e.grade_points if e.grade_points is not None else 1.0
 
         enrollment_year = (
             settings.CURRENT_YEAR - user.study_year if user.study_year else None
@@ -334,9 +339,8 @@ class UserService:
                     depends_on=req.depends_on,
                 )
                 ip_codes = [m.code for m in req.matched_courses if m.status == "in_progress"]
-                for i in range(req.in_progress_count):
-                    matched = [ip_codes[i]] if i < len(ip_codes) else []
-                    in_progress_slots.append(PlannedCourseResponse(**base, status="in_progress", matched_codes=matched))
+                for code in ip_codes:
+                    in_progress_slots.append(PlannedCourseResponse(**base, status="in_progress", matched_codes=[code]))
                 remaining = max(0, req.required_count - req.completed_count - req.in_progress_count)
                 for _ in range(remaining):
                     pending_slots.append(PlannedCourseResponse(**base, status="pending"))

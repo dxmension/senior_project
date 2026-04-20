@@ -39,7 +39,10 @@ def upgrade() -> None:
     material_upload_status.create(bind, checkfirst=True)
     material_curation_status.create(bind, checkfirst=True)
 
-    op.create_table(
+    existing = set(sa.inspect(bind).get_table_names())
+
+    if "study_material_uploads" not in existing:
+        op.create_table(
         "study_material_uploads",
         sa.Column("course_id", sa.Integer(), nullable=False),
         sa.Column("uploader_id", sa.Integer(), nullable=False),
@@ -68,33 +71,34 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["course_id"], ["course_offerings.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["uploader_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(
-        "ix_study_material_uploads_course_id",
-        "study_material_uploads",
-        ["course_id"],
-        unique=False,
-    )
-    op.create_index(
-        "ix_study_material_uploads_uploader_id",
-        "study_material_uploads",
-        ["uploader_id"],
-        unique=False,
-    )
-    op.create_index(
-        "ix_study_material_uploads_status_created",
-        "study_material_uploads",
-        ["upload_status", "created_at"],
-        unique=False,
-    )
-    op.create_index(
-        "ix_study_material_uploads_user_course_created",
-        "study_material_uploads",
-        ["uploader_id", "course_id", "created_at"],
-        unique=False,
-    )
+        )
+        op.create_index(
+            "ix_study_material_uploads_course_id",
+            "study_material_uploads",
+            ["course_id"],
+            unique=False,
+        )
+        op.create_index(
+            "ix_study_material_uploads_uploader_id",
+            "study_material_uploads",
+            ["uploader_id"],
+            unique=False,
+        )
+        op.create_index(
+            "ix_study_material_uploads_status_created",
+            "study_material_uploads",
+            ["upload_status", "created_at"],
+            unique=False,
+        )
+        op.create_index(
+            "ix_study_material_uploads_user_course_created",
+            "study_material_uploads",
+            ["uploader_id", "course_id", "created_at"],
+            unique=False,
+        )
 
-    op.create_table(
+    if "study_material_library_entries" not in existing:
+        op.create_table(
         "study_material_library_entries",
         sa.Column("upload_id", sa.Integer(), nullable=False),
         sa.Column("course_id", sa.Integer(), nullable=False),
@@ -127,13 +131,13 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("upload_id", name="uq_study_material_library_upload"),
-    )
-    op.create_index(
-        "ix_study_material_library_entries_course_week_created",
-        "study_material_library_entries",
-        ["course_id", "curated_week", "created_at"],
-        unique=False,
-    )
+        )
+        op.create_index(
+            "ix_study_material_library_entries_course_week_created",
+            "study_material_library_entries",
+            ["course_id", "curated_week", "created_at"],
+            unique=False,
+        )
 
 
 def downgrade() -> None:

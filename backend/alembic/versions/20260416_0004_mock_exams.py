@@ -43,6 +43,10 @@ def upgrade() -> None:
     assessment_type.create(bind, checkfirst=True)
     mock_exam_attempt_status.create(bind, checkfirst=True)
 
+    existing = set(sa.inspect(bind).get_table_names())
+    if "mock_exams" in existing:
+        return
+
     op.create_table(
         "mock_exams",
         sa.Column("course_id", sa.Integer(), nullable=False),
