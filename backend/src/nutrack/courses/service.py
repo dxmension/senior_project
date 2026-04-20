@@ -417,21 +417,18 @@ for _school, _majors in _SCHOOL_MAJORS.items():
     for _m in _majors:
         _MAJOR_TO_SCHOOLS.setdefault(_m, []).append(_school)
 
-# Matches "2 year UG SEDS" (all students in a school for that year, no specific major/qualifier)
-_YEAR_SCHOOL_RE = re.compile(r"^\d+\s+year\s+ug\s+(\w+)$", re.IGNORECASE)
+# Matches "2 year UG SEDS" or "5 year UG SEDS (pending graduation)" — captures year and school abbreviation
+_YEAR_SCHOOL_RE = re.compile(r"^(\d+)\s+year\s+ug\s+(\w+)(?:\s*\(.*\))?$", re.IGNORECASE)
 
 
-def _priority_text_matches(text: str, major_lower: str) -> bool:
+def _priority_text_matches(text: str, major_lower: str, study_year: int | None = None) -> bool:
     """Return True if priority text matches the user's major directly or via school.
 
     Priority text is a comma-separated list of items such as:
       "Computer Science", "SEDS", "2 year UG SEDS", "Undeclared SEDS"
 
-    School-level matching (abbreviation) only fires when an item is the
-    abbreviation alone ("SEDS") or a year+school without a specific major
-    ("2 year UG SEDS").  Items like "Undeclared SEDS" are specific sub-groups
-    and must NOT cause all SEDS students to match — only students whose major
-    is literally "Undeclared SEDS" will match via the direct substring check.
+    When study_year is provided, year-qualified school items ("5 year UG SEDS")
+    only match if the year matches the user's current study year.
     """
     text_lower = text.lower()
     # 1. Direct major substring match (handles specific majors AND "Undeclared SEDS" etc.)
@@ -458,15 +455,16 @@ def _priority_text_matches(text: str, major_lower: str) -> bool:
         # Exact abbreviation alone (e.g. item == "seds")
         if item in user_abbrevs:
             return True
-        # "X year UG ABBREVIATION" with no further qualifier
+        # "X year UG ABBREVIATION" — only matches if study year aligns
         m = _YEAR_SCHOOL_RE.match(item)
-        if m and m.group(1).lower() in user_abbrevs:
-            return True
+        if m and m.group(2).lower() in user_abbrevs:
+            if study_year is None or int(m.group(1)) == study_year:
+                return True
 
     return False
 
 
-def _get_user_priority(course, user_major: str | None) -> int | None:
+def _get_user_priority(course, user_major: str | None, study_year: int | None = None) -> int | None:
     """Return 1/2/3/4 if user's major (or their school) appears in that priority group text."""
     if not user_major:
         return None
@@ -477,7 +475,7 @@ def _get_user_priority(course, user_major: str | None) -> int | None:
         (3, course.priority_3),
         (4, course.priority_4),
     ]:
-        if text and _priority_text_matches(text, major_lower):
+        if text and _priority_text_matches(text, major_lower, study_year):
             return level
     return None
 

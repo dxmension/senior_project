@@ -8,36 +8,40 @@ import { ProfileHeader } from "@/components/profile/profile-header";
 import { StatsGrid } from "@/components/profile/stats-grid";
 import { EnrollmentHistory } from "@/components/profile/enrollment-history";
 import { AuditSection } from "@/components/profile/audit-section";
-import type { ApiResponse, UserStats, EnrollmentItem, AuditResult } from "@/types";
+import { DegreePlanSection } from "@/components/profile/degree-plan";
+import type { ApiResponse, UserStats, EnrollmentItem, AuditResult, DegreePlan } from "@/types";
 
-type Tab = "audit" | "history";
+type Tab = "audit" | "plan" | "history";
+
+const TAB_LABELS: Record<Tab, string> = {
+  audit: "Degree Audit",
+  plan: "Registration Plan",
+  history: "Course History",
+};
 
 export default function ProfilePage() {
   const { user } = useAuthStore();
   const [stats, setStats] = useState<UserStats | null>(null);
   const [enrollments, setEnrollments] = useState<EnrollmentItem[]>([]);
   const [audit, setAudit] = useState<AuditResult | null>(null);
+  const [plan, setPlan] = useState<DegreePlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("audit");
 
   useEffect(() => {
     async function load() {
       try {
-        const [statsRes, enrollRes, auditRes] = await Promise.allSettled([
+        const [statsRes, enrollRes, auditRes, planRes] = await Promise.allSettled([
           api.get<ApiResponse<UserStats>>("/profile/stats"),
           api.get<ApiResponse<EnrollmentItem[]>>("/profile/enrollments"),
           api.get<ApiResponse<AuditResult>>("/profile/audit"),
+          api.get<ApiResponse<DegreePlan>>("/profile/degree-plan"),
         ]);
 
-        if (statsRes.status === "fulfilled") {
-          setStats(statsRes.value.data);
-        }
-        if (enrollRes.status === "fulfilled") {
-          setEnrollments(enrollRes.value.data);
-        }
-        if (auditRes.status === "fulfilled") {
-          setAudit(auditRes.value.data);
-        }
+        if (statsRes.status === "fulfilled") setStats(statsRes.value.data);
+        if (enrollRes.status === "fulfilled") setEnrollments(enrollRes.value.data);
+        if (auditRes.status === "fulfilled") setAudit(auditRes.value.data);
+        if (planRes.status === "fulfilled") setPlan(planRes.value.data);
       } catch {
         // silently fail, components handle empty state
       } finally {
@@ -64,7 +68,7 @@ export default function ProfilePage() {
       {/* Tabs */}
       <div>
         <div className="flex gap-1 border-b border-border-primary mb-6">
-          {(["audit", "history"] as Tab[]).map((tab) => (
+          {(["audit", "plan", "history"] as Tab[]).map((tab) => (
             <button
               key={tab}
               type="button"
@@ -75,7 +79,7 @@ export default function ProfilePage() {
                   : "border-transparent text-text-muted hover:text-text-secondary"
               }`}
             >
-              {tab === "audit" ? "Degree Audit" : "Course History"}
+              {TAB_LABELS[tab]}
             </button>
           ))}
         </div>
@@ -86,6 +90,16 @@ export default function ProfilePage() {
             : (
               <p className="text-sm text-text-muted text-center py-10">
                 No audit data available. Upload your transcript to get started.
+              </p>
+            )
+        )}
+
+        {activeTab === "plan" && (
+          plan
+            ? <DegreePlanSection plan={plan} />
+            : (
+              <p className="text-sm text-text-muted text-center py-10">
+                No plan available. Upload your transcript and set your major to generate a registration plan.
               </p>
             )
         )}

@@ -50,6 +50,7 @@ class RequirementSpec:
     ects_per_course: int = 6
     note: str = ""               # shown in UI, e.g. "Any CSCI 300-400 level"
     is_elective: bool = False    # if True, courses already used elsewhere are excluded
+    depends_on: str | None = None  # requirement name that must be scheduled in a prior term
 
 
 @dataclass
@@ -84,6 +85,8 @@ class RequirementResult:
     ects_per_course: int = 6
     note: str = ""
     patterns: list[str] = field(default_factory=list)
+    is_elective: bool = False
+    depends_on: str | None = None
 
 
 @dataclass
@@ -103,6 +106,97 @@ class AuditResult:
     in_progress_ects: int
     actual_credits_earned: int  # raw total from transcript (used for summary bar)
     categories: list[CategoryResult]
+
+
+# ─── Kazakh language requirements (level-aware) ───────────────────────────────
+
+_SSH_BA_MAJORS = frozenset([
+    "anthropology", "economics", "history",
+    "political science and international relations", "psir",
+    "sociology", "world languages and literature", "wll",
+])
+
+
+def _is_ba_major(major: str) -> bool:
+    return major.strip().lower() in _SSH_BA_MAJORS
+
+
+def _kazakh_reqs(kazakh_level: str | None, is_ba: bool) -> list[RequirementSpec]:
+    """Return Kazakh/KFL requirements based on KLL level and program type."""
+    level = (kazakh_level or "").upper()
+
+    # No prior background (A1 or unset): KFL courses
+    if not level or level == "A1":
+        base = [
+            RequirementSpec("Elementary Kazakh as Foreign Language I", ["KFL 101"], note="KFL 101"),
+            RequirementSpec("Elementary Kazakh as Foreign Language II", ["KFL 102"], note="KFL 102", depends_on="Elementary Kazakh as Foreign Language I"),
+            RequirementSpec("Intermediate Kazakh as Foreign Language I", ["KFL 201"], note="KFL 201", depends_on="Elementary Kazakh as Foreign Language II"),
+        ]
+        if is_ba:
+            base.append(RequirementSpec("Intermediate Kazakh as Foreign Language II", ["KFL 202"], note="KFL 202", depends_on="Intermediate Kazakh as Foreign Language I"))
+        return base
+
+    # A2 Basic
+    if level == "A2":
+        base = [
+            RequirementSpec("Kazakh Language I", ["KAZ 150"], note="KAZ 150"),
+            RequirementSpec("Kazakh Language II", ["KAZ 201"], note="KAZ 201", depends_on="Kazakh Language I"),
+            RequirementSpec("Kazakh Language III", ["KAZ 202"], note="KAZ 202", depends_on="Kazakh Language II"),
+        ]
+        if is_ba:
+            base.append(RequirementSpec("Advanced Kazakh Language", ["KAZ 3"], note="Any KAZ 300-level course", depends_on="Kazakh Language III"))
+        return base
+
+    # B1 / B1.2 Intermediate
+    if level in ("B1", "B1.2"):
+        base = [
+            RequirementSpec("Kazakh Language I", ["KAZ 201"], note="KAZ 201"),
+            RequirementSpec("Kazakh Language II", ["KAZ 202"], note="KAZ 202", depends_on="Kazakh Language I"),
+        ]
+        if is_ba:
+            base.append(RequirementSpec("Advanced Kazakh Language", ["KAZ 3"], note="Any KAZ 300-level course", depends_on="Kazakh Language II"))
+        return base
+
+    # B2 / B2.2 Upper-Intermediate
+    if level in ("B2", "B2.2"):
+        if is_ba:
+            return [
+                RequirementSpec("Kazakh Language", ["KAZ 202"], note="KAZ 202"),
+                RequirementSpec("Advanced Kazakh Language", ["KAZ 3"], note="Any KAZ 300-level course", depends_on="Kazakh Language"),
+            ]
+        return [
+            RequirementSpec("Kazakh Language", ["KAZ 202"], note="KAZ 202"),
+            RequirementSpec("Advanced Kazakh Language", ["KAZ 211", "KAZ 212", "KAZ 3"], note="KAZ 211, KAZ 212, or any KAZ 300-level course", depends_on="Kazakh Language"),
+        ]
+
+    # C1+ Advanced
+    if level in ("C1", "C1.1", "C2"):
+        return [
+            RequirementSpec("Advanced Kazakh Language", ["KAZ 3"], required_count=2, note="Two KAZ 300-level courses"),
+        ]
+
+    # Unknown level: generic fallback
+    return [
+        RequirementSpec("Kazakh Language", ["KAZ"], required_count=2, note="2 KAZ language courses"),
+    ]
+
+
+def _inject_kazakh_reqs(plan: DegreePlan, kazakh_level: str | None, is_ba: bool) -> DegreePlan:
+    """Return a new DegreePlan with Kazakh Language replaced by level-specific requirements."""
+    kaz_reqs = _kazakh_reqs(kazakh_level, is_ba)
+    new_categories: list[CategorySpec] = []
+    for cat in plan.categories:
+        if cat.name == "University Core":
+            new_reqs: list[RequirementSpec] = []
+            for req in cat.requirements:
+                if req.name == "Kazakh Language":
+                    new_reqs.extend(kaz_reqs)
+                else:
+                    new_reqs.append(req)
+            new_categories.append(CategorySpec(name=cat.name, requirements=new_reqs))
+        else:
+            new_categories.append(cat)
+    return DegreePlan(major=plan.major, total_ects=plan.total_ects, categories=new_categories)
 
 
 # ─── Degree plan definitions ─────────────────────────────────────────────────
@@ -822,6 +916,7 @@ def compute_audit(
     courses: list[tuple[str, str]],  # (course_code, status) e.g. [("CSCI 151", "passed")]
     credits_earned: int = 0,
     handbook_plans: dict[str, Any] | None = None,
+    kazakh_level: str | None = None,
 ) -> AuditResult:
     """
     Compute a degree audit.
@@ -831,6 +926,7 @@ def compute_audit(
         courses: List of (course_code, enrollment_status) pairs.
                  Status is "passed" | "in_progress" | other (ignored).
         credits_earned: Total ECTS credited to the student.
+        kazakh_level: Student's KLL level (e.g. "A2", "B1", "B2", "C1").
 
     Returns:
         AuditResult with per-category, per-requirement breakdown.
@@ -847,6 +943,8 @@ def compute_audit(
             actual_credits_earned=credits_earned,
             categories=[],
         )
+
+    plan = _inject_kazakh_reqs(plan, kazakh_level, _is_ba_major(major))
 
     passed = {_norm(code) for code, st in courses if st == "passed"}
     in_prog = {_norm(code) for code, st in courses if st == "in_progress"}
@@ -877,12 +975,16 @@ def compute_audit(
                 used += 1
 
     # Pass 1 — Core requirements (is_elective=False) have first claim on all courses.
+    # Subtract already-consumed courses before each req so overlapping patterns
+    # (e.g. two "KAZ 3" requirements) don't claim the same course twice.
     consumed_passed: set[str] = set()
     consumed_ip: set[str] = set()
     for cat_spec in plan.categories:
         for req in cat_spec.requirements:
             if not req.is_elective:
-                _consume(passed, in_prog, req, consumed_passed, consumed_ip)
+                avail_p = passed - consumed_passed
+                avail_i = in_prog - consumed_ip
+                _consume(avail_p, avail_i, req, consumed_passed, consumed_ip)
 
     # Pass 2 — Specific electives (is_elective=True, non-wildcard) consume what's left.
     elective_passed: set[str] = set()
@@ -901,6 +1003,10 @@ def compute_audit(
     total_in_progress_ects = 0
     category_results: list[CategoryResult] = []
 
+    # Track courses claimed by core requirements during render (mirrors pass 1's incremental logic)
+    render_core_claimed_passed: set[str] = set()
+    render_core_claimed_ip: set[str] = set()
+
     for cat_spec in plan.categories:
         req_results: list[RequirementResult] = []
         cat_completed_ects = 0
@@ -911,9 +1017,9 @@ def compute_audit(
             cat_total_ects += req.required_count * ects
 
             if not req.is_elective:
-                # Core: sees all courses
-                avail_passed = passed
-                avail_ip = in_prog
+                # Core: sees courses not yet claimed by earlier core requirements
+                avail_passed = passed - render_core_claimed_passed
+                avail_ip = in_prog - render_core_claimed_ip
             elif _is_open_elective(req):
                 # Open elective: sees only courses not yet consumed by core or specific electives
                 avail_passed = passed - consumed_passed - elective_passed
@@ -935,6 +1041,14 @@ def compute_audit(
                 if code not in seen and _course_matches_any(code, req.patterns):
                     matched.append(MatchedCourse(code=code, status="in_progress"))
                     seen.add(code)
+
+            # Record courses claimed by this core requirement so later core reqs don't overlap
+            if not req.is_elective:
+                for m in matched[:req.required_count]:
+                    if m.status == "passed":
+                        render_core_claimed_passed.add(m.code)
+                    else:
+                        render_core_claimed_ip.add(m.code)
 
             completed_count = sum(1 for m in matched if m.status == "passed")
             ip_count = sum(1 for m in matched if m.status == "in_progress")
@@ -967,6 +1081,8 @@ def compute_audit(
                     ects_per_course=ects,
                     note=req.note,
                     patterns=req.patterns,
+                    is_elective=req.is_elective,
+                    depends_on=req.depends_on,
                 )
             )
 
