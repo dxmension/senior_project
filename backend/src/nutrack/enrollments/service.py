@@ -2,13 +2,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutrack.assessments.repository import AssessmentRepository
-from nutrack.courses.repository import CourseOfferingRepository
+from nutrack.courses.repository import CourseOfferingRepository, CourseRepository
+from nutrack.courses.service import CourseEligibilityService
 from nutrack.enrollments.exceptions import (
     EnrollmentConflictError,
+    EnrollmentCreditsExceededError,
+    EnrollmentEligibilityError,
     EnrollmentNotFoundError,
+    EnrollmentScheduleConflictError,
 )
 from nutrack.enrollments.models import Enrollment, EnrollmentStatus
 from nutrack.enrollments.repository import EnrollmentRepository
+from nutrack.enrollments.schedule import offerings_clash
 from nutrack.enrollments.schemas import EnrollmentItemResponse
 from nutrack.semester import term_year_desc_sort_key
 from nutrack.users.exceptions import NotFoundError
@@ -53,6 +58,7 @@ class EnrollmentService:
         self.course_offering_repo = CourseOfferingRepository(session)
         self.enrollment_repo = EnrollmentRepository(session)
         self.assessment_repo = AssessmentRepository(session)
+        self.eligibility_service = CourseEligibilityService(CourseRepository(session))
 
     async def list_enrollments(
         self,
@@ -70,24 +76,56 @@ class EnrollmentService:
         self,
         user_id: int,
         course_id: int,
+        course_overload_acknowledged: bool = False,
     ) -> EnrollmentItemResponse:
-        offering = await self.course_offering_repo.get_by_id(course_id)
+        offering = await self.course_offering_repo.get_by_id_with_course(course_id)
         if not offering:
             raise NotFoundError("Course")
+
+        # 1. Eligibility check
+        eligibility = await self.eligibility_service.check_eligibility(
+            offering.course_id, user_id
+        )
+        if not eligibility.can_register:
+            reasons = []
+            if not eligibility.prerequisites_met:
+                reasons.append("prerequisites not met")
+            if not eligibility.corequisites_met:
+                reasons.append("corequisites not met")
+            if eligibility.antirequisites_blocking:
+                reasons.append("antirequisite conflict")
+            if not reasons:
+                reasons.append("not eligible")
+            raise EnrollmentEligibilityError(", ".join(reasons).capitalize() + ".")
+
+        # 2. Credit cap check
+        current_ects = await self.enrollment_repo.sum_active_ects(
+            user_id, offering.term, offering.year
+        )
+        adding = offering.course.ects or 0
+        cap = 42 if course_overload_acknowledged else 36
+        if current_ects + adding > cap:
+            raise EnrollmentCreditsExceededError(current_ects, adding, cap)
+
+        # 3. Schedule conflict check
+        active_offerings = await self.enrollment_repo.list_active_offerings(
+            user_id, offering.term, offering.year
+        )
+        for other in active_offerings:
+            if offerings_clash(
+                offering.days, offering.meeting_time, other.days, other.meeting_time
+            ):
+                course_code = format_course_code(
+                    other.course.code, other.course.level
+                )
+                raise EnrollmentScheduleConflictError(course_code)
+
         existing = await self.enrollment_repo.get_by_identity(
-            user_id,
-            course_id,
-            offering.term,
-            offering.year,
+            user_id, course_id, offering.term, offering.year
         )
         if existing:
             raise EnrollmentConflictError()
-        enrollment = await self._create(
-            user_id,
-            course_id,
-            offering.term,
-            offering.year,
-        )
+        enrollment = await self._create(user_id, course_id, offering.term, offering.year)
         return build_enrollment_response(enrollment)
 
     async def delete_enrollment(

@@ -20,6 +20,7 @@ class EnrollmentItemResponse(BaseModel):
 
 class CreateEnrollmentRequest(BaseModel):
     course_id: int
+    course_overload_acknowledged: bool = False
 
 
 class DeleteEnrollmentResponse(BaseModel):
