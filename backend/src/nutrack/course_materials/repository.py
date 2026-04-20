@@ -174,3 +174,17 @@ class CourseMaterialLibraryRepository(
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def list_by_ids(
+        self,
+        ids: list[int],
+    ) -> list[CourseMaterialLibraryEntry]:
+        if not ids:
+            return []
+        stmt = (
+            select(CourseMaterialLibraryEntry)
+            .options(_library_loader())
+            .where(CourseMaterialLibraryEntry.id.in_(ids))
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().unique().all())

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -15,9 +16,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from nutrack.assessments.models import Assessment, AssessmentType
 from nutrack.assessments.repository import AssessmentRepository
 from nutrack.course_materials.models import CourseMaterialUpload, MaterialUploadStatus
-from nutrack.course_materials.repository import CourseMaterialUploadRepository
+from nutrack.course_materials.repository import (
+    CourseMaterialLibraryRepository,
+    CourseMaterialUploadRepository,
+)
 from nutrack.mock_exams.models import (
     MockExam,
+    MockExamDifficulty,
     MockExamGenerationJob,
     MockExamGenerationSettings,
     MockExamGenerationStatus,
@@ -99,6 +104,34 @@ class GenerationResult(BaseModel):
 
 
 @dataclass
+class GenerationOptions:
+    difficulty: MockExamDifficulty = MockExamDifficulty.MEDIUM
+    question_count: int | None = None
+    selected_upload_ids: list[int] | None = None
+    selected_shared_material_ids: list[int] | None = None
+
+    def to_json(self) -> str:
+        return json.dumps({
+            "difficulty": self.difficulty.value,
+            "question_count": self.question_count,
+            "selected_upload_ids": self.selected_upload_ids,
+            "selected_shared_material_ids": self.selected_shared_material_ids,
+        })
+
+    @classmethod
+    def from_json(cls, raw: str | None) -> GenerationOptions:
+        if not raw:
+            return cls()
+        data = json.loads(raw)
+        return cls(
+            difficulty=MockExamDifficulty(data.get("difficulty", "medium")),
+            question_count=data.get("question_count"),
+            selected_upload_ids=data.get("selected_upload_ids"),
+            selected_shared_material_ids=data.get("selected_shared_material_ids"),
+        )
+
+
+@dataclass
 class MaterialContext:
     uploads: list[CourseMaterialUpload]
     text: str
@@ -123,39 +156,54 @@ class MockExamGenerationService:
         self.exam_repo = MockExamRepository(session)
         self.question_repo = MockExamQuestionRepository(session)
         self.upload_repo = CourseMaterialUploadRepository(session)
+        self.library_repo = CourseMaterialLibraryRepository(session)
         self.settings_repo = MockExamGenerationSettingsRepository(session)
         self.job_repo = MockExamGenerationJobRepository(session)
 
     async def schedule_for_assessment(
         self,
         assessment: Assessment,
-    ) -> list[MockExamGenerationJob]:
-        await self.job_repo.cancel_pending_for_assessment(assessment.id)
+    ) -> tuple[list[MockExamGenerationJob], list[str]]:
+        cancelled_task_ids = await self.job_repo.cancel_pending_for_assessment(assessment.id)
         if not _is_eligible_type(assessment.assessment_type):
-            return []
+            return [], cancelled_task_ids
         settings = await self.get_effective_settings(assessment.assessment_type)
         now = datetime.now(timezone.utc)
         reminder_at = _reminder_run_at(assessment.deadline, settings, now)
         if reminder_at is None:
-            return []
+            return [], cancelled_task_ids
         return [
             await self._create_job(
                 assessment,
                 MockExamGenerationTrigger.DEADLINE_REMINDER,
                 reminder_at,
             )
-        ]
+        ], cancelled_task_ids
 
     async def queue_manual_generation(
         self,
         assessment: Assessment,
-    ) -> MockExamGenerationJob:
+        *,
+        difficulty: MockExamDifficulty = MockExamDifficulty.MEDIUM,
+        question_count: int | None = None,
+        selected_upload_ids: list[int] | None = None,
+        selected_shared_material_ids: list[int] | None = None,
+    ) -> tuple[MockExamGenerationJob, list[str]]:
+        cancelled_task_ids = await self.job_repo.cancel_pending_for_assessment(assessment.id)
         now = datetime.now(timezone.utc)
-        return await self._create_job(
+        opts = GenerationOptions(
+            difficulty=difficulty,
+            question_count=question_count,
+            selected_upload_ids=selected_upload_ids,
+            selected_shared_material_ids=selected_shared_material_ids,
+        )
+        job = await self._create_job(
             assessment,
             MockExamGenerationTrigger.RETRY,
             now,
+            generation_options=opts.to_json(),
         )
+        return job, cancelled_task_ids
 
     async def get_effective_settings(
         self,
@@ -261,15 +309,18 @@ class MockExamGenerationService:
         assessment = await self.assessment_repo.get_by_id(job.assessment_id)
         if assessment is None or assessment.is_completed:
             return None, "assessment_missing_or_completed"
+        opts = GenerationOptions.from_json(job.generation_options)
         settings = await self.get_effective_settings(assessment.assessment_type)
         if not settings.enabled:
             return None, "generation_disabled"
-        material_ctx = await self._material_context(assessment, settings)
+        if opts.question_count is not None:
+            settings = _settings_with_question_count(settings, opts.question_count)
+        material_ctx = await self._material_context(assessment, settings, opts)
         if not material_ctx.uploads:
             return None, "no_private_materials"
         if not material_ctx.text:
             return None, "no_extractable_private_material_text"
-        result = await self._run_llm(assessment, settings, material_ctx)
+        result = await self._run_llm(assessment, settings, material_ctx, opts.difficulty)
         exam = await self.exam_repo.get_by_id(result.created_mock_exam_id)
         await self.session.commit()
         return exam, None
@@ -279,9 +330,10 @@ class MockExamGenerationService:
         assessment: Assessment,
         settings: MockExamGenerationSettings,
         material_ctx: MaterialContext,
+        difficulty: MockExamDifficulty = MockExamDifficulty.MEDIUM,
     ) -> GenerationResult:
-        context = _assessment_context(assessment, settings, material_ctx.text)
-        state = _ToolState(assessment, settings, self)
+        context = _assessment_context(assessment, settings, material_ctx.text, difficulty)
+        state = _ToolState(assessment, settings, self, difficulty)
         text = await run_tool_conversation(
             system_prompt=_SYSTEM_PROMPT,
             user_prompt=context,
@@ -302,16 +354,27 @@ class MockExamGenerationService:
         self,
         assessment: Assessment,
         settings: MockExamGenerationSettings,
+        opts: GenerationOptions | None = None,
     ) -> MaterialContext:
-        uploads = await self._eligible_uploads(assessment.user_id, assessment.course_id)
-        parts = await _material_parts(self.storage, uploads)
+        uploads = await self._eligible_uploads(
+            assessment.user_id,
+            assessment.course_id,
+            selected_ids=opts.selected_upload_ids if opts else None,
+        )
+        shared_uploads = await self._shared_uploads(
+            opts.selected_shared_material_ids if opts else None
+        )
+        all_uploads = _dedupe_uploads(uploads + shared_uploads)
+        parts = await _material_parts(self.storage, all_uploads)
         text = _join_parts(parts, settings.max_source_chars)
-        return MaterialContext(uploads=uploads, text=text)
+        return MaterialContext(uploads=all_uploads, text=text)
 
     async def _eligible_uploads(
         self,
         user_id: int,
         course_offering_id: int,
+        *,
+        selected_ids: list[int] | None = None,
     ) -> list[CourseMaterialUpload]:
         uploads = await self.upload_repo.list_user_uploads(user_id, course_offering_id)
         personal = [
@@ -319,13 +382,30 @@ class MockExamGenerationService:
             for item in uploads
             if item.upload_status == MaterialUploadStatus.COMPLETED
         ]
+        if selected_ids is not None:
+            id_set = set(selected_ids)
+            personal = [item for item in personal if item.id in id_set]
         return _ordered_uploads(_dedupe_uploads(personal))
+
+    async def _shared_uploads(
+        self,
+        selected_shared_ids: list[int] | None,
+    ) -> list[CourseMaterialUpload]:
+        if not selected_shared_ids:
+            return []
+        entries = await self.library_repo.list_by_ids(selected_shared_ids)
+        return [
+            entry.upload
+            for entry in entries
+            if entry.upload.upload_status == MaterialUploadStatus.COMPLETED
+        ]
 
     async def _create_job(
         self,
         assessment: Assessment,
         trigger: MockExamGenerationTrigger,
         run_at: datetime,
+        generation_options: str | None = None,
     ) -> MockExamGenerationJob:
         course = assessment.course_offering.course
         return await self.job_repo.create(
@@ -341,6 +421,7 @@ class MockExamGenerationService:
             attempts=0,
             celery_task_id=None,
             error_message=None,
+            generation_options=generation_options,
             generated_mock_exam_id=None,
         )
 
@@ -384,9 +465,9 @@ class MockExamGenerationService:
                 course_id=course.id,
                 source=MockExamQuestionSource.AI,
                 historical_course_offering_id=None,
-                question_text=item.question_text.strip(),
-                answer_variant_1=item.answer_variant_1.strip(),
-                answer_variant_2=item.answer_variant_2.strip(),
+                question_text=_clean_required(item.question_text, "question_text"),
+                answer_variant_1=_clean_required(item.answer_variant_1, "answer_variant_1"),
+                answer_variant_2=_clean_required(item.answer_variant_2, "answer_variant_2"),
                 answer_variant_3=_clean(item.answer_variant_3),
                 answer_variant_4=_clean(item.answer_variant_4),
                 answer_variant_5=_clean(item.answer_variant_5),
@@ -406,6 +487,7 @@ class MockExamGenerationService:
         question_ids: list[int],
         instructions: str | None,
         time_limit_minutes: int | None,
+        difficulty: MockExamDifficulty = MockExamDifficulty.MEDIUM,
     ) -> int:
         course = assessment.course_offering.course
         latest = await self.exam_repo.get_latest_version(
@@ -454,10 +536,12 @@ class _ToolState:
         assessment: Assessment,
         settings: MockExamGenerationSettings,
         service: MockExamGenerationService,
+        difficulty: MockExamDifficulty = MockExamDifficulty.MEDIUM,
     ) -> None:
         self.assessment = assessment
         self.settings = settings
         self.service = service
+        self.difficulty = difficulty
         self.created_question_ids: list[int] = []
         self.reused_question_ids: list[int] = []
         self.created_exam_id: int | None = None
@@ -494,6 +578,7 @@ class _ToolState:
             args.question_ids,
             args.instructions,
             args.time_limit_minutes or self.settings.time_limit_minutes,
+            self.difficulty,
         )
         return {"mock_exam_id": self.created_exam_id}
 
@@ -504,6 +589,24 @@ def _is_eligible_type(assessment_type: AssessmentType) -> bool:
         AssessmentType.MIDTERM,
         AssessmentType.FINAL,
     }
+
+
+class _SettingsView:
+    """Lightweight settings proxy that overrides question_count without mutating the DB object."""
+
+    def __init__(self, settings: MockExamGenerationSettings, question_count: int) -> None:
+        self._settings = settings
+        self.question_count = question_count
+
+    def __getattr__(self, name: str):
+        return getattr(self._settings, name)
+
+
+def _settings_with_question_count(
+    settings: MockExamGenerationSettings,
+    question_count: int,
+) -> Any:
+    return _SettingsView(settings, question_count)
 
 
 def _merged_settings(
@@ -760,12 +863,28 @@ def _slide_texts(presentation) -> list[str]:
     return items
 
 
+_DIFFICULTY_PROMPTS: dict[MockExamDifficulty, str] = {
+    MockExamDifficulty.EASY: (
+        "Make the questions easy — focus on basic recall and straightforward concept checks."
+    ),
+    MockExamDifficulty.MEDIUM: (
+        "Make the questions medium difficulty — balance recall with application of concepts."
+    ),
+    MockExamDifficulty.HARD: (
+        "Make the questions hard — include complex scenarios, edge cases, and questions "
+        "requiring deep understanding and critical analysis."
+    ),
+}
+
+
 def _assessment_context(
     assessment: Assessment,
     settings: MockExamGenerationSettings,
     material_text: str,
+    difficulty: MockExamDifficulty = MockExamDifficulty.MEDIUM,
 ) -> str:
     course = assessment.course_offering.course
+    difficulty_note = _DIFFICULTY_PROMPTS[difficulty]
     return (
         f"Course: {course.code} {course.level} - {course.title}\n"
         f"Assessment type: {assessment.assessment_type.value}\n"
@@ -774,7 +893,8 @@ def _assessment_context(
         f"Target question count: {settings.question_count}\n"
         f"Target time limit: {settings.time_limit_minutes}\n"
         f"New question ratio: {settings.new_question_ratio}\n"
-        f"Tricky question ratio: {settings.tricky_question_ratio}\n\n"
+        f"Tricky question ratio: {settings.tricky_question_ratio}\n"
+        f"Difficulty instruction: {difficulty_note}\n\n"
         "Study materials:\n"
         f"{material_text}"
     )
@@ -873,8 +993,19 @@ def _result(text: str, method: str, *notes: str) -> ExtractedTextResult:
 def _clean(value: str | None) -> str | None:
     if value is None:
         return None
-    text = value.strip()
+    text = _sanitize_text(value).strip()
     return text or None
+
+
+def _clean_required(value: str, field_name: str) -> str:
+    text = _clean(value)
+    if text is None:
+        raise ValueError(f"{field_name} cannot be blank")
+    return text
+
+
+def _sanitize_text(value: str) -> str:
+    return value.replace("\x00", "")
 
 
 def _assessment_label(assessment: Assessment) -> str:
@@ -929,4 +1060,5 @@ Rules:
 - Return final output as JSON with:
   created_mock_exam_id, reused_question_ids, created_question_ids,
   coverage_summary, warnings.
+- Adjust the time limit based on question count, and question difficulty.
 """

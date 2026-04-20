@@ -54,6 +54,12 @@ class MockExamGenerationTrigger(str, enum.Enum):
     RETRY = "retry"
 
 
+class MockExamDifficulty(str, enum.Enum):
+    EASY = "easy"
+    MEDIUM = "medium"
+    HARD = "hard"
+
+
 class MockExamGenerationStatus(str, enum.Enum):
     QUEUED = "queued"
     RUNNING = "running"
@@ -473,6 +479,7 @@ class MockExamGenerationJob(Base, IDMixin, TimestampMixin):
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     celery_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    generation_options: Mapped[str | None] = mapped_column(Text, nullable=True)
     generated_mock_exam_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("mock_exams.id", ondelete="SET NULL"),

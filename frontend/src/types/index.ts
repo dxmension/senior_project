@@ -411,6 +411,15 @@ export interface MockExamGenerationQueued {
   status: string;
 }
 
+export type MockExamDifficulty = "easy" | "medium" | "hard";
+
+export interface GenerateMockOptions {
+  difficulty: MockExamDifficulty;
+  question_count: number;
+  selected_upload_ids: number[];
+  selected_shared_material_ids: number[];
+}
+
 export type CalendarEventType =
   | "personal_event"
   | "assessment_deadline"
@@ -590,6 +599,7 @@ export interface MockExamListItem {
   version: number;
   question_count: number;
   time_limit_minutes: number | null;
+  difficulty: MockExamDifficulty | null;
   created_at: string;
   sources: MockExamSourceSummary[];
   best_score_pct: number | null;
@@ -609,6 +619,22 @@ export interface MockExamAssessmentPrediction {
   predicted_grade_letter: string | null;
 }
 
+export interface MockExamFamily {
+  assessment_type: AssessmentType;
+  assessment_number: number;
+  label: string;
+  mocks_count: number;
+  completed_attempts: number;
+  latest_created_at: string | null;
+  best_score: number | null;
+  latest_score: number | null;
+  predicted_score: number | null;
+  predicted_letter: string | null;
+  has_active_attempt: boolean;
+  active_attempt: MockExamAttemptSummary | null;
+  exams: MockExamListItem[];
+}
+
 export interface MockExamCourseGroup {
   course_id: number;
   course_code: string;
@@ -616,6 +642,7 @@ export interface MockExamCourseGroup {
   predicted_score_pct: number | null;
   predicted_grade_letter: string | null;
   assessment_predictions: MockExamAssessmentPrediction[];
+  families: MockExamFamily[];
   exams: MockExamListItem[];
 }
 
@@ -737,6 +764,7 @@ export interface MockExamDashboard {
   version: number;
   question_count: number;
   time_limit_minutes: number | null;
+  difficulty: MockExamDifficulty | null;
   instructions: string | null;
   created_at: string;
   sources: MockExamSourceSummary[];
@@ -820,4 +848,99 @@ export interface MockExamAdminDetail {
 
 export interface AdminMockExamQuestion extends MockExamQuestionItem {
   usage_count: number;
+}
+
+export type FlashcardDifficulty = "easy" | "medium" | "hard";
+
+export interface GenerateFlashcardOptions {
+  course_id: number;
+  difficulty: FlashcardDifficulty;
+  card_count: number;
+  title?: string;
+  selected_upload_ids: number[];
+  selected_shared_material_ids: number[];
+}
+
+export interface FlashcardItem {
+  id: number;
+  position: number;
+  question: string;
+  answer: string;
+  topic: string | null;
+}
+
+export interface FlashcardDeckListItem {
+  id: number;
+  course_id: number;
+  title: string;
+  card_count: number;
+  difficulty: FlashcardDifficulty;
+  created_at: string;
+  completed_sessions: number;
+  latest_grade_pct: number | null;
+  latest_grade_letter: string | null;
+  average_grade_pct: number | null;
+  best_grade_pct: number | null;
+  latest_completed_session_id: number | null;
+}
+
+export interface FlashcardDeck extends FlashcardDeckListItem {
+  cards: FlashcardItem[];
+}
+
+export interface FlashcardCardStats {
+  times_seen: number;
+  times_easy: number;
+  times_medium: number;
+  times_hard: number;
+  last_response: "easy" | "medium" | "hard" | null;
+}
+
+export interface FlashcardSession {
+  id: number;
+  deck_id: number;
+  deck_title: string;
+  status: "in_progress" | "completed";
+  started_at: string;
+  cards: FlashcardItem[];
+  card_stats: Record<number, FlashcardCardStats>;
+}
+
+export interface FlashcardSessionReview {
+  session_id: number;
+  deck_id: number;
+  deck_title: string;
+  total_cards: number;
+  total_responses: number;
+  easy_count: number;
+  medium_count: number;
+  hard_count: number;
+  grade_pct: number;
+  grade_letter: string;
+  top_struggled_cards: FlashcardItem[];
+  ai_summary: string;
+  ai_weak_topics: string[];
+  ai_study_plan: string;
+}
+
+export interface FlashcardSessionHistoryItem {
+  session_id: number;
+  completed_at: string;
+  grade_pct: number;
+  grade_letter: string;
+  easy_count: number;
+  medium_count: number;
+  hard_count: number;
+  total_responses: number;
+}
+
+export interface FlashcardDeckHistory {
+  deck_id: number;
+  deck_title: string;
+  total_completed: number;
+  average_grade_pct: number | null;
+  best_grade_pct: number | null;
+  predicted_grade_pct: number | null;
+  predicted_grade_letter: string | null;
+  sessions: FlashcardSessionHistoryItem[];
 }

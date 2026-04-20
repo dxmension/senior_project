@@ -80,6 +80,10 @@ def _offering_label(offering: CourseOffering | None) -> str | None:
     return f"{offering.term} {offering.year} · {section}"
 
 
+def _family_key(assessment_type: str, assessment_number: int) -> tuple[str, int]:
+    return assessment_type, assessment_number
+
+
 def _question_source_label(source: MockExamQuestionSource) -> str:
     labels = {
         MockExamQuestionSource.AI: "AI",
@@ -281,6 +285,7 @@ class MockExamService:
         prediction_map = await self._student_prediction_map(user_id, available)
         return self._group_mock_exam_items(
             courses,
+            items,
             available,
             stats_map,
             prediction_map,
@@ -292,7 +297,7 @@ class MockExamService:
     ) -> list[dict]:
         exam = await self._require_student_exam_access(user_id, mock_exam_id)
         result = []
-        for link in sorted(exam.question_links, key=lambda l: l.position):
+        for link in sorted(exam.question_links, key=lambda item: item.position):
             q = link.question
             correct_idx = q.correct_option_index
             correct_answer = getattr(q, f"answer_variant_{correct_idx}", "")
@@ -728,6 +733,7 @@ class MockExamService:
     def _group_mock_exam_items(
         self,
         courses: dict[int, dict[str, object]],
+        assessments: list[Assessment],
         exams: list[MockExam],
         stats_map: dict[int, dict[str, float | int | bool | None]],
         prediction_map: dict[str, dict],
@@ -743,6 +749,7 @@ class MockExamService:
                     prediction_map["course"].get(course_id)
                 ),
                 "assessment_predictions": [],
+                "families": [],
                 "exams": [],
             }
             for course_id, data in courses.items()
@@ -750,6 +757,11 @@ class MockExamService:
         seen_predictions: dict[int, set[str]] = {
             course_id: set() for course_id in courses
         }
+        families = self._build_family_map(
+            groups,
+            assessments,
+            prediction_map,
+        )
         for exam in exams:
             stats = stats_map.get(exam.id, {})
             group = groups[exam.course_id]
@@ -769,37 +781,171 @@ class MockExamService:
                         ),
                     }
                 )
-            group["exams"].append(
-                {
-                    "id": exam.id,
-                    "assessment_number": _assessment_number(exam),
-                    "title": exam.title,
-                    "assessment_type": exam.assessment_type.value,
-                    "origin": exam.origin.value,
-                    "version": exam.version,
-                    "question_count": exam.question_count,
-                    "time_limit_minutes": exam.time_limit_minutes,
-                    "created_at": exam.created_at,
-                    "sources": self._exam_sources_payload(exam),
-                    "best_score_pct": stats.get("best_score_pct"),
-                    "average_score_pct": stats.get("average_score_pct"),
-                    "latest_score_pct": stats.get("latest_score_pct"),
-                    "predicted_score_pct": stats.get("predicted_score_pct"),
-                    "predicted_grade_letter": predicted_grade_letter(
-                        stats.get("predicted_score_pct")
-                    ),
-                    "attempts_count": stats.get("attempts_count", 0),
-                    "completed_attempts": stats.get("completed_attempts", 0),
-                    "has_active_attempt": bool(stats.get("has_active_attempt")),
-                    "active_attempt": self._attempt_summary(
-                        active_attempts[exam.id],
-                        exam.time_limit_minutes,
-                    )
-                    if exam.id in active_attempts
-                    else None,
-                }
+            item = self._mock_exam_list_item(exam, stats, active_attempts)
+            group["exams"].append(item)
+            self._append_exam_to_family(
+                families,
+                exam,
+                item,
             )
+        self._attach_families(groups, families)
         return list(groups.values())
+
+    def _build_family_map(
+        self,
+        groups: dict[int, dict],
+        assessments: list[Assessment],
+        prediction_map: dict[str, dict],
+    ) -> dict[int, dict[tuple[str, int], dict]]:
+        families: dict[int, dict[tuple[str, int], dict]] = {
+            course_id: {} for course_id in groups
+        }
+        for assessment in assessments:
+            course_id = assessment.course_offering.course.id
+            if course_id not in groups:
+                continue
+            assessment_type = assessment.assessment_type.value
+            assessment_number = assessment.assessment_number
+            families[course_id][_family_key(assessment_type, assessment_number)] = {
+                "assessment_type": assessment_type,
+                "assessment_number": assessment_number,
+                "label": assessment_label(
+                    assessment.assessment_type,
+                    assessment_number,
+                ),
+                "mocks_count": 0,
+                "completed_attempts": 0,
+                "latest_created_at": None,
+                "best_score": None,
+                "latest_score": None,
+                "predicted_score": prediction_map["assessment"].get(
+                    (course_id, assessment_type)
+                ),
+                "predicted_letter": predicted_grade_letter(
+                    prediction_map["assessment"].get((course_id, assessment_type))
+                ),
+                "has_active_attempt": False,
+                "active_attempt": None,
+                "exams": [],
+            }
+        return families
+
+    def _mock_exam_list_item(
+        self,
+        exam: MockExam,
+        stats: dict[str, float | int | bool | None],
+        active_attempts: dict[int, MockExamAttempt],
+    ) -> dict:
+        origin = getattr(exam, "origin", MockExamOrigin.MANUAL)
+        return {
+            "id": exam.id,
+            "assessment_number": _assessment_number(exam),
+            "title": exam.title,
+            "assessment_type": exam.assessment_type.value,
+            "origin": origin.value if hasattr(origin, "value") else str(origin),
+            "version": exam.version,
+            "question_count": exam.question_count,
+            "time_limit_minutes": exam.time_limit_minutes,
+            "difficulty": getattr(exam, "difficulty", None),
+            "created_at": exam.created_at,
+            "sources": self._exam_sources_payload(exam),
+            "best_score_pct": stats.get("best_score_pct"),
+            "average_score_pct": stats.get("average_score_pct"),
+            "latest_score_pct": stats.get("latest_score_pct"),
+            "predicted_score_pct": stats.get("predicted_score_pct"),
+            "predicted_grade_letter": predicted_grade_letter(
+                stats.get("predicted_score_pct")
+            ),
+            "attempts_count": stats.get("attempts_count", 0),
+            "completed_attempts": stats.get("completed_attempts", 0),
+            "has_active_attempt": bool(stats.get("has_active_attempt")),
+            "active_attempt": self._attempt_summary(
+                active_attempts[exam.id],
+                exam.time_limit_minutes,
+            )
+            if exam.id in active_attempts
+            else None,
+        }
+
+    def _append_exam_to_family(
+        self,
+        families: dict[int, dict[tuple[str, int], dict]],
+        exam: MockExam,
+        item: dict,
+    ) -> None:
+        course_families = families.get(exam.course_id)
+        if course_families is None:
+            return
+        key = _family_key(
+            exam.assessment_type.value,
+            _assessment_number(exam),
+        )
+        family = course_families.get(key)
+        if family is None:
+            family = self._family_from_exam(item)
+            course_families[key] = family
+        family["exams"].append(item)
+        family["mocks_count"] += 1
+        family["completed_attempts"] += item["completed_attempts"]
+        family["latest_created_at"] = family["latest_created_at"] or item["created_at"]
+        family["best_score"] = self._max_score(
+            family["best_score"],
+            item["best_score_pct"],
+        )
+        family["latest_score"] = family["latest_score"] or item["latest_score_pct"]
+        family["predicted_score"] = family["predicted_score"] or item["predicted_score_pct"]
+        family["predicted_letter"] = (
+            family["predicted_letter"] or item["predicted_grade_letter"]
+        )
+        family["has_active_attempt"] = family["has_active_attempt"] or item["has_active_attempt"]
+        family["active_attempt"] = family["active_attempt"] or item["active_attempt"]
+
+    def _family_from_exam(self, item: dict) -> dict:
+        return {
+            "assessment_type": item["assessment_type"],
+            "assessment_number": item["assessment_number"],
+            "label": assessment_label(
+                item["assessment_type"],
+                item["assessment_number"],
+            ),
+            "mocks_count": 0,
+            "completed_attempts": 0,
+            "latest_created_at": None,
+            "best_score": None,
+            "latest_score": None,
+            "predicted_score": None,
+            "predicted_letter": None,
+            "has_active_attempt": False,
+            "active_attempt": None,
+            "exams": [],
+        }
+
+    def _attach_families(
+        self,
+        groups: dict[int, dict],
+        families: dict[int, dict[tuple[str, int], dict]],
+    ) -> None:
+        for course_id, group in groups.items():
+            group["families"] = sorted(
+                families.get(course_id, {}).values(),
+                key=self._family_sort_key,
+            )
+
+    def _family_sort_key(self, family: dict) -> tuple[float, str, int]:
+        created_at = family["latest_created_at"]
+        timestamp = created_at.timestamp() if created_at else float("-inf")
+        return (-timestamp, family["assessment_type"], family["assessment_number"])
+
+    def _max_score(
+        self,
+        current: float | None,
+        candidate: float | None,
+    ) -> float | None:
+        if current is None:
+            return candidate
+        if candidate is None:
+            return current
+        return max(current, candidate)
 
     def _current_study_courses(self, enrollments: list) -> dict[int, dict[str, object]]:
         courses = {}
@@ -887,6 +1033,7 @@ class MockExamService:
             "version": exam.version,
             "question_count": exam.question_count,
             "time_limit_minutes": exam.time_limit_minutes,
+            "difficulty": getattr(exam, "difficulty", None),
             "instructions": exam.instructions,
             "created_at": exam.created_at,
             "sources": self._exam_sources_payload(exam),
