@@ -78,8 +78,8 @@ export function EnrollmentHistory({ enrollments }: EnrollmentHistoryProps) {
                 <tr className="border-b border-border-primary text-text-muted">
                   <th className="text-left px-4 py-3 font-medium">Code</th>
                   <th className="text-left px-4 py-3 font-medium">Course</th>
-                  <th className="text-center px-4 py-3 font-medium">ECTS</th>
-                  <th className="text-center px-4 py-3 font-medium">Grade</th>
+                  <th className="text-right px-4 py-3 font-medium w-20">ECTS</th>
+                  <th className="text-center px-4 py-3 font-medium w-24">Grade</th>
                 </tr>
               </thead>
               <tbody>
@@ -94,13 +94,15 @@ export function EnrollmentHistory({ enrollments }: EnrollmentHistoryProps) {
                     <td className="px-4 py-3 text-text-primary">
                       {e.course_title}
                     </td>
-                    <td className="px-4 py-3 text-center text-text-secondary">
-                      {e.ects}
+                    <td className="px-4 py-3 text-right font-mono text-text-secondary">
+                      {e.ects ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <Badge variant={gradeVariant(e.grade)}>
-                        {e.grade || "—"}
-                      </Badge>
+                      <div className="inline-flex w-14 justify-center">
+                        <Badge variant={gradeVariant(e.grade)}>
+                          {e.grade || "—"}
+                        </Badge>
+                      </div>
                     </td>
                   </tr>
                 ))}

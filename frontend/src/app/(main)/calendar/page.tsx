@@ -5,8 +5,8 @@ import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
-import type { EventInput, DatesSetArg, EventHoveringArg, EventSourceFuncArg } from "@fullcalendar/core";
-import { AlertCircle } from "lucide-react";
+import type { EventInput, DatesSetArg, EventHoveringArg, EventSourceFuncArg, EventClickArg } from "@fullcalendar/core";
+import { AlertCircle, Plus } from "lucide-react";
 
 import { api } from "@/lib/api";
 import { resolveEventColor } from "@/lib/calendar-colors";
@@ -15,6 +15,8 @@ import { CalendarToolbar } from "@/components/calendar/calendar-toolbar";
 import { CalendarLegend } from "@/components/calendar/calendar-legend";
 import { EventPopup } from "@/components/calendar/event-popup";
 import { Spinner } from "@/components/ui/spinner";
+import { AddEventModal } from "@/components/calendar/add-event-modal";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 function clampToSixPm(isoString: string): string {
   const d = new Date(isoString);
@@ -60,6 +62,10 @@ export default function CalendarPage() {
   const [popupPos, setPopupPos] = useState<{ x: number; y: number } | null>(null);
   const [currentView, setCurrentView] = useState<"dayGridMonth" | "timeGridWeek">("dayGridMonth");
   const [calendarTitle, setCalendarTitle] = useState("");
+  const [addEventOpen, setAddEventOpen] = useState(false);
+  const [addModalDate, setAddModalDate] = useState<string | undefined>(undefined);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
+  const personalEventsRef = useRef<CalendarEntry[]>([]);
 
   const eventSource = useCallback(
     async (
@@ -73,9 +79,10 @@ export default function CalendarPage() {
         );
         const entries = res.data ?? [];
         const view = currentViewRef.current;
+        personalEventsRef.current = entries.filter((e) => e.event_type === "personal_event");
         const filtered = entries.filter((e) =>
           view === "timeGridWeek"
-            ? e.event_type !== "personal_event"
+            ? true
             : e.event_type === "assessment_deadline"
         );
         successCallback(filtered.map(toFullCalendarEvent));
@@ -125,9 +132,41 @@ export default function CalendarPage() {
     calendarRef.current?.getApi().refetchEvents();
   };
 
+  const handleEventClick = useCallback((info: EventClickArg) => {
+    const entry = info.event.extendedProps.entry as CalendarEntry;
+    if (entry.event_type === "personal_event") {
+      setDeleteTarget({ id: entry.id, title: entry.title });
+    }
+  }, []);
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    try {
+      await api.delete(`/events/${deleteTarget.id}`);
+      calendarRef.current?.getApi().refetchEvents();
+    } catch {
+      // silently ignore — calendar will still refetch
+    } finally {
+      setDeleteTarget(null);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 relative">
-      <h1 className="text-2xl font-bold text-text-primary">Calendar</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-text-primary">Calendar</h1>
+        <button
+          type="button"
+          onClick={() => {
+            setAddModalDate(new Date().toISOString().slice(0, 10));
+            setAddEventOpen(true);
+          }}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg bg-accent-green text-bg-primary hover:opacity-90 transition-opacity"
+        >
+          <Plus size={15} />
+          Add event
+        </button>
+      </div>
 
       {/* Legend */}
       <div className="glass-card-sm px-4 py-3">
@@ -178,6 +217,7 @@ export default function CalendarPage() {
               }}
               eventMouseEnter={handleEventMouseEnter}
               eventMouseLeave={handleEventMouseLeave}
+              eventClick={handleEventClick}
               datesSet={handleDatesSet}
               height="auto"
               dayMaxEvents={4}
@@ -200,6 +240,28 @@ export default function CalendarPage() {
       {selectedEntry && popupPos && (
         <EventPopup entry={selectedEntry} position={popupPos} />
       )}
+
+      <AddEventModal
+        isOpen={addEventOpen}
+        onClose={() => setAddEventOpen(false)}
+        onCreated={() => {
+          setAddEventOpen(false);
+          calendarRef.current?.getApi().refetchEvents();
+        }}
+        existingPersonalEvents={personalEventsRef.current}
+        initialDate={addModalDate}
+      />
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        title="Delete event"
+        message={`Delete "${deleteTarget?.title}"? This cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

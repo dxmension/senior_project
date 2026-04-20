@@ -6,6 +6,7 @@ import { Search, X } from "lucide-react";
 
 import { api } from "@/lib/api";
 import type { ApiResponse, CourseOption, EnrollmentItem } from "@/types";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 interface CourseSearchDialogProps {
   open: boolean;
@@ -55,6 +56,7 @@ export function CourseSearchDialog({
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [overloadPendingId, setOverloadPendingId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -120,22 +122,26 @@ export function CourseSearchDialog({
     query.trim() && !isLoading && !results.length && !error
   );
 
-  async function createEnrollment(courseId: number) {
-    if (isSubmitting) {
-      return;
-    }
+  async function createEnrollment(courseId: number, overloadAcknowledged = false) {
+    if (isSubmitting) return;
     setIsSubmitting(true);
     setError(null);
     try {
-      const response = await api.post<ApiResponse<EnrollmentItem>>(
-        "/enrollments",
-        { course_id: courseId }
-      );
+      const response = await api.post<ApiResponse<EnrollmentItem>>("/enrollments", {
+        course_id: courseId,
+        course_overload_acknowledged: overloadAcknowledged,
+      });
       onCreated(response.data);
       onClose();
     } catch (err) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const code: string | undefined = (err as any)?.response?.data?.error?.code;
       const message = err instanceof Error ? err.message : "Failed to add course";
-      setError(message);
+      if (code === "ENROLLMENT_CREDITS_EXCEEDED") {
+        setOverloadPendingId(courseId);
+      } else {
+        setError(message);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -301,6 +307,21 @@ export function CourseSearchDialog({
           ) : null}
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={overloadPendingId !== null}
+        title="Course overload?"
+        message="Adding this course would exceed the 36 ECTS limit. If you've been approved for a course overload (up to 42 ECTS), you can proceed. Have you been approved?"
+        confirmLabel="Yes, I'm approved"
+        cancelLabel="Cancel"
+        variant="default"
+        onConfirm={() => {
+          const id = overloadPendingId!;
+          setOverloadPendingId(null);
+          void createEnrollment(id, true);
+        }}
+        onCancel={() => setOverloadPendingId(null)}
+      />
     </div>
   );
 }

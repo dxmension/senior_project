@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Brain, LoaderCircle, PlayCircle } from "lucide-react";
 
@@ -64,6 +64,8 @@ export default function StudyAssessmentFamilyPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const examsBeforeGenerate = useRef<number>(0);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   async function loadFamilyData(silent = false) {
     if (!silent) setLoading(true);
@@ -127,16 +129,46 @@ export default function StudyAssessmentFamilyPage({
     family?.predictedScore ?? null,
   );
 
+  function stopPolling() {
+    if (pollIntervalRef.current !== null) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  }
+
+  // Stop polling and mark done when a new exam appears
+  useEffect(() => {
+    if (!isGenerating) return;
+    if (familyExams.length > examsBeforeGenerate.current) {
+      stopPolling();
+      setIsGenerating(false);
+    }
+  }, [familyExams.length, isGenerating]);
+
+  useEffect(() => () => stopPolling(), []);
+
   async function handleGenerateMock() {
     if (!assessment) return;
+    examsBeforeGenerate.current = familyExams.length;
     setIsGenerating(true);
     try {
       await api.post<ApiResponse<MockExamGenerationQueued>>(
         `/assessments/${assessment.id}/generate-mock-exam`
       );
-    } finally {
+    } catch {
       setIsGenerating(false);
+      return;
     }
+    // Poll every 2.5s, max 60s
+    let elapsed = 0;
+    pollIntervalRef.current = setInterval(() => {
+      elapsed += 2500;
+      void loadFamilyData(true);
+      if (elapsed >= 60000) {
+        stopPolling();
+        setIsGenerating(false);
+      }
+    }, 2500);
   }
 
   if (loading) {
@@ -188,22 +220,39 @@ export default function StudyAssessmentFamilyPage({
           </p>
         </div>
         {assessment ? (
-          <button
-            type="button"
-            disabled={isGenerating}
-            onClick={() => void handleGenerateMock()}
-            className="inline-flex items-center gap-2 rounded-lg border border-border-primary
-              px-4 py-2 text-sm text-text-secondary transition-colors
-              hover:border-accent-green hover:bg-[#243111] hover:text-accent-green
-              disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isGenerating ? (
-              <LoaderCircle size={15} className="animate-spin" />
-            ) : (
-              <Brain size={15} />
-            )}
-            Generate AI Mock
-          </button>
+          familyExams.length > 0 && !isGenerating ? (
+            <Link
+              href={`/study/mock-exams/${familyExams[0].id}`}
+              className="inline-flex items-center gap-2 rounded-lg border border-accent-green
+                bg-[#243111] px-4 py-2 text-sm font-medium text-accent-green transition-colors
+                hover:bg-accent-green/20"
+            >
+              <PlayCircle size={15} />
+              See the mock exam
+            </Link>
+          ) : (
+            <button
+              type="button"
+              disabled={isGenerating}
+              onClick={() => void handleGenerateMock()}
+              className="inline-flex items-center gap-2 rounded-lg border border-border-primary
+                px-4 py-2 text-sm text-text-secondary transition-colors
+                hover:border-accent-green hover:bg-[#243111] hover:text-accent-green
+                disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isGenerating ? (
+                <>
+                  <LoaderCircle size={15} className="animate-spin" />
+                  Generating mock exam…
+                </>
+              ) : (
+                <>
+                  <Brain size={15} />
+                  Generate AI Mock
+                </>
+              )}
+            </button>
+          )
         ) : null}
       </div>
 

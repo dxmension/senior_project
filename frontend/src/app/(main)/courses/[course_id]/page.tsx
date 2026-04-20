@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 
 import { AddAssessmentModal } from "@/components/courses/add-assessment-modal";
 import { CourseMaterialsPanel } from "@/components/courses/course-materials-panel";
+import { CurrentGradeCard } from "@/components/courses/current-grade-card";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
@@ -503,6 +504,8 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
                 <p className="mt-0.5 text-xs text-text-secondary">⚠ Overdue</p>
               </GlassCard>
             </div>
+
+            <CurrentGradeCard assessments={assessments} />
 
             <GlassCard padding={false} className="overflow-hidden">
               <div className="flex items-center justify-between border-b border-[#2a2a2a] px-5 py-4">

@@ -501,7 +501,7 @@ function CourseRoadmapRow({
         <p className="text-xs text-text-secondary">No deadlines</p>
       ) : (
         <div className="overflow-x-auto pb-2">
-          <div className="flex min-w-max items-center pb-4">
+          <div className="flex min-w-max items-center pb-4 pl-6 pr-4">
             {dots.map((dot, idx) => (
               <div key={dot.assessment_id} className="flex items-center">
                 {/* Circle + label pinned absolutely below — label never affects circle height */}

@@ -266,6 +266,7 @@ export function CourseMaterialsPanel({
       setFiles([]);
       setTab("mine");
       await loadAll();
+      setUploadModalOpen(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Upload failed";
       setError(message);

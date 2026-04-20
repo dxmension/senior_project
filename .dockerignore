@@ -14,3 +14,4 @@ build
 data
 tmp
 .env
+database_backup.sql

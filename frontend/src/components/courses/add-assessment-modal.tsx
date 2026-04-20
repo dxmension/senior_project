@@ -94,9 +94,17 @@ function parseTimeText(text: string): string | null {
 
 function toDatetimeLocal(isoString: string): string {
   const date = new Date(isoString);
-  const offsetMs = 6 * 60 * 60 * 1000;
-  const localDate = new Date(date.getTime() + offsetMs);
-  return localDate.toISOString().slice(0, 16);
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Almaty",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
 }
 
 // Convert YYYY-MM-DDTHH:mm → { dateText: DD.MM.YYYY, timeText: HH:MM }
@@ -224,7 +232,7 @@ export function AddAssessmentModal({
     const parsedTime = parseTimeText(form.timeText);
     if (!parsedTime) { setError("Enter a valid time — HH:MM"); return; }
 
-    const deadlineIso = `${parsedDate}T${parsedTime}:00+06:00`;
+    const deadlineIso = `${parsedDate}T${parsedTime}:00+05:00`;
     const weight = form.weight !== "" ? parseFloat(form.weight) : undefined;
     const maxScore = form.max_score !== "" ? parseFloat(form.max_score) : undefined;
 

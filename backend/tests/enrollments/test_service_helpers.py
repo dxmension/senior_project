@@ -15,6 +15,7 @@ from nutrack.enrollments.service import (
 
 def _enrollment() -> SimpleNamespace:
     course = SimpleNamespace(
+        id=5,
         code="CSCI",
         level="151",
         title="Programming",
