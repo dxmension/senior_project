@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from openai import AsyncOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from nutrack.config import settings
 from nutrack.courses.models import Course, CourseOffering
@@ -16,7 +16,7 @@ from nutrack.courses.schemas import (
     RecommendedOfferingSummary,
     RecommendationsResponse,
 )
-from nutrack.courses.service import CourseEligibilityService
+from nutrack.courses.service import CourseEligibilityService, _get_user_priority
 from nutrack.users.audit import compute_audit
 from nutrack.users.models import User
 
@@ -90,7 +90,7 @@ class CourseRecommendationService:
         eligible_catalog_ids: list[int] = []
         for catalog_id, offs in course_offerings.items():
             elig = await self._eligibility.check_eligibility(
-                offs[0].id, user.id, user.kazakh_level
+                offs[0].course_id, user.id, user.kazakh_level
             )
             if elig.can_register:
                 eligible_catalog_ids.append(catalog_id)
@@ -106,24 +106,12 @@ class CourseRecommendationService:
         )
 
         # 7. Sort: priority match first, then highest avg_gpa; cap at 50 for prompt
-        def _priority_match(course: Course) -> bool:
-            if not user.major:
-                return False
-            m = user.major.lower()
-            return any(
-                p and m in p.lower()
-                for p in [
-                    course.priority_1,
-                    course.priority_2,
-                    course.priority_3,
-                    course.priority_4,
-                ]
-            )
+        priority_match = lambda c: _get_user_priority(c, user.major) is not None
 
         sorted_eligible = sorted(
             eligible_catalog_ids,
             key=lambda cid: (
-                not _priority_match(course_offerings[cid][0].course),
+                not priority_match(course_offerings[cid][0].course),
                 -(gpa_map.get(cid) or 0),
             ),
         )[:50]
@@ -133,16 +121,17 @@ class CourseRecommendationService:
         if audit and audit.supported:
             for cat in audit.categories:
                 for req in cat.requirements:
-                    if not req.satisfied:
+                    if req.status != "completed":
+                        missing = req.required_count - req.completed_count
                         gap_lines.append(
                             f"  - {cat.name} / {req.name}: "
-                            f"need {req.missing_count} more course(s)"
+                            f"need {missing} more course(s)"
                         )
 
         # 9. Call OpenAI for top-5 ranked recommendations
         openai_recs = await self._rank_with_openai(
             user, taken_codes, gap_lines, sorted_eligible, course_offerings,
-            gpa_map, _priority_match
+            gpa_map, priority_match
         )
 
         # 10. Build final response preserving OpenAI ordering
@@ -164,7 +153,7 @@ class CourseRecommendationService:
                     description=c.description,
                     department=c.department,
                     avg_gpa=gpa_map.get(cid),
-                    priority_match=_priority_match(c),
+                    priority_match=priority_match(c),
                     reason=rec.reason,
                     offerings=[
                         RecommendedOfferingSummary(
@@ -248,5 +237,5 @@ class CourseRecommendationService:
         try:
             parsed = _OpenAIResponse.model_validate_json(raw)
             return parsed.recommendations[:5]
-        except Exception:
+        except ValidationError:
             return []
