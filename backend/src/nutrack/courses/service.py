@@ -43,7 +43,9 @@ from nutrack.courses.schemas import (
     CorequisiteCheck,
     CourseDetailResponse,
     CourseOfferingInfo,
-    CourseSearchItem,
+    CourseSearchComponentGroup,
+    CourseSearchGroup,
+    CourseSearchOfferingOption,
     CourseStatsResponse,
     DescriptionsUploadResponse,
     EligibilityResponse,
@@ -126,20 +128,61 @@ def _offering_payload(
     }
 
 
-def _course_option(offering) -> CourseSearchItem:
-    course = offering.course
-    return CourseSearchItem(
-        id=offering.id,
-        code=course.code,
-        level=course.level,
+def _to_offering_option(offering) -> CourseSearchOfferingOption:
+    return CourseSearchOfferingOption(
+        offering_id=offering.id,
         section=offering.section,
-        title=course.title,
-        ects=course.ects,
-        term=offering.term,
-        year=offering.year,
+        faculty=offering.faculty,
+        days=offering.days,
         meeting_time=offering.meeting_time,
         room=offering.room,
+        enrolled=offering.enrolled,
+        capacity=offering.capacity,
     )
+
+
+def _group_offerings(offerings, term: str, year: int) -> list[CourseSearchGroup]:
+    from nutrack.courses.repository import _is_lecture_type
+
+    groups: dict[int, dict] = {}
+    for o in offerings:
+        cid = o.course.id
+        if cid not in groups:
+            groups[cid] = {"course": o.course, "lectures": [], "others": []}
+        if _is_lecture_type(o.section):
+            groups[cid]["lectures"].append(o)
+        else:
+            groups[cid]["others"].append(o)
+
+    result = []
+    for g in groups.values():
+        c = g["course"]
+        components = []
+        if g["lectures"]:
+            components.append(CourseSearchComponentGroup(
+                component_type="lecture",
+                label="Lecture",
+                required=True,
+                offerings=[_to_offering_option(o) for o in g["lectures"]],
+            ))
+        if g["others"]:
+            components.append(CourseSearchComponentGroup(
+                component_type="lab",
+                label="Lab / Recitation",
+                required=True,
+                offerings=[_to_offering_option(o) for o in g["others"]],
+            ))
+        result.append(CourseSearchGroup(
+            course_id=c.id,
+            code=c.code,
+            level=c.level,
+            title=c.title,
+            ects=c.ects,
+            term=term,
+            year=year,
+            components=components,
+        ))
+    return result
 
 
 def _remove_tmp_file(file_path: str) -> None:
@@ -309,7 +352,7 @@ class CourseSearchService:
         limit: int = 10,
         term: str | None = None,
         year: int | None = None,
-    ) -> list[CourseSearchItem]:
+    ) -> list[CourseSearchGroup]:
         resolved_term, resolved_year = self._resolve_term_year(term, year)
         bounded_limit = min(max(limit, 1), 20)
         offerings = await self.repository.search(
@@ -318,7 +361,7 @@ class CourseSearchService:
             resolved_term,
             resolved_year,
         )
-        return [_course_option(offering) for offering in offerings]
+        return _group_offerings(offerings, resolved_term, resolved_year)
 
     def _resolve_term_year(
         self,

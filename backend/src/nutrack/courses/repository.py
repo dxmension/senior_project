@@ -12,7 +12,7 @@ from nutrack.enrollments.models import Enrollment, EnrollmentStatus
 # Section helpers
 # ---------------------------------------------------------------------------
 
-_RECITATION_TYPES = frozenset({"R", "LAB", "LB", "PLB", "TUT", "T"})
+_RECITATION_TYPES = frozenset({"R", "LAB", "LB", "CLB", "PLB", "TUT", "T"})
 _TERM_ORDER = {"Spring": 1, "Summer": 2, "Fall": 3}
 
 
