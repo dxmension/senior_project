@@ -304,3 +304,39 @@ class EligibilityResponse(BaseModel):
     prerequisite_checks: list[PrerequisiteCheck] = Field(default_factory=list)
     corequisite_checks: list[CorequisiteCheck] = Field(default_factory=list)
     antirequisite_checks: list[AntirequisiteCheck] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Recommendations
+# ---------------------------------------------------------------------------
+
+
+class RecommendedOfferingSummary(BaseModel):
+    section: str | None = None
+    faculty: str | None = None
+    meeting_time: str | None = None
+    days: str | None = None
+    room: str | None = None
+    enrolled: int | None = None
+    capacity: int | None = None
+
+
+class RecommendedCourseItem(BaseModel):
+    course_id: int
+    offering_ids: list[int]
+    code: str
+    level: str
+    title: str
+    ects: int
+    description: str | None = None
+    department: str | None = None
+    avg_gpa: float | None = None
+    priority_match: bool
+    reason: str
+    offerings: list[RecommendedOfferingSummary]
+
+
+class RecommendationsResponse(BaseModel):
+    recommendations: list[RecommendedCourseItem]
+    term: str
+    year: int

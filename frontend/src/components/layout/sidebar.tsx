@@ -71,7 +71,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             <div className="w-8 h-8 rounded-lg bg-accent-green flex items-center justify-center">
               <span className="text-bg-primary font-bold text-sm">NU</span>
             </div>
-            <span className="font-semibold text-text-primary">NU Learning</span>
+            <span className="font-semibold text-text-primary">nutrack</span>
           </Link>
           <button onClick={onClose} className="lg:hidden text-text-secondary hover:text-text-primary">
             <X size={20} />

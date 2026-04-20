@@ -466,6 +466,25 @@ class CourseOfferingRepository(BaseRepository[CourseOffering]):
                 offerings[offering.course_id].append(offering)
         return offerings
 
+    async def list_by_term(
+        self,
+        term: str,
+        year: int,
+        limit: int | None = 200,
+    ) -> list[CourseOffering]:
+        """Return all offerings for a given term/year with Course eager-loaded."""
+        stmt = (
+            select(CourseOffering)
+            .join(CourseOffering.course)
+            .options(joinedload(CourseOffering.course))
+            .where(CourseOffering.term == term, CourseOffering.year == year)
+            .order_by(Course.code, Course.level, CourseOffering.section)
+        )
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
 
 class CourseGpaStatsRepository(BaseRepository[CourseGpaStats]):
     def __init__(self, session: AsyncSession):

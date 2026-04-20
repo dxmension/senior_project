@@ -63,7 +63,7 @@ export default function OnboardingPage() {
             </div>
           </div>
           <h1 className="text-2xl font-bold text-text-primary">
-            Welcome to NU Learning
+            Welcome to nutrack
           </h1>
           <p className="text-sm text-text-secondary mt-1">
             Let&apos;s set up your profile

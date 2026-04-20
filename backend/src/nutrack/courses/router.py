@@ -10,7 +10,9 @@ from nutrack.courses.dependencies import (
     get_course_schedule_service,
     get_course_search_service,
     get_course_stats_service,
+    get_recommendation_service,
 )
+from nutrack.courses.recommendation_service import CourseRecommendationService
 from nutrack.courses.schemas import (
     CourseDetailResponse,
     CourseScheduleUploadResponse,
@@ -19,6 +21,7 @@ from nutrack.courses.schemas import (
     DescriptionsUploadResponse,
     EligibilityResponse,
     GpaStatsUploadResponse,
+    RecommendationsResponse,
     RequirementsUploadResponse,
     ReviewCreate,
     ReviewResponse,
@@ -59,6 +62,15 @@ async def search_courses(
     # term/year — handled by the global app_exception_handler, no try/except here.
     courses = await service.search_courses(q, limit, term, year)
     return ApiResponse(data=courses)
+
+
+@router.get("/recommended", response_model=ApiResponse[RecommendationsResponse])
+async def get_recommended_courses(
+    current_user: User = Depends(get_current_user),
+    service: CourseRecommendationService = Depends(get_recommendation_service),
+):
+    result = await service.get_recommendations(current_user)
+    return ApiResponse(data=result)
 
 
 @router.post(
