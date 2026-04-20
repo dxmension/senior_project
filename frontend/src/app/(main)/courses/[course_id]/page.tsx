@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation";
 import { AddAssessmentModal } from "@/components/courses/add-assessment-modal";
 import { CourseMaterialsPanel } from "@/components/courses/course-materials-panel";
 import { CurrentGradeCard } from "@/components/courses/current-grade-card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
@@ -268,8 +269,8 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
   const [pageTab, setPageTab] = useState<CoursePageTab>("deadlines");
   const [editingAssessment, setEditingAssessment] =
     useState<Assessment | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
+  const [actingId, setActingId] = useState<number | null>(null);
   const [generatingIds, setGeneratingIds] = useState<Set<number>>(new Set());
   const [studyGroup, setStudyGroup] = useState<MockExamCourseGroup | null>(null);
 
@@ -366,15 +367,16 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
     (a) => !a.is_completed && new Date(a.deadline) < now
   ).length;
 
-  async function handleDelete(id: number) {
-    setDeletingId(id);
+  async function handleDelete(target: { id: number; title: string } | null) {
+    if (!target) return;
+    setActingId(target.id);
     try {
-      await deleteAssessment(id, courseId);
-      setConfirmDeleteId(null);
+      await deleteAssessment(target.id, courseId);
+      setDeleteTarget(null);
     } catch {
       // error ignored, store keeps state
     } finally {
-      setDeletingId(null);
+      setActingId(null);
     }
   }
 
@@ -592,7 +594,6 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
                     </thead>
                     <tbody>
                       {filtered.map((assessment) => {
-                        const isConfirmingDelete = confirmDeleteId === assessment.id;
                         const badge = BADGE_STYLES[assessment.assessment_type];
                         const isPast = new Date(assessment.deadline) < now;
                         const prediction = findAssessmentPrediction(
@@ -735,12 +736,14 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
                                   </button>
                                   <button
                                     type="button"
+                                    disabled={actingId === assessment.id}
                                     onClick={() =>
-                                      setConfirmDeleteId(
-                                        isConfirmingDelete ? null : assessment.id
-                                      )
+                                      setDeleteTarget({
+                                        id: assessment.id,
+                                        title: assessment.title,
+                                      })
                                     }
-                                    className="rounded p-1.5 text-text-secondary transition-colors hover:bg-red-950/50 hover:text-red-400"
+                                    className="rounded p-1.5 text-text-secondary transition-colors hover:bg-red-950/50 hover:text-red-400 disabled:opacity-50"
                                     title="Delete"
                                   >
                                     <Trash2 size={13} />
@@ -749,34 +752,6 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
                               </td>
                             </tr>
 
-                            {isConfirmingDelete ? (
-                              <tr className="bg-red-950/20">
-                                <td colSpan={7} className="px-5 py-2">
-                                  <div className="flex items-center gap-3 text-xs">
-                                    <span className="text-red-400">
-                                      Delete &quot;{assessment.title}&quot;?
-                                    </span>
-                                    <button
-                                      type="button"
-                                      disabled={deletingId === assessment.id}
-                                      onClick={() => void handleDelete(assessment.id)}
-                                      className="rounded bg-red-600/80 px-3 py-1 text-white transition-opacity hover:opacity-80 disabled:opacity-50"
-                                    >
-                                      {deletingId === assessment.id
-                                        ? "Deleting..."
-                                        : "Confirm"}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setConfirmDeleteId(null)}
-                                      className="text-text-secondary hover:text-text-primary"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            ) : null}
                           </Fragment>
                         );
                       })}
@@ -802,6 +777,23 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
         initialData={editingAssessment ?? undefined}
         onSuccess={() => {
           void fetchForCourse(courseId);
+        }}
+      />
+
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        title="Delete assessment"
+        message={
+          deleteTarget
+            ? `Delete "${deleteTarget.title}" from assessments?`
+            : ""
+        }
+        confirmLabel={actingId ? "Deleting..." : "Delete"}
+        variant="danger"
+        onConfirm={() => void handleDelete(deleteTarget)}
+        onCancel={() => {
+          if (actingId) return;
+          setDeleteTarget(null);
         }}
       />
 

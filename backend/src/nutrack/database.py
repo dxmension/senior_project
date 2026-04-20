@@ -18,6 +18,7 @@ MODEL_MODULES = (
     "nutrack.mindmaps.models",
     "nutrack.course_materials.models",
     "nutrack.mock_exams.models",
+    "nutrack.study_helper.models",
     "nutrack.transcripts.models",
     "nutrack.users.models",
 )

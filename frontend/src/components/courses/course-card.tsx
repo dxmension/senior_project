@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Plus, Trash2, AlertTriangle, Clock, MapPin, BookOpen, AlertCircle, Timer, CheckCircle2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Spinner } from "@/components/ui/spinner";
 import type { Assessment, EnrollmentItem } from "@/types";
 
@@ -24,7 +25,7 @@ export function CourseCard({
   onRemove,
   isRemoving,
 }: CourseCardProps) {
-  const [confirming, setConfirming] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const now = new Date();
   const completed = assessments.filter((a) => a.is_completed).length;
@@ -39,51 +40,25 @@ export function CourseCard({
 
   function handleTrashClick(e: React.MouseEvent) {
     e.stopPropagation();
-    setConfirming(true);
+    setShowDeleteDialog(true);
   }
 
-  function handleCancelConfirm(e: React.MouseEvent) {
-    e.stopPropagation();
-    setConfirming(false);
-  }
-
-  function handleConfirmRemove(e: React.MouseEvent) {
-    e.stopPropagation();
-    setConfirming(false);
+  function handleConfirmDelete() {
+    setShowDeleteDialog(false);
     onRemove?.();
   }
 
+  function handleCancelDelete() {
+    if (isRemoving) return;
+    setShowDeleteDialog(false);
+  }
+
   return (
-    <div
-      onClick={onClick}
-      className="flex flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[#2a2a2a] bg-[#1a1a1a] cursor-pointer transition-all duration-200 hover:border-[#3a3a3a] hover:bg-[#1e1e1e] hover:shadow-lg group"
-    >
-      {/* Delete confirmation banner */}
-      {confirming && (
-        <div
-          className="flex items-center gap-3 px-4 py-2.5 bg-red-950/40 border-b border-red-900/50"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <AlertTriangle size={13} className="text-red-400 shrink-0" />
-          <span className="text-xs text-red-300 flex-1">Remove this course?</span>
-          <button
-            type="button"
-            onClick={handleCancelConfirm}
-            className="px-2.5 py-1 text-xs rounded-md border border-[#3a3a3a] text-text-secondary hover:text-text-primary hover:border-[#555] transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleConfirmRemove}
-            disabled={isRemoving}
-            className="px-2.5 py-1 text-xs rounded-md bg-red-600 text-white hover:bg-red-500 disabled:opacity-50 transition-colors flex items-center gap-1"
-          >
-            {isRemoving ? <Spinner size={11} /> : null}
-            Remove
-          </button>
-        </div>
-      )}
+    <>
+      <div
+        onClick={onClick}
+        className="flex flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[#2a2a2a] bg-[#1a1a1a] cursor-pointer transition-all duration-200 hover:border-[#3a3a3a] hover:bg-[#1e1e1e] hover:shadow-lg group"
+      >
 
       {/* ── Section 1: course identity ── */}
       <div className="flex items-start justify-between gap-2 px-4 pt-4 pb-3">
@@ -104,7 +79,7 @@ export function CourseCard({
           </p>
         </div>
 
-        {onRemove && !confirming && (
+        {onRemove && (
           <button
             type="button"
             onClick={handleTrashClick}
@@ -200,5 +175,16 @@ export function CourseCard({
         </button>
       </div>
     </div>
+
+    <ConfirmDialog
+      isOpen={showDeleteDialog}
+      title="Remove course"
+      message={`Remove "${enrollment.course_code}: ${enrollment.course_title}" from your courses?`}
+      confirmLabel={isRemoving ? "Removing..." : "Remove"}
+      variant="danger"
+      onConfirm={handleConfirmDelete}
+      onCancel={handleCancelDelete}
+    />
+    </>
   );
 }
