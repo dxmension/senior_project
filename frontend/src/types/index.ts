@@ -277,6 +277,47 @@ export interface AuditResult {
   categories: AuditCategory[];
 }
 
+export interface SuggestedCourse {
+  code: string;
+  level: string;
+  full_code: string;
+  title: string;
+  ects: number;
+  user_priority: number | null;
+  terms_offered: string[];
+}
+
+export interface DegreePlanCourse {
+  requirement_name: string;
+  category: string;
+  ects: number;
+  note: string;
+  terms_available: string[];
+  status: "in_progress" | "pending";
+  is_elective: boolean;
+  matched_codes: string[];
+  suggested_courses: SuggestedCourse[];
+}
+
+export interface DegreePlanTerm {
+  term: string;
+  year: number;
+  label: string;
+  courses: DegreePlanCourse[];
+  total_ects: number;
+  is_current: boolean;
+  study_year: number | null;
+}
+
+export interface DegreePlan {
+  major: string;
+  graduation_term: string | null;
+  graduation_year: number | null;
+  needs_extra_time: boolean;
+  enrollment_year: number | null;
+  terms: DegreePlanTerm[];
+}
+
 export interface ApiResponse<T = null> {
   ok: boolean;
   data: T;

@@ -183,6 +183,78 @@ class CourseRepository(BaseRepository[Course]):
             out.setdefault(row.course_id, set()).add(row.term)
         return {k: sorted(v) for k, v in out.items()}
 
+    async def get_courses_by_patterns(
+        self,
+        patterns: list[str],
+        term_type: str,
+        all_course_terms: list[tuple[str, str, str]],
+        limit: int = 8,
+        required_ects: int | None = None,
+    ) -> list[Course]:
+        """Fetch courses matching audit patterns that are offered in the given term type."""
+        if not patterns:
+            return []
+
+        has_wildcard = "*" in patterns
+        non_wildcard = [p for p in patterns if p != "*"]
+
+        offered_in_term = {(c, lv) for c, lv, t in all_course_terms if t == term_type}
+        if not offered_in_term:
+            return []
+
+        if has_wildcard and not non_wildcard:
+            return []
+
+        conditions = []
+        for p in non_wildcard:
+            pn = p.strip().upper()
+            if " " in pn:
+                code_part, level_part = pn.split(" ", 1)
+                if len(level_part) < 3:
+                    conditions.append(
+                        (Course.code == code_part) & Course.level.like(f"{level_part}%")
+                    )
+                else:
+                    conditions.append((Course.code == code_part) & (Course.level == level_part))
+            else:
+                conditions.append(Course.code == pn)
+
+        if not conditions:
+            return []
+
+        stmt = select(Course).where(or_(*conditions)).order_by(Course.code, Course.level)
+        result = await self.session.execute(stmt)
+        courses = list(result.scalars().all())
+
+        filtered = [c for c in courses if (c.code, c.level) in offered_in_term]
+        if required_ects is not None:
+            filtered = [c for c in filtered if c.ects == required_ects]
+        return filtered[:limit]
+
+    async def get_courses_info_by_patterns(self, patterns: list[str], limit: int = 5) -> list[Course]:
+        """Fetch courses matching patterns without term filtering — used to show course details."""
+        if not patterns:
+            return []
+        non_wildcard = [p for p in patterns if p != "*"]
+        if not non_wildcard:
+            return []
+        conditions = []
+        for p in non_wildcard:
+            pn = p.strip().upper()
+            if " " in pn:
+                code_part, level_part = pn.split(" ", 1)
+                if len(level_part) < 3:
+                    conditions.append((Course.code == code_part) & Course.level.like(f"{level_part}%"))
+                else:
+                    conditions.append((Course.code == code_part) & (Course.level == level_part))
+            else:
+                conditions.append(Course.code == pn)
+        if not conditions:
+            return []
+        stmt = select(Course).where(or_(*conditions)).order_by(Course.code, Course.level).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def get_all_course_terms(self) -> list[tuple[str, str, str]]:
         """
         Return all distinct (code, level, term) triples from CourseOfferings.
