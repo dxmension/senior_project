@@ -19,6 +19,15 @@ class StudyGuideUnavailableError(AppException):
         )
 
 
+class StudyGuideNoMaterialsError(AppException):
+    def __init__(self) -> None:
+        super().__init__(
+            message="Study guide generation requires course materials",
+            status_code=422,
+            error_code="STUDY_GUIDE_NO_MATERIALS",
+        )
+
+
 class StudyGuideNotFoundError(AppException):
     def __init__(self) -> None:
         super().__init__(

@@ -15,6 +15,7 @@ from nutrack.mindmaps.repository import MindmapRepository
 from nutrack.storage import ObjectStorage
 from nutrack.study_helper.exceptions import (
     StudyGuideGenerationError,
+    StudyGuideNoMaterialsError,
     StudyGuideNotFoundError,
     StudyGuideUnavailableError,
 )
@@ -32,7 +33,6 @@ from nutrack.study_helper.schemas import (
     DeepDiveResponse,
     DetailLLMResponse,
     DetailResponse,
-    KeyPoint,
     OverviewLLMResponse,
     StudyGuideOverview,
     StudyGuideResponse,
@@ -52,6 +52,12 @@ MAX_SOURCE_TEXT_CHARS = 20_000
 MAX_FILE_TEXT_CHARS = 8_000
 logger = get_logger(__name__)
 
+_MATERIALS_ONLY_RULES = """\
+- Use only the provided course materials.
+- Do not use outside knowledge, assumptions, or typical course content.
+- If the materials do not support a claim, omit it.
+"""
+
 _OVERVIEW_SYSTEM_PROMPT_MATERIALS = """\
 You are a study guide generator. Given study material excerpts, produce a \
 structured study guide.
@@ -61,55 +67,41 @@ Rules:
 - Each key point needs: id (short unique string), label (2-6 words), \
 short_description (1-2 sentences).
 - Ground all content in the provided material.
-"""
-
-_OVERVIEW_SYSTEM_PROMPT_AI = """\
-You are a study guide generator. Produce a structured study guide for the \
-given academic topic.
-Rules:
-- Summarize the topic in 2-3 sentences.
-- Identify 5 key points.
-- Each key point needs: id (short unique string), label (2-6 words), \
-short_description (1-2 sentences).
-- Use accurate academic knowledge.
-"""
+""" + _MATERIALS_ONLY_RULES
 
 _DETAIL_SYSTEM_PROMPT = """\
 Given a key point from a study guide, provide a detailed explanation in \
-3 paragraphs. Cover definitions, relationships, and practical implications.\
-"""
+3 paragraphs. Cover definitions, relationships, and practical implications.
+Rules:
+""" + _MATERIALS_ONLY_RULES
 
 _DEEP_EXPLAIN_SYSTEM_PROMPT = """\
 Provide a deeper, more nuanced explanation of this concept. Include edge \
-cases, common misconceptions, and connections to related topics.\
-"""
+cases, common misconceptions, and connections to related topics.
+Rules:
+""" + _MATERIALS_ONLY_RULES
 
 _DEEP_EXAMPLE_SYSTEM_PROMPT = """\
 Provide 2-3 concrete, practical examples that illustrate this concept. \
-Include step-by-step reasoning where applicable.\
-"""
+Include step-by-step reasoning where applicable.
+Rules:
+""" + _MATERIALS_ONLY_RULES
 
 _TOPIC_EXTRACTION_SYSTEM_PROMPT = """\
 Given study material text, extract a list of distinct academic topics \
 covered. Return 5-10 topic names, each 2-8 words. Be specific and \
-descriptive. No duplicates.\
-"""
+descriptive. No duplicates.
+Rules:
+""" + _MATERIALS_ONLY_RULES
 
 _WEEK_SUMMARY_SYSTEM_PROMPT_MATERIALS = """\
 You are a study assistant. Given study material excerpts for a specific \
 week, produce:
 1. A concise 2-4 sentence summary of what this week covers.
 2. A list of 4-8 distinct topics found in the materials, each 2-8 words.
-Ground everything in the provided material.\
-"""
-
-_WEEK_SUMMARY_SYSTEM_PROMPT_AI = """\
-You are a study assistant. Given a course and week number, produce:
-1. A concise 2-4 sentence summary of what a typical week at this point \
-in the course might cover.
-2. A list of 4-8 likely academic topics for this week, each 2-8 words.
-Use general academic knowledge.\
-"""
+Ground everything in the provided material.
+Rules:
+""" + _MATERIALS_ONLY_RULES
 
 
 class StudyHelperService:
@@ -558,7 +550,7 @@ def _compute_metadata_hash(
 
 def _determine_source_type(material_text: str) -> StudyGuideSourceType:
     if material_text:
-        return StudyGuideSourceType.HYBRID
+        return StudyGuideSourceType.MATERIALS
     return StudyGuideSourceType.AI_KNOWLEDGE
 
 
@@ -678,20 +670,18 @@ async def _generate_overview(
     topic: str,
     material_text: str,
 ) -> OverviewLLMResponse:
-    if material_text:
-        system_prompt = _OVERVIEW_SYSTEM_PROMPT_MATERIALS
-        user_prompt = (
-            f"Topic: {topic}\n\n"
-            f"Study materials:\n{material_text}\n\n"
-            "Generate a study guide focused on this topic."
-        )
-    else:
-        system_prompt = _OVERVIEW_SYSTEM_PROMPT_AI
-        user_prompt = f"Generate a study guide for: {topic}"
+    if not material_text:
+        raise StudyGuideNoMaterialsError()
+
+    user_prompt = (
+        f"Focus topic: {topic}\n\n"
+        f"Study materials:\n{material_text}\n\n"
+        "Generate a study guide using only these materials."
+    )
 
     try:
         return await parse_structured_response(
-            system_prompt=system_prompt,
+            system_prompt=_OVERVIEW_SYSTEM_PROMPT_MATERIALS,
             user_prompt=user_prompt,
             response_model=OverviewLLMResponse,
             max_output_tokens=1_500,
@@ -760,19 +750,17 @@ async def _generate_week_summary(
     week: int,
     material_text: str,
 ) -> WeekSummaryLLMResponse:
-    if material_text:
-        system_prompt = _WEEK_SUMMARY_SYSTEM_PROMPT_MATERIALS
-        user_prompt = (
-            f"Week {week} study materials:\n{material_text}\n\n"
-            "Summarize this week and extract topics."
-        )
-    else:
-        system_prompt = _WEEK_SUMMARY_SYSTEM_PROMPT_AI
-        user_prompt = f"Generate a week summary and topics for Week {week}."
+    if not material_text:
+        raise StudyGuideNoMaterialsError()
+
+    user_prompt = (
+        f"Week {week} study materials:\n{material_text}\n\n"
+        "Summarize this week and extract topics using only these materials."
+    )
 
     try:
         return await parse_structured_response(
-            system_prompt=system_prompt,
+            system_prompt=_WEEK_SUMMARY_SYSTEM_PROMPT_MATERIALS,
             user_prompt=user_prompt,
             response_model=WeekSummaryLLMResponse,
             max_output_tokens=800,

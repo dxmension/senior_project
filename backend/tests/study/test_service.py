@@ -451,6 +451,11 @@ async def test_list_mock_exams_returns_available_course_exams_by_type() -> None:
     assert result[0]["predicted_grade_letter"] == "B"
     assert result[0]["assessment_predictions"][0]["predicted_score_pct"] == 81.2
     assert result[0]["assessment_predictions"][0]["predicted_grade_letter"] == "B"
+    assert len(result[0]["families"]) == 1
+    assert result[0]["families"][0]["assessment_type"] == "midterm"
+    assert result[0]["families"][0]["assessment_number"] == 1
+    assert result[0]["families"][0]["mocks_count"] == 2
+    assert result[0]["families"][0]["active_attempt"]["id"] == 22
     assert len(result[0]["exams"]) == 2
     assert result[0]["exams"][0]["id"] == 4
     assert result[0]["exams"][0]["has_active_attempt"] is True
@@ -461,6 +466,51 @@ async def test_list_mock_exams_returns_available_course_exams_by_type() -> None:
     assert result[0]["exams"][0]["sources"][0]["label"] == "Historic"
     assert result[0]["exams"][1]["id"] == 3
     assert result[0]["exams"][1]["title"] == "Midterm 1 Mock 1"
+
+
+@pytest.mark.asyncio
+async def test_list_mock_exams_includes_empty_eligible_family() -> None:
+    session = AsyncMock()
+    service = MockExamService(session=session)
+    assessment = SimpleNamespace(
+        id=3,
+        course_id=7,
+        title="Quiz 2",
+        assessment_number=2,
+        assessment_type=SimpleNamespace(value="quiz"),
+        deadline=datetime(2026, 4, 20, tzinfo=timezone.utc),
+        course_offering=SimpleNamespace(
+            course=SimpleNamespace(id=2, code="CSCI", level="151", title="Programming")
+        ),
+    )
+    service.assessment_repo = SimpleNamespace(get_by_user=AsyncMock(return_value=[assessment]))
+    service.enrollment_repo = SimpleNamespace(
+        list_by_user=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    course_offering=SimpleNamespace(
+                        course=SimpleNamespace(id=2, code="CSCI", level="151", title="Programming")
+                    )
+                )
+            ]
+        )
+    )
+    service.mock_exam_repo = SimpleNamespace(list_matching_for_user=AsyncMock(return_value=[]))
+    service.mock_exam_attempt_repo = SimpleNamespace(
+        list_active_for_user_exams=AsyncMock(return_value=[]),
+        get_attempt_stats=AsyncMock(return_value={}),
+        list_for_user_exams=AsyncMock(return_value=[]),
+    )
+
+    result = await service.list_mock_exams(1)
+
+    assert len(result) == 1
+    assert result[0]["exams"] == []
+    assert len(result[0]["families"]) == 1
+    assert result[0]["families"][0]["label"] == "Quiz 2"
+    assert result[0]["families"][0]["mocks_count"] == 0
+    assert result[0]["families"][0]["exams"] == []
+    assert result[0]["families"][0]["latest_created_at"] is None
 
 
 def test_dashboard_payload_builds_best_and_trend() -> None:

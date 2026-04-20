@@ -269,6 +269,8 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
   const [pageTab, setPageTab] = useState<CoursePageTab>("deadlines");
   const [editingAssessment, setEditingAssessment] =
     useState<Assessment | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
   const [actingId, setActingId] = useState<number | null>(null);
   const [generatingIds, setGeneratingIds] = useState<Set<number>>(new Set());
@@ -611,8 +613,6 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
                           ) &&
                           !assessment.is_completed &&
                           !isPast;
-                        const isGenerating = generatingIds.has(assessment.id);
-
                         return (
                           <Fragment key={assessment.id}>
                             <tr className="border-b border-[#1e1e1e] transition-colors hover:bg-white/[0.02]">
@@ -700,25 +700,21 @@ export default function CourseDetailPage({ params }: { params: PageParams }) {
                                       </span>
                                       <button
                                         type="button"
-                                        disabled={isGenerating}
                                         onClick={() => {
-                                          if (aiMockExam) {
-                                            router.push(
-                                              `/study/${courseId}/${assessment.assessment_type}/${assessment.assessment_number}`
-                                            );
-                                            return;
-                                          }
-                                          void handleGenerateMock(assessment);
+                                          router.push(
+                                            aiMockExam
+                                              ? `/study/${courseId}/${assessment.assessment_type}/${assessment.assessment_number}`
+                                              : `/study/${courseId}/${assessment.assessment_type}/${assessment.assessment_number}?generateMock=1`
+                                          );
                                         }}
                                         className="inline-flex items-center gap-1 rounded-md
                                           border border-border-primary px-2 py-1 text-[11px]
                                           text-text-secondary transition-colors
                                           hover:border-accent-green hover:bg-[#243111]
-                                          hover:text-accent-green disabled:cursor-not-allowed
-                                          disabled:opacity-60"
+                                          hover:text-accent-green"
                                         title={aiMockExam ? "Open AI mock exams" : "Generate AI mock exam"}
                                       >
-                                        {isGenerating ? <LoaderCircle size={12} className="animate-spin" /> : <Brain size={12} />}
+                                        <Brain size={12} />
                                         {aiMockExam ? "Go to AI Mock" : "Generate AI Mock"}
                                       </button>
                                     </>

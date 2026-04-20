@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Body, Depends, Query, status
 
 from nutrack.assessments.dependencies import get_assessment_service
 from nutrack.assessments.schemas import (
     AssessmentResponse,
     CreateAssessmentRequest,
+    GenerateMockExamRequest,
     MockExamGenerationQueuedResponse,
     UpdateAssessmentRequest,
 )
@@ -73,10 +74,18 @@ async def update_assessment(
 )
 async def generate_mock_exam(
     assessment_id: int,
+    body: GenerateMockExamRequest = Body(default_factory=GenerateMockExamRequest),
     user: User = Depends(get_current_user),
     service: AssessmentService = Depends(get_assessment_service),
 ):
-    job = await service.generate_mock_exam(user.id, assessment_id)
+    job = await service.generate_mock_exam(
+        user.id,
+        assessment_id,
+        difficulty=body.difficulty,
+        question_count=body.question_count,
+        selected_upload_ids=body.selected_upload_ids,
+        selected_shared_material_ids=body.selected_shared_material_ids,
+    )
     return ApiResponse(data=job)
 
 

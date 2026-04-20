@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from nutrack.assessments.models import AssessmentType
 from nutrack.mock_exams.models import (
     MockExamAttemptStatus,
+    MockExamDifficulty,
     MockExamGenerationStatus,
     MockExamGenerationTrigger,
     MockExamOrigin,
@@ -197,6 +198,7 @@ class MockExamListItem(BaseModel):
     version: int
     question_count: int
     time_limit_minutes: int | None
+    difficulty: MockExamDifficulty | None = None
     created_at: datetime
     sources: list[MockExamSourceSummary]
     best_score_pct: float | None
@@ -216,6 +218,22 @@ class MockExamAssessmentPrediction(BaseModel):
     predicted_grade_letter: str | None
 
 
+class MockExamFamilySummary(BaseModel):
+    assessment_type: AssessmentType
+    assessment_number: int
+    label: str
+    mocks_count: int
+    completed_attempts: int
+    latest_created_at: datetime | None
+    best_score: float | None
+    latest_score: float | None
+    predicted_score: float | None
+    predicted_letter: str | None
+    has_active_attempt: bool
+    active_attempt: MockExamAttemptSummary | None = None
+    exams: list[MockExamListItem]
+
+
 class MockExamCourseGroup(BaseModel):
     course_id: int
     course_code: str
@@ -223,6 +241,7 @@ class MockExamCourseGroup(BaseModel):
     predicted_score_pct: float | None
     predicted_grade_letter: str | None
     assessment_predictions: list[MockExamAssessmentPrediction]
+    families: list[MockExamFamilySummary]
     exams: list[MockExamListItem]
 
 
@@ -237,6 +256,7 @@ class MockExamDashboardResponse(BaseModel):
     version: int
     question_count: int
     time_limit_minutes: int | None
+    difficulty: MockExamDifficulty | None = None
     instructions: str | None
     created_at: datetime
     sources: list[MockExamSourceSummary]

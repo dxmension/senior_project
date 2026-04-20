@@ -18,7 +18,17 @@ from nutrack.assessments.schemas import (
 from nutrack.assessments.utils import assessment_label
 from nutrack.enrollments.models import Enrollment
 from nutrack.enrollments.repository import EnrollmentRepository
-from nutrack.mock_exams.models import MockExamGenerationJob
+from nutrack.mock_exams.models import MockExamDifficulty, MockExamGenerationJob
+
+
+def _revoke_tasks(task_ids: list[str]) -> None:
+    if not task_ids:
+        return
+    from nutrack.mock_exams.tasks import generate_assessment_mock_exam_task
+
+    app = generate_assessment_mock_exam_task.app
+    for task_id in task_ids:
+        app.control.revoke(task_id, terminate=False)
 
 
 def _build_response(assessment: Assessment) -> AssessmentResponse:
@@ -144,13 +154,17 @@ class AssessmentService:
             assessment_id,
             user_id,
         )
-        await self._schedule_mock_exam_generation(refreshed)
         return _build_response(refreshed)
 
     async def generate_mock_exam(
         self,
         user_id: int,
         assessment_id: int,
+        *,
+        difficulty: MockExamDifficulty = MockExamDifficulty.MEDIUM,
+        question_count: int | None = None,
+        selected_upload_ids: list[int] | None = None,
+        selected_shared_material_ids: list[int] | None = None,
     ) -> MockExamGenerationQueuedResponse:
         assessment = await self.assessment_repo.get_by_id_and_user(
             assessment_id,
@@ -158,7 +172,13 @@ class AssessmentService:
         )
         if not assessment:
             raise AssessmentNotFoundError()
-        job = await self._queue_manual_mock_exam_generation(assessment)
+        job = await self._queue_manual_mock_exam_generation(
+            assessment,
+            difficulty=difficulty,
+            question_count=question_count,
+            selected_upload_ids=selected_upload_ids,
+            selected_shared_material_ids=selected_shared_material_ids,
+        )
         return MockExamGenerationQueuedResponse(job_id=job.id, status="queued")
 
     async def delete_assessment(
@@ -211,7 +231,8 @@ class AssessmentService:
         from nutrack.mock_exams.generation import MockExamGenerationService
 
         service = MockExamGenerationService(self.assessment_repo.session)
-        jobs = await service.schedule_for_assessment(assessment)
+        jobs, stale_task_ids = await service.schedule_for_assessment(assessment)
+        _revoke_tasks(stale_task_ids)
         for job in jobs:
             task_id = self._enqueue_generation_job(job)
             await service.set_celery_task_id(job.id, task_id)
@@ -219,11 +240,23 @@ class AssessmentService:
     async def _queue_manual_mock_exam_generation(
         self,
         assessment: Assessment,
+        *,
+        difficulty: MockExamDifficulty = MockExamDifficulty.MEDIUM,
+        question_count: int | None = None,
+        selected_upload_ids: list[int] | None = None,
+        selected_shared_material_ids: list[int] | None = None,
     ) -> MockExamGenerationJob:
         from nutrack.mock_exams.generation import MockExamGenerationService
 
         service = MockExamGenerationService(self.assessment_repo.session)
-        job = await service.queue_manual_generation(assessment)
+        job, stale_task_ids = await service.queue_manual_generation(
+            assessment,
+            difficulty=difficulty,
+            question_count=question_count,
+            selected_upload_ids=selected_upload_ids,
+            selected_shared_material_ids=selected_shared_material_ids,
+        )
+        _revoke_tasks(stale_task_ids)
         task_id = self._enqueue_generation_job(job)
         await service.set_celery_task_id(job.id, task_id)
         return job

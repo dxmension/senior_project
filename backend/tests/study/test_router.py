@@ -329,12 +329,51 @@ async def test_list_mock_exams_returns_groups(
                     "predicted_grade_letter": "B+",
                 }
             ],
+            "families": [
+                {
+                    "assessment_type": "midterm",
+                    "assessment_number": 1,
+                    "label": "Midterm 1",
+                    "mocks_count": 1,
+                    "completed_attempts": 2,
+                    "latest_created_at": "2026-04-16T09:00:00Z",
+                    "best_score": 88.5,
+                    "latest_score": 88.5,
+                    "predicted_score": 86.7,
+                    "predicted_letter": "B+",
+                    "has_active_attempt": False,
+                    "active_attempt": None,
+                    "exams": [
+                        {
+                            "id": 4,
+                            "assessment_number": 1,
+                            "title": "Midterm 1 Mock 1",
+                            "assessment_type": "midterm",
+                            "origin": "manual",
+                            "version": 1,
+                            "question_count": 20,
+                            "time_limit_minutes": 40,
+                            "created_at": "2026-04-16T09:00:00Z",
+                            "sources": [{"source": "historic", "label": "Historic"}],
+                            "best_score_pct": 88.5,
+                            "average_score_pct": 82.0,
+                            "latest_score_pct": 88.5,
+                            "predicted_score_pct": 86.7,
+                            "predicted_grade_letter": "B+",
+                            "attempts_count": 2,
+                            "completed_attempts": 2,
+                            "has_active_attempt": False,
+                        }
+                    ],
+                }
+            ],
             "exams": [
                 {
                     "id": 4,
                     "assessment_number": 1,
                     "title": "Midterm 1 Mock 1",
                     "assessment_type": "midterm",
+                    "origin": "manual",
                     "version": 1,
                     "question_count": 20,
                     "time_limit_minutes": 40,
