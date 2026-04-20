@@ -4915,8 +4915,354 @@ ALTER TABLE ONLY public.study_material_uploads
 
 
 --
+-- Schema patch to current migration head (20260419_0010)
+--
+
+CREATE TYPE public.mockexamattemptstatus AS ENUM (
+    'IN_PROGRESS',
+    'COMPLETED',
+    'ABANDONED'
+);
+
+CREATE TYPE public.mockexamquestionsource AS ENUM (
+    'ai',
+    'historic',
+    'rumored',
+    'tutor_made'
+);
+
+ALTER TABLE ONLY public.assessments
+    ADD COLUMN assessment_number integer;
+
+UPDATE public.assessments
+SET assessment_number = ranked.assessment_number
+FROM (
+    SELECT
+        id,
+        DENSE_RANK() OVER (
+            PARTITION BY user_id, course_id, assessment_type
+            ORDER BY deadline, created_at, title, id
+        ) AS assessment_number
+    FROM public.assessments
+) AS ranked
+WHERE public.assessments.id = ranked.id;
+
+ALTER TABLE ONLY public.assessments
+    ALTER COLUMN assessment_number SET NOT NULL;
+
+ALTER TABLE ONLY public.assessments
+    ADD CONSTRAINT uq_assessments_identity
+    UNIQUE (user_id, course_id, assessment_type, assessment_number);
+
+ALTER TABLE ONLY public.assessments
+    DROP COLUMN title;
+
+ALTER TABLE ONLY public.users
+    ADD COLUMN kazakh_level character varying(8);
+
+ALTER TABLE ONLY public.users
+    ADD COLUMN enrollment_year integer;
+
+CREATE TABLE public.mock_exams (
+    course_id integer NOT NULL,
+    assessment_type public.assessment_type NOT NULL,
+    assessment_number integer NOT NULL,
+    assessment_title character varying(255) NOT NULL,
+    assessment_title_slug character varying(255) NOT NULL,
+    title character varying(255) NOT NULL,
+    version integer NOT NULL,
+    question_count integer NOT NULL,
+    time_limit_minutes integer,
+    instructions text,
+    is_active boolean NOT NULL,
+    created_by_admin_id integer NOT NULL,
+    id integer NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE SEQUENCE public.mock_exams_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.mock_exams_id_seq OWNED BY public.mock_exams.id;
+ALTER TABLE ONLY public.mock_exams
+    ALTER COLUMN id SET DEFAULT nextval('public.mock_exams_id_seq'::regclass);
+SELECT pg_catalog.setval('public.mock_exams_id_seq', 1, false);
+ALTER TABLE ONLY public.mock_exams
+    ADD CONSTRAINT mock_exams_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.mock_exams
+    ADD CONSTRAINT uq_mock_exams_version
+    UNIQUE (course_id, assessment_type, assessment_number, version);
+CREATE UNIQUE INDEX ix_mock_exams_id ON public.mock_exams USING btree (id);
+CREATE INDEX ix_mock_exams_course_id ON public.mock_exams USING btree (course_id);
+CREATE UNIQUE INDEX uq_mock_exams_active
+    ON public.mock_exams USING btree (course_id, assessment_type, assessment_number)
+    WHERE (is_active = true);
+ALTER TABLE ONLY public.mock_exams
+    ADD CONSTRAINT mock_exams_course_id_fkey
+    FOREIGN KEY (course_id) REFERENCES public.courses(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.mock_exams
+    ADD CONSTRAINT mock_exams_created_by_admin_id_fkey
+    FOREIGN KEY (created_by_admin_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+CREATE TABLE public.mock_exam_questions (
+    course_id integer NOT NULL,
+    source public.mockexamquestionsource NOT NULL,
+    historical_course_offering_id integer,
+    question_text text NOT NULL,
+    answer_variant_1 text NOT NULL,
+    answer_variant_2 text NOT NULL,
+    answer_variant_3 text,
+    answer_variant_4 text,
+    answer_variant_5 text,
+    answer_variant_6 text,
+    correct_option_index integer NOT NULL,
+    explanation text,
+    created_by_admin_id integer NOT NULL,
+    id integer NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ck_mock_exam_questions_correct_option
+        CHECK (((correct_option_index >= 1) AND (correct_option_index <= 6))),
+    CONSTRAINT ck_mock_exam_questions_source_offering
+        CHECK (
+            (source = 'historic'::public.mockexamquestionsource)
+            OR (
+                source = ANY (
+                    ARRAY[
+                        'ai'::public.mockexamquestionsource,
+                        'rumored'::public.mockexamquestionsource,
+                        'tutor_made'::public.mockexamquestionsource
+                    ]
+                )
+                AND historical_course_offering_id IS NULL
+            )
+        )
+);
+
+CREATE SEQUENCE public.mock_exam_questions_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.mock_exam_questions_id_seq OWNED BY public.mock_exam_questions.id;
+ALTER TABLE ONLY public.mock_exam_questions
+    ALTER COLUMN id SET DEFAULT nextval('public.mock_exam_questions_id_seq'::regclass);
+SELECT pg_catalog.setval('public.mock_exam_questions_id_seq', 1, false);
+ALTER TABLE ONLY public.mock_exam_questions
+    ADD CONSTRAINT mock_exam_questions_pkey PRIMARY KEY (id);
+CREATE UNIQUE INDEX ix_mock_exam_questions_id ON public.mock_exam_questions USING btree (id);
+CREATE INDEX ix_mock_exam_questions_course_id ON public.mock_exam_questions USING btree (course_id);
+CREATE INDEX ix_mock_exam_questions_historical_offering_id
+    ON public.mock_exam_questions USING btree (historical_course_offering_id);
+ALTER TABLE ONLY public.mock_exam_questions
+    ADD CONSTRAINT mock_exam_questions_course_id_fkey
+    FOREIGN KEY (course_id) REFERENCES public.courses(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.mock_exam_questions
+    ADD CONSTRAINT mock_exam_questions_created_by_admin_id_fkey
+    FOREIGN KEY (created_by_admin_id) REFERENCES public.users(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.mock_exam_questions
+    ADD CONSTRAINT mock_exam_questions_historical_course_offering_id_fkey
+    FOREIGN KEY (historical_course_offering_id) REFERENCES public.course_offerings(id)
+    ON DELETE CASCADE;
+
+CREATE TABLE public.mock_exam_question_links (
+    mock_exam_id integer NOT NULL,
+    question_id integer NOT NULL,
+    position integer NOT NULL,
+    points integer NOT NULL,
+    id integer NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE SEQUENCE public.mock_exam_question_links_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.mock_exam_question_links_id_seq OWNED BY public.mock_exam_question_links.id;
+ALTER TABLE ONLY public.mock_exam_question_links
+    ALTER COLUMN id SET DEFAULT nextval('public.mock_exam_question_links_id_seq'::regclass);
+SELECT pg_catalog.setval('public.mock_exam_question_links_id_seq', 1, false);
+ALTER TABLE ONLY public.mock_exam_question_links
+    ADD CONSTRAINT mock_exam_question_links_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.mock_exam_question_links
+    ADD CONSTRAINT uq_mock_exam_question_links_position UNIQUE (mock_exam_id, position);
+ALTER TABLE ONLY public.mock_exam_question_links
+    ADD CONSTRAINT uq_mock_exam_question_links_question UNIQUE (mock_exam_id, question_id);
+CREATE UNIQUE INDEX ix_mock_exam_question_links_id
+    ON public.mock_exam_question_links USING btree (id);
+ALTER TABLE ONLY public.mock_exam_question_links
+    ADD CONSTRAINT mock_exam_question_links_mock_exam_id_fkey
+    FOREIGN KEY (mock_exam_id) REFERENCES public.mock_exams(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.mock_exam_question_links
+    ADD CONSTRAINT mock_exam_question_links_question_id_fkey
+    FOREIGN KEY (question_id) REFERENCES public.mock_exam_questions(id) ON DELETE RESTRICT;
+
+CREATE TABLE public.mock_exam_attempts (
+    user_id integer NOT NULL,
+    mock_exam_id integer NOT NULL,
+    status public.mockexamattemptstatus NOT NULL,
+    started_at timestamp with time zone NOT NULL,
+    submitted_at timestamp with time zone,
+    last_active_at timestamp with time zone NOT NULL,
+    current_position integer NOT NULL,
+    answered_count integer NOT NULL,
+    correct_count integer NOT NULL,
+    score_pct double precision,
+    id integer NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE SEQUENCE public.mock_exam_attempts_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.mock_exam_attempts_id_seq OWNED BY public.mock_exam_attempts.id;
+ALTER TABLE ONLY public.mock_exam_attempts
+    ALTER COLUMN id SET DEFAULT nextval('public.mock_exam_attempts_id_seq'::regclass);
+SELECT pg_catalog.setval('public.mock_exam_attempts_id_seq', 1, false);
+ALTER TABLE ONLY public.mock_exam_attempts
+    ADD CONSTRAINT mock_exam_attempts_pkey PRIMARY KEY (id);
+CREATE UNIQUE INDEX ix_mock_exam_attempts_id ON public.mock_exam_attempts USING btree (id);
+CREATE INDEX ix_mock_exam_attempts_user_id ON public.mock_exam_attempts USING btree (user_id);
+CREATE INDEX ix_mock_exam_attempts_mock_exam_id ON public.mock_exam_attempts USING btree (mock_exam_id);
+CREATE UNIQUE INDEX uq_mock_exam_attempts_active
+    ON public.mock_exam_attempts USING btree (user_id, mock_exam_id)
+    WHERE (status = 'IN_PROGRESS'::public.mockexamattemptstatus);
+ALTER TABLE ONLY public.mock_exam_attempts
+    ADD CONSTRAINT mock_exam_attempts_user_id_fkey
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.mock_exam_attempts
+    ADD CONSTRAINT mock_exam_attempts_mock_exam_id_fkey
+    FOREIGN KEY (mock_exam_id) REFERENCES public.mock_exams(id) ON DELETE CASCADE;
+
+CREATE TABLE public.mock_exam_attempt_answers (
+    attempt_id integer NOT NULL,
+    mock_exam_question_link_id integer NOT NULL,
+    selected_option_index integer,
+    is_correct boolean,
+    answered_at timestamp with time zone,
+    id integer NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ck_mock_exam_attempt_answers_selected_option
+        CHECK (((selected_option_index IS NULL) OR ((selected_option_index >= 1) AND (selected_option_index <= 6))))
+);
+
+CREATE SEQUENCE public.mock_exam_attempt_answers_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.mock_exam_attempt_answers_id_seq OWNED BY public.mock_exam_attempt_answers.id;
+ALTER TABLE ONLY public.mock_exam_attempt_answers
+    ALTER COLUMN id SET DEFAULT nextval('public.mock_exam_attempt_answers_id_seq'::regclass);
+SELECT pg_catalog.setval('public.mock_exam_attempt_answers_id_seq', 1, false);
+ALTER TABLE ONLY public.mock_exam_attempt_answers
+    ADD CONSTRAINT mock_exam_attempt_answers_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.mock_exam_attempt_answers
+    ADD CONSTRAINT uq_mock_exam_attempt_answers_link
+    UNIQUE (attempt_id, mock_exam_question_link_id);
+CREATE UNIQUE INDEX ix_mock_exam_attempt_answers_id
+    ON public.mock_exam_attempt_answers USING btree (id);
+ALTER TABLE ONLY public.mock_exam_attempt_answers
+    ADD CONSTRAINT mock_exam_attempt_answers_attempt_id_fkey
+    FOREIGN KEY (attempt_id) REFERENCES public.mock_exam_attempts(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.mock_exam_attempt_answers
+    ADD CONSTRAINT mock_exam_attempt_answers_mock_exam_question_link_id_fkey
+    FOREIGN KEY (mock_exam_question_link_id) REFERENCES public.mock_exam_question_links(id)
+    ON DELETE CASCADE;
+
+CREATE TABLE public.mindmaps (
+    user_id integer NOT NULL,
+    course_id integer NOT NULL,
+    week integer NOT NULL,
+    topic character varying(500) NOT NULL,
+    tree_json json NOT NULL,
+    id integer NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE SEQUENCE public.mindmaps_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.mindmaps_id_seq OWNED BY public.mindmaps.id;
+ALTER TABLE ONLY public.mindmaps
+    ALTER COLUMN id SET DEFAULT nextval('public.mindmaps_id_seq'::regclass);
+SELECT pg_catalog.setval('public.mindmaps_id_seq', 1, false);
+ALTER TABLE ONLY public.mindmaps
+    ADD CONSTRAINT mindmaps_pkey PRIMARY KEY (id);
+CREATE UNIQUE INDEX ix_mindmaps_id ON public.mindmaps USING btree (id);
+CREATE INDEX ix_mindmaps_user_course ON public.mindmaps USING btree (user_id, course_id);
+ALTER TABLE ONLY public.mindmaps
+    ADD CONSTRAINT mindmaps_course_id_fkey
+    FOREIGN KEY (course_id) REFERENCES public.course_offerings(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.mindmaps
+    ADD CONSTRAINT mindmaps_user_id_fkey
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+CREATE TABLE public.handbook_plans (
+    enrollment_year integer NOT NULL,
+    filename character varying(256) NOT NULL,
+    status character varying(16) NOT NULL,
+    plans json,
+    error text,
+    id integer NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE SEQUENCE public.handbook_plans_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.handbook_plans_id_seq OWNED BY public.handbook_plans.id;
+ALTER TABLE ONLY public.handbook_plans
+    ALTER COLUMN id SET DEFAULT nextval('public.handbook_plans_id_seq'::regclass);
+SELECT pg_catalog.setval('public.handbook_plans_id_seq', 1, false);
+ALTER TABLE ONLY public.handbook_plans
+    ADD CONSTRAINT handbook_plans_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.handbook_plans
+    ADD CONSTRAINT uq_handbook_plans_year UNIQUE (enrollment_year);
+CREATE UNIQUE INDEX ix_handbook_plans_id ON public.handbook_plans USING btree (id);
+
+UPDATE public.alembic_version
+SET version_num = '20260419_0010';
+
+
+--
 -- PostgreSQL database dump complete
 --
 
 \unrestrict UNedNNbMeDneEmL2lqXZqToHl8PO7FcaXXH5NTTtjfZPeOFNTvCISQbQZ6eh2cv
-

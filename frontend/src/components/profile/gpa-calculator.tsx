@@ -11,7 +11,7 @@ interface Props {
 
 export function GpaCalculator({ enrollments }: Props) {
   const current = useMemo(
-    () => enrollments.filter((e) => e.status === "IN_PROGRESS"),
+    () => enrollments.filter((e) => e.status === "in_progress"),
     [enrollments]
   );
   const [picked, setPicked] = useState<Record<number, string | null>>({});
