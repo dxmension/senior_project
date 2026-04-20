@@ -35,6 +35,10 @@ class User(Base, IDMixin, TimestampMixin):
     is_onboarded: Mapped[bool] = mapped_column(Boolean, default=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    is_subscribed_notifications: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True
+    )
+
     enrollments: Mapped[list["Enrollment"]] = relationship(
         back_populates="user",
     )
