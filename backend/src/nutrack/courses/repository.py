@@ -395,7 +395,10 @@ class CourseOfferingRepository(BaseRepository[CourseOffering]):
         return offerings
 
     async def list_by_term(
-        self, term: str, year: int, limit: int = 200
+        self,
+        term: str,
+        year: int,
+        limit: int | None = 200,
     ) -> list[CourseOffering]:
         """Return all offerings for a given term/year with Course eager-loaded."""
         stmt = (
@@ -404,8 +407,9 @@ class CourseOfferingRepository(BaseRepository[CourseOffering]):
             .options(joinedload(CourseOffering.course))
             .where(CourseOffering.term == term, CourseOffering.year == year)
             .order_by(Course.code, Course.level, CourseOffering.section)
-            .limit(limit)
         )
+        if limit is not None:
+            stmt = stmt.limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 

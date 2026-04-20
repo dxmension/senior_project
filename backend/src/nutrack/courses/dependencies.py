@@ -18,6 +18,7 @@ from nutrack.courses.service import (
     CourseSearchService,
     CourseStatsService,
 )
+from nutrack.handbook.service import HandbookService
 
 
 async def get_course_schedule_service(
@@ -97,4 +98,5 @@ async def get_recommendation_service(
         eligibility_service=CourseEligibilityService(
             course_repository=CourseRepository(session)
         ),
+        handbook_service=HandbookService(session),
     )

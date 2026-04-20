@@ -63,6 +63,7 @@ def _eligible_response(course_id: int = 4) -> EligibilityResponse:
 
 def _setup_create_mocks(service: EnrollmentService, offering, enrollment) -> None:
     service.course_offering_repo.get_by_id_with_course = AsyncMock(return_value=offering)
+    service.user_repo.get_by_id = AsyncMock(return_value=SimpleNamespace(kazakh_level=None))
     service.eligibility_service.check_eligibility = AsyncMock(
         return_value=_eligible_response(offering.course_id)
     )
@@ -96,6 +97,7 @@ async def test_create_manual_enrollment_sets_defaults() -> None:
     assert response.year == 2026
     assert response.catalog_course_id == 4
     assert response.section == "2"
+    assert response.days == "MWF"
     assert response.meeting_time == "10:00 AM - 10:50 AM"
     assert response.room == "6.310"
 
@@ -107,6 +109,7 @@ async def test_create_manual_enrollment_rejects_duplicates() -> None:
     service.course_offering_repo.get_by_id_with_course = AsyncMock(
         return_value=created.course_offering
     )
+    service.user_repo.get_by_id = AsyncMock(return_value=SimpleNamespace(kazakh_level=None))
     service.eligibility_service.check_eligibility = AsyncMock(
         return_value=_eligible_response()
     )
@@ -134,6 +137,7 @@ async def test_create_manual_enrollment_blocks_ineligible() -> None:
     service.course_offering_repo.get_by_id_with_course = AsyncMock(
         return_value=created.course_offering
     )
+    service.user_repo.get_by_id = AsyncMock(return_value=SimpleNamespace(kazakh_level=None))
     service.eligibility_service.check_eligibility = AsyncMock(
         return_value=EligibilityResponse(
             course_id=4,
@@ -155,6 +159,7 @@ async def test_create_manual_enrollment_blocks_over_36_ects() -> None:
     service.course_offering_repo.get_by_id_with_course = AsyncMock(
         return_value=created.course_offering
     )
+    service.user_repo.get_by_id = AsyncMock(return_value=SimpleNamespace(kazakh_level=None))
     service.eligibility_service.check_eligibility = AsyncMock(
         return_value=_eligible_response()
     )
@@ -191,6 +196,7 @@ async def test_create_manual_enrollment_blocks_schedule_conflict() -> None:
     service.course_offering_repo.get_by_id_with_course = AsyncMock(
         return_value=created.course_offering
     )
+    service.user_repo.get_by_id = AsyncMock(return_value=SimpleNamespace(kazakh_level=None))
     service.eligibility_service.check_eligibility = AsyncMock(
         return_value=_eligible_response()
     )
@@ -201,6 +207,24 @@ async def test_create_manual_enrollment_blocks_schedule_conflict() -> None:
 
     with pytest.raises(EnrollmentScheduleConflictError):
         await service.create_manual_enrollment(1, 7)
+
+
+@pytest.mark.asyncio
+async def test_create_manual_enrollment_passes_user_kazakh_level_to_eligibility() -> None:
+    service = EnrollmentService(session=None)
+    created = make_enrollment("Fall", 2026)
+    _setup_create_mocks(service, created.course_offering, created)
+    service.user_repo.get_by_id = AsyncMock(
+        return_value=SimpleNamespace(kazakh_level="C1")
+    )
+
+    await service.create_manual_enrollment(1, 7)
+
+    service.eligibility_service.check_eligibility.assert_awaited_once_with(
+        created.course_offering.course_id,
+        1,
+        "C1",
+    )
 
 
 @pytest.mark.asyncio

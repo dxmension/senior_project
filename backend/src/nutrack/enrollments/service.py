@@ -17,6 +17,7 @@ from nutrack.enrollments.schedule import offerings_clash
 from nutrack.enrollments.schemas import EnrollmentItemResponse
 from nutrack.semester import term_year_desc_sort_key
 from nutrack.users.exceptions import NotFoundError
+from nutrack.users.repository import UserRepository
 
 
 def format_course_code(code: str, level: str) -> str:
@@ -48,6 +49,7 @@ def build_enrollment_response(
         term=enrollment.term,
         year=enrollment.year,
         status=enrollment.status.value,
+        days=offering.days,
         meeting_time=offering.meeting_time,
         room=offering.room,
     )
@@ -59,6 +61,7 @@ class EnrollmentService:
         self.enrollment_repo = EnrollmentRepository(session)
         self.assessment_repo = AssessmentRepository(session)
         self.eligibility_service = CourseEligibilityService(CourseRepository(session))
+        self.user_repo = UserRepository(session)
 
     async def list_enrollments(
         self,
@@ -81,10 +84,13 @@ class EnrollmentService:
         offering = await self.course_offering_repo.get_by_id_with_course(course_id)
         if not offering:
             raise NotFoundError("Course")
+        user = await self.user_repo.get_by_id(user_id)
+        if not user:
+            raise NotFoundError("User")
 
         # 1. Eligibility check
         eligibility = await self.eligibility_service.check_eligibility(
-            offering.course_id, user_id
+            offering.course_id, user_id, user.kazakh_level
         )
         if not eligibility.can_register:
             reasons = []

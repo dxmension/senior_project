@@ -1,8 +1,9 @@
-"""AI-powered course recommendation service."""
+"""Audit-driven course recommendation service."""
 from __future__ import annotations
 
-from openai import AsyncOpenAI
-from pydantic import BaseModel, ValidationError
+from dataclasses import dataclass
+
+from sqlalchemy.exc import ProgrammingError
 
 from nutrack.config import settings
 from nutrack.courses.models import Course, CourseOffering
@@ -17,25 +18,95 @@ from nutrack.courses.schemas import (
     RecommendationsResponse,
 )
 from nutrack.courses.service import CourseEligibilityService, _get_user_priority
-from nutrack.users.audit import compute_audit
+from nutrack.handbook.service import HandbookService
+from nutrack.users.audit import RequirementResult, compute_audit
 from nutrack.users.models import User
 
-_NEXT_TERM: dict[str, str] = {"Spring": "Fall", "Summer": "Fall", "Fall": "Spring"}
+
+@dataclass
+class _MissingRequirement:
+    category_name: str
+    requirement: RequirementResult
+    slots_needed: int
 
 
-def _next_semester(current_term: str, current_year: int) -> tuple[str, int]:
-    next_t = _NEXT_TERM.get(current_term, "Fall")
-    next_y = current_year + 1 if current_term == "Fall" else current_year
-    return next_t, next_y
+def _is_missing_handbook_table(error: ProgrammingError) -> bool:
+    return 'relation "handbook_plans" does not exist' in str(error)
 
 
-class _OpenAIRec(BaseModel):
-    course_id: int
-    reason: str
+def _norm(value: str) -> str:
+    return value.strip().upper()
 
 
-class _OpenAIResponse(BaseModel):
-    recommendations: list[_OpenAIRec]
+def _level_sort_value(level: str) -> int:
+    digits = "".join(ch for ch in level if ch.isdigit())
+    return int(digits) if digits else 9_999
+
+
+def _is_kazakh_core_requirement(requirement: RequirementResult) -> bool:
+    return requirement.name.lower() == "kazakh language" and requirement.patterns == ["KAZ"]
+
+
+def _kazakh_preference(course: Course, requirement: RequirementResult) -> int:
+    if not _is_kazakh_core_requirement(requirement) or course.code != "KAZ":
+        return 0
+    level = _level_sort_value(course.level)
+    if 300 <= level < 400:
+        return 3
+    if 200 <= level < 300:
+        return 2
+    if 100 <= level < 200:
+        return 1
+    return 0
+
+
+def _matches_pattern(course_code: str, pattern: str) -> bool:
+    normalized_pattern = _norm(pattern)
+    if normalized_pattern == "*":
+        return True
+    normalized_code = _norm(course_code)
+    if normalized_code == normalized_pattern:
+        return True
+    if not normalized_code.startswith(normalized_pattern):
+        return False
+    rest = normalized_code[len(normalized_pattern):]
+    return not rest or rest[0] in " 0123456789"
+
+
+def _match_strength(course: Course, patterns: list[str]) -> int:
+    course_code = f"{course.code} {course.level}"
+    exact = any(_norm(course_code) == _norm(pattern) for pattern in patterns)
+    if exact:
+        return 2
+    prefix = any(_matches_pattern(course_code, pattern) for pattern in patterns)
+    return 1 if prefix else 0
+
+
+def _requirement_priority(item: _MissingRequirement) -> tuple[int, int, str]:
+    elective = 1 if item.requirement.patterns == ["*"] else 0
+    broad = 1 if any(" " not in pattern for pattern in item.requirement.patterns) else 0
+    return elective, broad, item.category_name
+
+
+def _build_reason(
+    course: Course,
+    category_name: str,
+    requirement: RequirementResult,
+) -> str:
+    course_code = f"{course.code} {course.level}"
+    return (
+        f"{course_code} helps fulfill {category_name} / {requirement.name}."
+    )
+
+
+def _suggestion_limit(requirement: RequirementResult, slots_needed: int) -> int:
+    if _is_kazakh_core_requirement(requirement):
+        return max(3, slots_needed)
+    broad_requirement = any(" " not in pattern for pattern in requirement.patterns)
+    elective_like = "elective" in requirement.name.lower() or len(requirement.patterns) > 1
+    if broad_requirement or elective_like:
+        return max(3, slots_needed)
+    return slots_needed
 
 
 class CourseRecommendationService:
@@ -45,197 +116,212 @@ class CourseRecommendationService:
         offering_repository: CourseOfferingRepository,
         gpa_stats_repository: CourseGpaStatsRepository,
         eligibility_service: CourseEligibilityService,
+        handbook_service: HandbookService | None = None,
     ) -> None:
         self._course_repo = course_repository
         self._offering_repo = offering_repository
         self._gpa_stats_repo = gpa_stats_repository
         self._eligibility = eligibility_service
-        self._openai = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        self._handbook = handbook_service
 
     async def get_recommendations(self, user: User) -> RecommendationsResponse:
-        next_term, next_year = _next_semester(
-            settings.CURRENT_TERM, settings.CURRENT_YEAR
-        )
-
-        # 1. User's full course history
+        term, year = settings.CURRENT_TERM, settings.CURRENT_YEAR
         history = await self._course_repo.get_user_course_history(user.id)
-        taken_catalog_ids: set[int] = {r["id"] for r in history}
-        taken_codes: set[str] = {f"{r['code']} {r['level']}" for r in history}
-        audit_input = [(f"{r['code']} {r['level']}", r["status"]) for r in history]
-
-        # 2. Degree audit to find gaps
-        audit = None
-        if user.major:
-            audit = compute_audit(
-                user.major, audit_input, user.total_credits_earned or 0
-            )
-
-        # 3. All offerings for next term (up to 200)
-        all_offerings = await self._offering_repo.list_by_term(
-            next_term, next_year, limit=200
-        )
-
-        # 4. Group by catalog course_id, exclude already-taken courses
-        course_offerings: dict[int, list[CourseOffering]] = {}
-        for off in all_offerings:
-            if off.course_id not in taken_catalog_ids:
-                course_offerings.setdefault(off.course_id, []).append(off)
-
-        if not course_offerings:
-            return RecommendationsResponse(
-                recommendations=[], term=next_term, year=next_year
-            )
-
-        # 5. Eligibility check — use first offering per catalog course
-        eligible_catalog_ids: list[int] = []
-        for catalog_id, offs in course_offerings.items():
-            elig = await self._eligibility.check_eligibility(
-                offs[0].course_id, user.id, user.kazakh_level
-            )
-            if elig.can_register:
-                eligible_catalog_ids.append(catalog_id)
-
-        if not eligible_catalog_ids:
-            return RecommendationsResponse(
-                recommendations=[], term=next_term, year=next_year
-            )
-
-        # 6. GPA stats for eligible courses
-        gpa_map = await self._gpa_stats_repo.get_avg_gpa_by_course_ids(
-            eligible_catalog_ids
-        )
-
-        # 7. Sort: priority match first, then highest avg_gpa; cap at 50 for prompt
-        priority_match = lambda c: _get_user_priority(c, user.major) is not None
-
-        sorted_eligible = sorted(
-            eligible_catalog_ids,
-            key=lambda cid: (
-                not priority_match(course_offerings[cid][0].course),
-                -(gpa_map.get(cid) or 0),
-            ),
-        )[:50]
-
-        # 8. Build degree gap summary for prompt
-        gap_lines: list[str] = []
-        if audit and audit.supported:
-            for cat in audit.categories:
-                for req in cat.requirements:
-                    if req.status != "completed":
-                        missing = req.required_count - req.completed_count
-                        gap_lines.append(
-                            f"  - {cat.name} / {req.name}: "
-                            f"need {missing} more course(s)"
-                        )
-
-        # 9. Call OpenAI for top-5 ranked recommendations
-        openai_recs = await self._rank_with_openai(
-            user, taken_codes, gap_lines, sorted_eligible, course_offerings,
-            gpa_map, priority_match
-        )
-
-        # 10. Build final response preserving OpenAI ordering
-        result: list[RecommendedCourseItem] = []
-        for rec in openai_recs:
-            cid = rec.course_id
-            if cid not in course_offerings:
-                continue
-            offs = course_offerings[cid]
-            c = offs[0].course
-            result.append(
-                RecommendedCourseItem(
-                    course_id=cid,
-                    offering_ids=[o.id for o in offs],
-                    code=c.code,
-                    level=c.level,
-                    title=c.title,
-                    ects=c.ects,
-                    description=c.description,
-                    department=c.department,
-                    avg_gpa=gpa_map.get(cid),
-                    priority_match=priority_match(c),
-                    reason=rec.reason,
-                    offerings=[
-                        RecommendedOfferingSummary(
-                            section=o.section,
-                            faculty=o.faculty,
-                            meeting_time=o.meeting_time,
-                            days=o.days,
-                            room=o.room,
-                            enrolled=o.enrolled,
-                            capacity=o.capacity,
-                        )
-                        for o in offs
-                    ],
-                )
-            )
-
+        audit = await self._build_audit(user, history)
+        offerings = await self._offering_repo.list_by_term(term, year, limit=None)
+        course_offerings = self._group_offerings(history, offerings)
+        recommendations = await self._select_courses(user, audit, course_offerings)
         return RecommendationsResponse(
-            recommendations=result, term=next_term, year=next_year
+            recommendations=recommendations,
+            term=term,
+            year=year,
         )
 
-    async def _rank_with_openai(
+    async def _build_audit(self, user: User, history: list[dict]):
+        audit_input = [(f"{row['code']} {row['level']}", row["status"]) for row in history]
+        handbook_plans = await self._load_handbook_plans(user)
+        return compute_audit(
+            user.major or "",
+            audit_input,
+            user.total_credits_earned or 0,
+            handbook_plans,
+        )
+
+    async def _load_handbook_plans(self, user: User):
+        if not self._handbook or not user.study_year:
+            return None
+        enrollment_year = settings.CURRENT_YEAR - user.study_year
+        try:
+            return await self._handbook.get_plans_for_year(enrollment_year)
+        except ProgrammingError as exc:
+            if _is_missing_handbook_table(exc):
+                return None
+            raise
+
+    def _group_offerings(
+        self,
+        history: list[dict],
+        offerings: list[CourseOffering],
+    ) -> dict[int, list[CourseOffering]]:
+        taken_ids = {row["id"] for row in history}
+        grouped: dict[int, list[CourseOffering]] = {}
+        for offering in offerings:
+            if offering.course_id in taken_ids:
+                continue
+            grouped.setdefault(offering.course_id, []).append(offering)
+        return grouped
+
+    async def _select_courses(
         self,
         user: User,
-        taken_codes: set[str],
-        gap_lines: list[str],
-        sorted_eligible: list[int],
+        audit,
         course_offerings: dict[int, list[CourseOffering]],
-        gpa_map: dict[int, float | None],
-        priority_fn,
-    ) -> list[_OpenAIRec]:
-        taken_str = ", ".join(sorted(taken_codes)) or "None"
-        gap_str = "\n".join(gap_lines) or "  (no audit data available)"
-
-        course_lines: list[str] = []
-        for cid in sorted_eligible:
-            offs = course_offerings[cid]
-            c = offs[0].course
-            sched_parts = [
-                f"{o.section or 'N/A'} {o.meeting_time or ''} ({o.faculty or 'TBA'})"
-                for o in offs
-            ]
-            sched = "; ".join(sched_parts)
-            prio = "MAJOR PRIORITY" if priority_fn(c) else ""
-            gpa_str = f"{gpa_map[cid]:.2f}" if gpa_map.get(cid) else "N/A"
-            course_lines.append(
-                f"ID={cid}: {c.code} {c.level} {c.title} | "
-                f"ECTS={c.ects} | avg_gpa={gpa_str} | {prio} | {sched}"
-            )
-
-        prompt = (
-            f"Student profile:\n"
-            f"- Major: {user.major or 'Undeclared'}\n"
-            f"- Cumulative GPA: {user.cgpa or 'N/A'}\n"
-            f"- Study Year: {user.study_year or 'N/A'}\n"
-            f"- Credits Earned: {user.total_credits_earned or 0}\n\n"
-            f"Completed/in-progress courses:\n{taken_str}\n\n"
-            f"Degree audit gaps (unfulfilled requirements):\n{gap_str}\n\n"
-            f"Available eligible courses for next semester:\n"
-            + "\n".join(course_lines)
-            + "\n\nRecommend exactly 5 courses from the list above. "
-            "Prioritize: degree completion gaps > major priority access > "
-            "good avg GPA > balanced workload. "
-            'Return JSON: {"recommendations": [{"course_id": <int>, "reason": "<1-2 sentence reason>"}, ...]}'
-        )
-
-        response = await self._openai.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are an academic advisor. Respond only with valid JSON.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-            response_format={"type": "json_object"},
-            max_tokens=800,
-            temperature=0.3,
-        )
-
-        raw = response.choices[0].message.content or "{}"
-        try:
-            parsed = _OpenAIResponse.model_validate_json(raw)
-            return parsed.recommendations[:5]
-        except ValidationError:
+    ) -> list[RecommendedCourseItem]:
+        if not audit.supported or not course_offerings:
             return []
+        eligible_ids = await self._eligible_ids(user, course_offerings)
+        gpa_map = await self._gpa_stats_repo.get_avg_gpa_by_course_ids(eligible_ids)
+        missing = self._missing_requirements(audit)
+        return self._build_items(user, missing, course_offerings, eligible_ids, gpa_map)
+
+    async def _eligible_ids(
+        self,
+        user: User,
+        course_offerings: dict[int, list[CourseOffering]],
+    ) -> list[int]:
+        eligible_ids: list[int] = []
+        for catalog_id, offerings in course_offerings.items():
+            result = await self._eligibility.check_eligibility(
+                offerings[0].course_id,
+                user.id,
+                user.kazakh_level,
+            )
+            if result.can_register:
+                eligible_ids.append(catalog_id)
+        return eligible_ids
+
+    def _missing_requirements(self, audit) -> list[_MissingRequirement]:
+        items: list[_MissingRequirement] = []
+        for category in audit.categories:
+            for requirement in category.requirements:
+                slots = requirement.required_count - requirement.completed_count
+                slots -= requirement.in_progress_count
+                if slots > 0:
+                    items.append(
+                        _MissingRequirement(
+                            category_name=category.name,
+                            requirement=requirement,
+                            slots_needed=slots,
+                        )
+                    )
+        return sorted(items, key=_requirement_priority)
+
+    def _build_items(
+        self,
+        user: User,
+        missing: list[_MissingRequirement],
+        course_offerings: dict[int, list[CourseOffering]],
+        eligible_ids: list[int],
+        gpa_map: dict[int, float | None],
+    ) -> list[RecommendedCourseItem]:
+        selected: list[RecommendedCourseItem] = []
+        used_ids: set[int] = set()
+        total_limit = 8
+        for item in missing:
+            matches = self._rank_matches(
+                user,
+                item.requirement,
+                course_offerings,
+                eligible_ids,
+                gpa_map,
+                used_ids,
+            )
+            per_requirement_limit = _suggestion_limit(
+                item.requirement,
+                item.slots_needed,
+            )
+            remaining_slots = total_limit - len(selected)
+            if remaining_slots <= 0:
+                break
+            for course_id in matches[: min(per_requirement_limit, remaining_slots)]:
+                selected.append(
+                    self._recommendation_item(
+                        item.category_name,
+                        item.requirement,
+                        course_offerings[course_id],
+                        gpa_map,
+                        user.major,
+                    )
+                )
+                used_ids.add(course_id)
+            if len(selected) >= total_limit:
+                break
+        return selected[:total_limit]
+
+    def _rank_matches(
+        self,
+        user: User,
+        requirement: RequirementResult,
+        course_offerings: dict[int, list[CourseOffering]],
+        eligible_ids: list[int],
+        gpa_map: dict[int, float | None],
+        used_ids: set[int],
+    ) -> list[int]:
+        scored: list[tuple[tuple, int]] = []
+        broad_requirement = any(" " not in pattern for pattern in requirement.patterns)
+        for course_id in eligible_ids:
+            if course_id in used_ids:
+                continue
+            course = course_offerings[course_id][0].course
+            strength = _match_strength(course, requirement.patterns)
+            if not strength:
+                continue
+            priority = _get_user_priority(course, user.major) is not None
+            kazakh_score = _kazakh_preference(course, requirement)
+            level_score = -_level_sort_value(course.level) if broad_requirement else 0
+            score = (
+                strength,
+                priority,
+                kazakh_score,
+                level_score,
+                gpa_map.get(course_id) or 0,
+                -course.id,
+            )
+            scored.append((score, course_id))
+        scored.sort(reverse=True)
+        return [course_id for _, course_id in scored]
+
+    def _recommendation_item(
+        self,
+        category_name: str,
+        requirement: RequirementResult,
+        offerings: list[CourseOffering],
+        gpa_map: dict[int, float | None],
+        user_major: str | None,
+    ) -> RecommendedCourseItem:
+        course = offerings[0].course
+        return RecommendedCourseItem(
+            course_id=course.id,
+            offering_ids=[offering.id for offering in offerings],
+            code=course.code,
+            level=course.level,
+            title=course.title,
+            ects=course.ects,
+            description=course.description,
+            department=course.department,
+            avg_gpa=gpa_map.get(course.id),
+            priority_match=_get_user_priority(course, user_major) is not None,
+            reason=_build_reason(course, category_name, requirement),
+            offerings=[
+                RecommendedOfferingSummary(
+                    section=offering.section,
+                    faculty=offering.faculty,
+                    meeting_time=offering.meeting_time,
+                    days=offering.days,
+                    room=offering.room,
+                    enrolled=offering.enrolled,
+                    capacity=offering.capacity,
+                )
+                for offering in offerings
+            ],
+        )

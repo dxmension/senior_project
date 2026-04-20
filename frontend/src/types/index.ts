@@ -66,6 +66,7 @@ export interface EnrollmentItem {
   term: string;
   year: number;
   status: string;
+  days: string | null;
   meeting_time: string | null;
   room: string | null;
 }
