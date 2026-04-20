@@ -407,7 +407,7 @@ class CourseOfferingRepository(BaseRepository[CourseOffering]):
             .limit(limit)
         )
         result = await self.session.execute(stmt)
-        return list(result.scalars().unique().all())
+        return list(result.scalars().all())
 
 
 class CourseGpaStatsRepository(BaseRepository[CourseGpaStats]):
