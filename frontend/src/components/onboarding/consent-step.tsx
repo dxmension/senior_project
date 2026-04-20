@@ -7,9 +7,9 @@ interface ConsentStepProps {
   onNext: () => void;
 }
 
-const PRIVACY_TEXT = `Privacy Policy for NU Learning Platform
+const PRIVACY_TEXT = `Privacy Policy for nutrack Platform
 
-This Privacy Policy describes how NU Learning ("we", "our", or "us") collects, uses, and protects your personal information when you use our educational platform.
+This Privacy Policy describes how nutrack ("we", "our", or "us") collects, uses, and protects your personal information when you use our educational platform.
 
 1. Information We Collect
 We collect information you provide directly, including your Nazarbayev University email address, name, academic transcript data, course enrollments, and study progress. We also collect usage data such as login timestamps and feature interactions.
@@ -29,9 +29,9 @@ You may request access to, correction of, or deletion of your personal data at a
 6. Data Retention
 Your data is retained for the duration of your enrollment at Nazarbayev University. You may request deletion of your account and associated data at any time.`;
 
-const TERMS_TEXT = `Terms of Service for NU Learning Platform
+const TERMS_TEXT = `Terms of Service for nutrack Platform
 
-By using the NU Learning platform, you agree to the following terms and conditions.
+By using the nutrack platform, you agree to the following terms and conditions.
 
 1. Eligibility
 This platform is exclusively available to current students and staff of Nazarbayev University with valid @nu.edu.kz email addresses.
@@ -55,7 +55,7 @@ You retain ownership of your personal academic data. By using the platform, you 
 We strive to maintain platform availability but do not guarantee uninterrupted service. We reserve the right to modify or discontinue features with reasonable notice.
 
 8. Limitation of Liability
-NU Learning is provided "as is" without warranties. We are not liable for academic decisions made based on platform data or AI recommendations.`;
+nutrack is provided "as is" without warranties. We are not liable for academic decisions made based on platform data or AI recommendations.`;
 
 export function ConsentStep({ onNext }: ConsentStepProps) {
   const [privacyChecked, setPrivacyChecked] = useState(false);

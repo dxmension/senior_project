@@ -3,7 +3,7 @@ from celery import Celery
 from nutrack.config import settings
 from nutrack.database import load_model_modules
 
-celery_app = Celery("NU Learning")
+celery_app = Celery("nutrack")
 
 celery_app.config_from_object(
     {
