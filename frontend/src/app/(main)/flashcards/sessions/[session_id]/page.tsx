@@ -11,6 +11,24 @@ import { api } from "@/lib/api";
 import type { ApiResponse, FlashcardItem, FlashcardSession } from "@/types";
 
 type PageParams = Promise<{ session_id: string }>;
+const MAX_REQUEUE_COUNT = 2;
+
+function getRequeueCount(session: FlashcardSession, cardId: number) {
+  const stats = session.card_stats[cardId];
+  if (!stats) return 0;
+  return stats.times_medium + stats.times_hard;
+}
+
+function shouldKeepInStack(session: FlashcardSession, cardId: number) {
+  const stats = session.card_stats[cardId];
+  if (!stats) return true;
+  if (stats.last_response === "easy") return false;
+  return getRequeueCount(session, cardId) < MAX_REQUEUE_COUNT;
+}
+
+function buildStack(session: FlashcardSession) {
+  return session.cards.filter((card) => shouldKeepInStack(session, card.id));
+}
 
 function FlashcardCardView({
   card,
@@ -104,12 +122,7 @@ export default function FlashcardSessionPage({
         const s = res.data;
         if (!s) return;
         setSession(s);
-        // Build initial stack: cards not yet marked easy
-        const initialStack = s.cards.filter((c) => {
-          const stats = s.card_stats[c.id];
-          return !stats || stats.last_response !== "easy";
-        });
-        setStack(initialStack);
+        setStack(buildStack(s));
       })
       .catch(() => setError("Failed to load session."))
       .finally(() => setLoading(false));
@@ -132,13 +145,40 @@ export default function FlashcardSessionPage({
       respondingRef.current = true;
 
       const card = stack[0];
+      const currentSession = session;
+      if (!currentSession) {
+        respondingRef.current = false;
+        return;
+      }
+      const nextRequeueCount = getRequeueCount(currentSession, card.id) + (
+        response === "medium" || response === "hard" ? 1 : 0
+      );
 
       // Optimistic UI update
       if (response === "easy") {
         setStack((prev) => prev.slice(1));
+      } else if (nextRequeueCount >= MAX_REQUEUE_COUNT) {
+        setStack((prev) => prev.slice(1));
       } else {
         setStack((prev) => [...prev.slice(1), prev[0]]);
       }
+      setSession((prev) => {
+        if (!prev) return prev;
+        const currentStats = prev.card_stats[card.id];
+        return {
+          ...prev,
+          card_stats: {
+            ...prev.card_stats,
+            [card.id]: {
+              times_seen: (currentStats?.times_seen ?? 0) + 1,
+              times_easy: (currentStats?.times_easy ?? 0) + (response === "easy" ? 1 : 0),
+              times_medium: (currentStats?.times_medium ?? 0) + (response === "medium" ? 1 : 0),
+              times_hard: (currentStats?.times_hard ?? 0) + (response === "hard" ? 1 : 0),
+              last_response: response,
+            },
+          },
+        };
+      });
       setIsFlipped(false);
 
       try {
@@ -152,7 +192,7 @@ export default function FlashcardSessionPage({
         respondingRef.current = false;
       }
     },
-    [isFlipped, stack, sessionId]
+    [isFlipped, session, stack, sessionId]
   );
 
   useEffect(() => {

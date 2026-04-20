@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NU Learning",
+  title: "nutrack",
   description: "Educational platform for Nazarbayev University students",
 };
 
