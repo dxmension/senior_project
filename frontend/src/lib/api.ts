@@ -207,6 +207,12 @@ class ApiClient {
 
     return payload;
   }
+
+  async getRecommendedCourses() {
+    return this.get<{ ok: boolean; data: import("@/types").RecommendationsResponse | null }>(
+      "/courses/recommended"
+    );
+  }
 }
 
 export const api = new ApiClient();

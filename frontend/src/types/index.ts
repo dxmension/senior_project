@@ -821,3 +821,34 @@ export interface MockExamAdminDetail {
 export interface AdminMockExamQuestion extends MockExamQuestionItem {
   usage_count: number;
 }
+
+export interface RecommendedOfferingSummary {
+  section: string | null;
+  faculty: string | null;
+  meeting_time: string | null;
+  days: string | null;
+  room: string | null;
+  enrolled: number | null;
+  capacity: number | null;
+}
+
+export interface RecommendedCourseItem {
+  course_id: number;
+  offering_ids: number[];
+  code: string;
+  level: string;
+  title: string;
+  ects: number;
+  description: string | null;
+  department: string | null;
+  avg_gpa: number | null;
+  priority_match: boolean;
+  reason: string;
+  offerings: RecommendedOfferingSummary[];
+}
+
+export interface RecommendationsResponse {
+  recommendations: RecommendedCourseItem[];
+  term: string;
+  year: number;
+}
