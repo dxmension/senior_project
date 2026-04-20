@@ -18,6 +18,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    cols = {c["name"] for c in sa.inspect(op.get_bind()).get_columns("mock_exams")}
+    if "assessment_number" in cols:
+        return
+
     op.add_column(
         "mock_exams",
         sa.Column("assessment_number", sa.Integer(), nullable=True),

@@ -18,11 +18,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "users",
-        sa.Column("kazakh_level", sa.String(length=8), nullable=True),
-    )
-    op.add_column("users", sa.Column("enrollment_year", sa.Integer(), nullable=True))
+    cols = {c["name"] for c in sa.inspect(op.get_bind()).get_columns("users")}
+    if "kazakh_level" not in cols:
+        op.add_column("users", sa.Column("kazakh_level", sa.String(length=8), nullable=True))
+    if "enrollment_year" not in cols:
+        op.add_column("users", sa.Column("enrollment_year", sa.Integer(), nullable=True))
 
 
 def downgrade() -> None:
