@@ -37,6 +37,12 @@ class MockExamQuestionSource(str, enum.Enum):
     TUTOR_MADE = "tutor_made"
 
 
+class MockExamQuestionCurationStatus(str, enum.Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 class MockExamOrigin(str, enum.Enum):
     MANUAL = "manual"
     AI = "ai"
@@ -225,6 +231,8 @@ class MockExamQuestion(Base, IDMixin, TimestampMixin):
         nullable=False,
         default=MockExamQuestionSource.AI,
     )
+    historic_section: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    historic_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     historical_course_offering_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("course_offerings.id", ondelete="CASCADE"),
@@ -254,16 +262,34 @@ class MockExamQuestion(Base, IDMixin, TimestampMixin):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=True,
     )
-    created_by_admin_id: Mapped[int] = mapped_column(
+    created_by_admin_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
     )
+    submitted_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    curation_status: Mapped[MockExamQuestionCurationStatus] = mapped_column(
+        sa.Enum(
+            MockExamQuestionCurationStatus,
+            name="mockexamquestioncurationstatus",
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
+        nullable=False,
+        default=MockExamQuestionCurationStatus.APPROVED,
+    )
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     course: Mapped["Course"] = relationship()
     historical_course_offering: Mapped["CourseOffering | None"] = relationship()
-    created_by_admin: Mapped["User"] = relationship(
+    created_by_admin: Mapped["User | None"] = relationship(
         foreign_keys=[created_by_admin_id]
+    )
+    submitted_by_user: Mapped["User | None"] = relationship(
+        foreign_keys=[submitted_by_user_id]
     )
     owner_user: Mapped["User | None"] = relationship(foreign_keys=[owner_user_id])
     mock_exam_links: Mapped[list["MockExamQuestionLink"]] = relationship(
@@ -480,6 +506,10 @@ class MockExamGenerationJob(Base, IDMixin, TimestampMixin):
     celery_task_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     generation_options: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notification_sent_at: Mapped[datetime | None] = mapped_column(
+        sa.DateTime(timezone=True),
+        nullable=True,
+    )
     generated_mock_exam_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("mock_exams.id", ondelete="SET NULL"),

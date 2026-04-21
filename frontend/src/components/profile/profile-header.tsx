@@ -62,6 +62,9 @@ export function ProfileHeader({ user }: ProfileHeaderProps) {
   const [editing, setEditing] = useState(false);
   const [major, setMajor] = useState(user.major ?? "");
   const [kazakhLevel, setKazakhLevel] = useState(user.kazakh_level ?? "");
+  const [subscribedToNotifications, setSubscribedToNotifications] = useState(
+    user.subscribed_to_notifications
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,6 +75,7 @@ export function ProfileHeader({ user }: ProfileHeaderProps) {
       await api.patch<ApiResponse>("/profile", {
         major: major.trim() || null,
         kazakh_level: kazakhLevel || null,
+        subscribed_to_notifications: subscribedToNotifications,
       });
       await fetchUser();
       setEditing(false);
@@ -85,6 +89,7 @@ export function ProfileHeader({ user }: ProfileHeaderProps) {
   const handleCancel = () => {
     setMajor(user.major ?? "");
     setKazakhLevel(user.kazakh_level ?? "");
+    setSubscribedToNotifications(user.subscribed_to_notifications);
     setError(null);
     setEditing(false);
   };
@@ -114,6 +119,9 @@ export function ProfileHeader({ user }: ProfileHeaderProps) {
               {user.kazakh_level && (
                 <Badge variant="muted">KLL {user.kazakh_level}</Badge>
               )}
+              <Badge variant="muted">
+                {user.subscribed_to_notifications ? "Notifications on" : "Notifications off"}
+              </Badge>
             </div>
           )}
         </div>
@@ -155,6 +163,23 @@ export function ProfileHeader({ user }: ProfileHeaderProps) {
               </select>
             </div>
           </div>
+
+          <label className="flex items-start gap-3 rounded-lg border border-border-primary bg-bg-card px-3 py-2">
+            <input
+              type="checkbox"
+              checked={subscribedToNotifications}
+              onChange={(e) => setSubscribedToNotifications(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-border-primary bg-transparent"
+            />
+            <span className="space-y-0.5">
+              <span className="block text-sm text-text-primary">
+                Subscribe to notifications
+              </span>
+              <span className="block text-xs text-text-muted">
+                Get email reminders when your AI mock exam is ready before an assessment deadline.
+              </span>
+            </span>
+          </label>
 
           {error && (
             <p className="text-xs text-accent-red">{error}</p>

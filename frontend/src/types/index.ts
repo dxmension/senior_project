@@ -13,6 +13,7 @@ export interface User {
   total_credits_enrolled: number | null;
   is_onboarded: boolean;
   is_admin: boolean;
+  subscribed_to_notifications: boolean;
   created_at: string;
 }
 
@@ -511,6 +512,8 @@ export interface GenerateMockOptions {
   question_count: number;
   selected_upload_ids: number[];
   selected_shared_material_ids: number[];
+  include_rumored_questions: boolean;
+  include_historic_questions: boolean;
 }
 
 export type CalendarEventType =
@@ -873,6 +876,30 @@ export type MockExamQuestionSource =
   | "rumored"
   | "tutor_made";
 
+export type MockExamQuestionCurationStatus = "pending" | "approved" | "rejected";
+
+export interface UserSubmittedQuestion {
+  id: number;
+  course_id: number;
+  source: MockExamQuestionSource;
+  source_label: string;
+  historic_section: string | null;
+  historic_year: number | null;
+  question_text: string;
+  answer_variant_1: string;
+  answer_variant_2: string;
+  answer_variant_3: string | null;
+  answer_variant_4: string | null;
+  answer_variant_5: string | null;
+  answer_variant_6: string | null;
+  correct_option_index: number;
+  explanation: string | null;
+  curation_status: MockExamQuestionCurationStatus;
+  rejection_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface MockExamSourceSummary {
   source: MockExamQuestionSource;
   label: string;
@@ -883,6 +910,8 @@ export interface MockExamQuestionItem {
   course_id: number;
   source: MockExamQuestionSource;
   source_label: string;
+  historic_section: string | null;
+  historic_year: number | null;
   historical_course_offering_id: number | null;
   historical_course_offering_label: string | null;
   question_text: string;
@@ -910,6 +939,8 @@ export interface MockExamQuestionStudentItem {
   course_id: number;
   source: MockExamQuestionSource;
   source_label: string;
+  historic_section: string | null;
+  historic_year: number | null;
   historical_course_offering_id: number | null;
   historical_course_offering_label: string | null;
   question_text: string;
@@ -1042,6 +1073,9 @@ export interface MockExamAdminDetail {
 
 export interface AdminMockExamQuestion extends MockExamQuestionItem {
   usage_count: number;
+  curation_status: MockExamQuestionCurationStatus;
+  submitted_by_user_id: number | null;
+  rejection_reason: string | null;
 }
 
 export interface RecommendedOfferingSummary {

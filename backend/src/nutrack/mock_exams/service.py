@@ -27,6 +27,7 @@ from nutrack.mock_exams.models import (
     MockExamGenerationSettings,
     MockExamOrigin,
     MockExamQuestion,
+    MockExamQuestionCurationStatus,
     MockExamQuestionLink,
     MockExamQuestionSource,
     MockExamVisibilityScope,
@@ -188,13 +189,19 @@ def _attempt_response(
 
 def _question_response(question: MockExamQuestion) -> dict:
     offering = question.__dict__.get("historical_course_offering")
+    status = question.curation_status
     return {
         "id": question.id,
         "course_id": question.course_id,
         "source": question.source.value,
         "source_label": _question_source_label(question.source),
+        "historic_section": question.historic_section,
+        "historic_year": question.historic_year,
         "historical_course_offering_id": question.historical_course_offering_id,
         "historical_course_offering_label": _offering_label(offering),
+        "curation_status": status.value if hasattr(status, "value") else str(status),
+        "submitted_by_user_id": question.submitted_by_user_id,
+        "rejection_reason": question.rejection_reason,
         "question_text": question.question_text,
         "answer_variant_1": question.answer_variant_1,
         "answer_variant_2": question.answer_variant_2,
@@ -216,6 +223,8 @@ def _student_question_response(question: MockExamQuestion) -> dict:
         "course_id": question.course_id,
         "source": question.source.value,
         "source_label": _question_source_label(question.source),
+        "historic_section": question.historic_section,
+        "historic_year": question.historic_year,
         "historical_course_offering_id": question.historical_course_offering_id,
         "historical_course_offering_label": _offering_label(offering),
         "question_text": question.question_text,
@@ -225,6 +234,31 @@ def _student_question_response(question: MockExamQuestion) -> dict:
         "answer_variant_4": question.answer_variant_4,
         "answer_variant_5": question.answer_variant_5,
         "answer_variant_6": question.answer_variant_6,
+    }
+
+
+def _submitted_question_response(question: MockExamQuestion) -> dict:
+    status = question.curation_status
+    return {
+        "id": question.id,
+        "course_id": question.course_id,
+        "source": question.source.value,
+        "source_label": _question_source_label(question.source),
+        "historic_section": question.historic_section,
+        "historic_year": question.historic_year,
+        "question_text": question.question_text,
+        "answer_variant_1": question.answer_variant_1,
+        "answer_variant_2": question.answer_variant_2,
+        "answer_variant_3": question.answer_variant_3,
+        "answer_variant_4": question.answer_variant_4,
+        "answer_variant_5": question.answer_variant_5,
+        "answer_variant_6": question.answer_variant_6,
+        "correct_option_index": question.correct_option_index,
+        "explanation": question.explanation,
+        "curation_status": status.value if hasattr(status, "value") else str(status),
+        "rejection_reason": question.rejection_reason,
+        "created_at": question.created_at,
+        "updated_at": question.updated_at,
     }
 
 
@@ -551,8 +585,15 @@ class MockExamService:
         await self.mock_exam_repo.delete(exam)
         return {"deleted": True}
 
-    async def list_admin_mock_exam_questions(self, course_id: int) -> list[dict]:
-        questions = await self.mock_exam_question_repo.list_by_course(course_id)
+    async def list_admin_mock_exam_questions(
+        self,
+        course_id: int,
+        curation_status: MockExamQuestionCurationStatus | None = None,
+    ) -> list[dict]:
+        questions = await self.mock_exam_question_repo.list_by_course(
+            course_id,
+            curation_status=curation_status,
+        )
         usage_map = await self.mock_exam_question_repo.usage_counts([q.id for q in questions])
         payload = []
         for question in questions:
@@ -570,6 +611,8 @@ class MockExamService:
         question = await self.mock_exam_question_repo.create(
             course_id=payload.course_id,
             source=payload.source,
+            historic_section=getattr(payload, "historic_section", None),
+            historic_year=getattr(payload, "historic_year", None),
             historical_course_offering_id=payload.historical_course_offering_id,
             question_text=payload.question_text.strip(),
             answer_variant_1=payload.answer_variant_1.strip(),
@@ -583,6 +626,58 @@ class MockExamService:
             visibility_scope=MockExamVisibilityScope.COURSE,
             owner_user_id=None,
             created_by_admin_id=admin_id,
+            submitted_by_user_id=None,
+            curation_status=MockExamQuestionCurationStatus.APPROVED,
+        )
+        return {**_question_response(question), "usage_count": 0}
+
+    async def submit_question(self, user_id: int, payload) -> dict:
+        self._validate_question_payload(payload)
+        if payload.source not in (
+            MockExamQuestionSource.RUMORED,
+            MockExamQuestionSource.HISTORIC,
+        ):
+            raise MockExamValidationError("User submissions must be rumored or historic")
+        question = await self.mock_exam_question_repo.create(
+            course_id=payload.course_id,
+            source=payload.source,
+            historic_section=self._clean_optional_text(getattr(payload, "historic_section", None)),
+            historic_year=getattr(payload, "historic_year", None),
+            historical_course_offering_id=None,
+            question_text=payload.question_text.strip(),
+            answer_variant_1=payload.answer_variant_1.strip(),
+            answer_variant_2=payload.answer_variant_2.strip(),
+            answer_variant_3=self._clean_optional_text(payload.answer_variant_3),
+            answer_variant_4=self._clean_optional_text(payload.answer_variant_4),
+            answer_variant_5=self._clean_optional_text(payload.answer_variant_5),
+            answer_variant_6=self._clean_optional_text(payload.answer_variant_6),
+            correct_option_index=payload.correct_option_index,
+            explanation=self._clean_optional_text(payload.explanation),
+            visibility_scope=MockExamVisibilityScope.COURSE,
+            owner_user_id=None,
+            created_by_admin_id=None,
+            submitted_by_user_id=user_id,
+            curation_status=MockExamQuestionCurationStatus.PENDING,
+        )
+        return _submitted_question_response(question)
+
+    async def list_user_submissions(self, user_id: int, course_id: int) -> list[dict]:
+        questions = await self.mock_exam_question_repo.list_by_user(user_id, course_id)
+        return [_submitted_question_response(q) for q in questions]
+
+    async def curate_question(
+        self,
+        question_id: int,
+        status: MockExamQuestionCurationStatus,
+        rejection_reason: str | None = None,
+    ) -> dict:
+        question = await self.mock_exam_question_repo.get_by_id(question_id)
+        if not question:
+            raise MockExamQuestionNotFoundError()
+        await self.mock_exam_question_repo.update(
+            question,
+            curation_status=status,
+            rejection_reason=rejection_reason if status == MockExamQuestionCurationStatus.REJECTED else None,
         )
         return {**_question_response(question), "usage_count": 0}
 

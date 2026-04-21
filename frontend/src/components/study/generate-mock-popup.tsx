@@ -79,6 +79,8 @@ export function GenerateMockPopup({
   const [questionCount, setQuestionCount] = useState(
     DEFAULT_QUESTION_COUNT[assessmentType] ?? 20
   );
+  const [includeRumoredQuestions, setIncludeRumoredQuestions] = useState(false);
+  const [includeHistoricQuestions, setIncludeHistoricQuestions] = useState(false);
   const backdropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -166,6 +168,8 @@ export function GenerateMockPopup({
       question_count: questionCount,
       selected_upload_ids: Array.from(selectedUploadIds),
       selected_shared_material_ids: Array.from(selectedSharedIds),
+      include_rumored_questions: includeRumoredQuestions,
+      include_historic_questions: includeHistoricQuestions,
     });
   }
 
@@ -228,6 +232,26 @@ export function GenerateMockPopup({
               <option value="medium">Medium</option>
               <option value="hard">Hard</option>
             </select>
+          </div>
+          <div className="flex flex-col justify-end gap-2">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-text-secondary hover:text-text-primary">
+              <input
+                type="checkbox"
+                checked={includeRumoredQuestions}
+                onChange={(e) => setIncludeRumoredQuestions(e.target.checked)}
+                className="accent-[#a3e635]"
+              />
+              Add rumored questions
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-text-secondary hover:text-text-primary">
+              <input
+                type="checkbox"
+                checked={includeHistoricQuestions}
+                onChange={(e) => setIncludeHistoricQuestions(e.target.checked)}
+                className="accent-[#a3e635]"
+              />
+              Add historic questions
+            </label>
           </div>
         </div>
 

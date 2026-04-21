@@ -22,6 +22,7 @@ import type {
   ApiResponse,
   CourseListItem,
   MockExamAdminDetail,
+  MockExamQuestionCurationStatus,
   AssessmentType,
 } from "@/types";
 
@@ -59,6 +60,8 @@ function emptyQuestionForm() {
   return {
     id: null as number | null,
     source: "ai" as AdminMockExamQuestion["source"],
+    historic_section: "",
+    historic_year: "",
     historical_course_offering_id: "",
     question_text: "",
     answer_variant_1: "",
@@ -121,6 +124,8 @@ export function MockExamCourseManagement({
   const [builderPage, setBuilderPage] = useState(1);
   const [builderPreviewId, setBuilderPreviewId] = useState<number | null>(null);
   const [questionEditorOpen, setQuestionEditorOpen] = useState(false);
+  const [pendingQuestions, setPendingQuestions] = useState<AdminMockExamQuestion[]>([]);
+  const [curating, setCurating] = useState<number | null>(null);
 
   useEffect(() => {
     void loadPageData();
@@ -169,11 +174,45 @@ export function MockExamCourseManagement({
         `/admin/mock-exam-questions?course_id=${id}`
       ),
     ]);
+    void loadPendingQuestions(id);
     return {
       offerings: offeringsRes.data ?? [],
       exams: examsRes.data ?? [],
       questions: questionsRes.data ?? [],
     };
+  }
+
+  async function loadPendingQuestions(id: number) {
+    try {
+      const res = await api.get<ApiResponse<AdminMockExamQuestion[]>>(
+        `/admin/mock-exam-questions?course_id=${id}&curation_status=pending`
+      );
+      setPendingQuestions(res.data ?? []);
+    } catch {
+      // non-critical
+    }
+  }
+
+  async function curateQuestion(
+    questionId: number,
+    status: MockExamQuestionCurationStatus,
+    rejectionReason?: string,
+  ) {
+    setCurating(questionId);
+    try {
+      await api.patch<ApiResponse<AdminMockExamQuestion>>(
+        `/admin/mock-exam-questions/${questionId}/curate`,
+        { status, rejection_reason: rejectionReason ?? null },
+      );
+      setPendingQuestions((prev) => prev.filter((q) => q.id !== questionId));
+      if (status === "approved") {
+        await refreshCourseData();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to curate question");
+    } finally {
+      setCurating(null);
+    }
   }
 
   function syncResources(resources: CourseResources) {
@@ -195,6 +234,8 @@ export function MockExamCourseManagement({
       const body = {
         course_id: courseId,
         source: questionForm.source,
+        historic_section: questionForm.historic_section || undefined,
+        historic_year: questionForm.historic_year ? Number(questionForm.historic_year) : undefined,
         historical_course_offering_id: questionForm.historical_course_offering_id
           ? Number(questionForm.historical_course_offering_id)
           : null,
@@ -331,6 +372,8 @@ export function MockExamCourseManagement({
     setQuestionForm({
       id: question.id,
       source: question.source,
+      historic_section: question.historic_section ?? "",
+      historic_year: question.historic_year ? String(question.historic_year) : "",
       historical_course_offering_id: question.historical_course_offering_id
         ? String(question.historical_course_offering_id)
         : "",
@@ -477,6 +520,11 @@ export function MockExamCourseManagement({
                   className="btn-secondary inline-flex items-center gap-2 px-4 py-2 text-sm"
                 >
                   Manage Question Bank
+                  {pendingQuestions.length > 0 && (
+                    <span className="rounded-full bg-accent-orange px-1.5 py-0.5 text-xs font-bold text-white">
+                      {pendingQuestions.length}
+                    </span>
+                  )}
                 </Link>
               </>
             ) : null}
@@ -508,30 +556,40 @@ export function MockExamCourseManagement({
       ) : null}
 
       {view === "questions" ? (
-        <QuestionBankPanel
-          offerings={offerings}
-          questions={paginatedQuestions}
-          selectedQuestion={selectedQuestion}
-          form={questionForm}
-          editorOpen={questionEditorOpen}
-          page={questionPage}
-          search={questionSearch}
-          totalPages={totalQuestionPages}
-          onCloseEditor={() => setQuestionEditorOpen(false)}
-          onDelete={removeQuestion}
-          onEdit={editQuestion}
-          onNewQuestion={() => {
-            setSelectedQuestionId(null);
-            setQuestionEditorOpen(true);
-            setQuestionForm(emptyQuestionForm());
-          }}
-          onPageChange={setQuestionPage}
-          onSearchChange={setQuestionSearch}
-          onSelectQuestion={setSelectedQuestionId}
-          onFormChange={setQuestionForm}
-          onSave={saveQuestion}
-          saving={savingQuestion}
-        />
+        <>
+          {pendingQuestions.length > 0 && (
+            <CurationPanel
+              questions={pendingQuestions}
+              curating={curating}
+              onApprove={(id) => void curateQuestion(id, "approved")}
+              onReject={(id, reason) => void curateQuestion(id, "rejected", reason)}
+            />
+          )}
+          <QuestionBankPanel
+            offerings={offerings}
+            questions={paginatedQuestions}
+            selectedQuestion={selectedQuestion}
+            form={questionForm}
+            editorOpen={questionEditorOpen}
+            page={questionPage}
+            search={questionSearch}
+            totalPages={totalQuestionPages}
+            onCloseEditor={() => setQuestionEditorOpen(false)}
+            onDelete={removeQuestion}
+            onEdit={editQuestion}
+            onNewQuestion={() => {
+              setSelectedQuestionId(null);
+              setQuestionEditorOpen(true);
+              setQuestionForm(emptyQuestionForm());
+            }}
+            onPageChange={setQuestionPage}
+            onSearchChange={setQuestionSearch}
+            onSelectQuestion={setSelectedQuestionId}
+            onFormChange={setQuestionForm}
+            onSave={saveQuestion}
+            saving={savingQuestion}
+          />
+        </>
       ) : null}
 
       {view === "builder" ? (
@@ -851,23 +909,51 @@ function QuestionBankPanel({
                 <option value="tutor_made">Tutor made</option>
               </select>
               {form.source === "historic" ? (
-                <select
-                  value={form.historical_course_offering_id}
-                  onChange={(event) =>
-                    onFormChange({
-                      ...form,
-                      historical_course_offering_id: event.target.value,
-                    })
-                  }
-                  className="glass-input px-3 py-2 text-sm"
-                >
-                  <option value="">General historic question</option>
-                  {offerings.map((offering) => (
-                    <option key={offering.id} value={offering.id}>
-                      {offering.term} {offering.year} · {offering.section ?? "No section"}
-                    </option>
-                  ))}
-                </select>
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-text-secondary">Section (optional)</label>
+                      <input
+                        type="text"
+                        value={form.historic_section}
+                        onChange={(event) =>
+                          onFormChange({ ...form, historic_section: event.target.value })
+                        }
+                        placeholder="e.g. Section A"
+                        className="glass-input px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-text-secondary">Year (optional)</label>
+                      <input
+                        type="number"
+                        value={form.historic_year}
+                        onChange={(event) =>
+                          onFormChange({ ...form, historic_year: event.target.value })
+                        }
+                        placeholder="e.g. 2023"
+                        className="glass-input px-3 py-2 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <select
+                    value={form.historical_course_offering_id}
+                    onChange={(event) =>
+                      onFormChange({
+                        ...form,
+                        historical_course_offering_id: event.target.value,
+                      })
+                    }
+                    className="glass-input px-3 py-2 text-sm"
+                  >
+                    <option value="">General historic question</option>
+                    {offerings.map((offering) => (
+                      <option key={offering.id} value={offering.id}>
+                        {offering.term} {offering.year} · {offering.section ?? "No section"}
+                      </option>
+                    ))}
+                  </select>
+                </>
               ) : null}
               <textarea
                 value={form.question_text}
@@ -1174,6 +1260,111 @@ function MockExamFormPanel({
         {saving ? <LoaderCircle size={14} className="animate-spin" /> : <Save size={14} />}
         {form.id ? "Publish New Version" : "Create Mock Exam"}
       </button>
+    </div>
+  );
+}
+
+function CurationPanel({
+  questions,
+  curating,
+  onApprove,
+  onReject,
+}: {
+  questions: AdminMockExamQuestion[];
+  curating: number | null;
+  onApprove: (id: number) => void;
+  onReject: (id: number, reason: string) => void;
+}) {
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+
+  function submitReject(id: number) {
+    onReject(id, rejectReason);
+    setRejectingId(null);
+    setRejectReason("");
+  }
+
+  return (
+    <div className="glass-card p-6">
+      <div className="mb-4 flex items-center gap-2">
+        <span className="rounded-full bg-accent-orange/10 px-2.5 py-1 text-xs font-semibold text-accent-orange">
+          {questions.length} pending
+        </span>
+        <h3 className="text-sm font-semibold text-text-primary">Pending Curation</h3>
+      </div>
+      <div className="space-y-3">
+        {questions.map((q) => (
+          <div
+            key={q.id}
+            className="rounded-xl border border-border-primary bg-white/[0.02] p-4"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-text-primary">{q.question_text}</p>
+                <div className="mt-1 flex flex-wrap gap-2 text-xs text-text-muted">
+                  <span className="capitalize">{q.source_label}</span>
+                  {q.historic_section && <span>· {q.historic_section}</span>}
+                  {q.historic_year && <span>· {q.historic_year}</span>}
+                  <span>· {[1, 2, 3, 4, 5, 6].filter((i) => q[`answer_variant_${i}` as keyof AdminMockExamQuestion]).length} options</span>
+                </div>
+                <p className="mt-1 text-xs text-text-secondary line-clamp-2">
+                  Correct: {q[`answer_variant_${q.correct_option_index}` as keyof AdminMockExamQuestion] as string}
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <button
+                  type="button"
+                  disabled={curating === q.id}
+                  onClick={() => onApprove(q.id)}
+                  className="rounded-lg bg-accent-green/10 px-3 py-1.5 text-xs font-medium text-accent-green hover:bg-accent-green/20 disabled:opacity-60"
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  disabled={curating === q.id}
+                  onClick={() => {
+                    setRejectingId(q.id);
+                    setRejectReason("");
+                  }}
+                  className="rounded-lg bg-accent-red/10 px-3 py-1.5 text-xs font-medium text-accent-red hover:bg-accent-red/20 disabled:opacity-60"
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+            {rejectingId === q.id && (
+              <div className="mt-3 flex gap-2">
+                <input
+                  type="text"
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="Reason for rejection (optional)"
+                  className="glass-input flex-1 px-3 py-1.5 text-xs"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") submitReject(q.id);
+                    if (e.key === "Escape") setRejectingId(null);
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => submitReject(q.id)}
+                  className="rounded-lg bg-accent-red px-3 py-1.5 text-xs font-medium text-white"
+                >
+                  Confirm
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRejectingId(null)}
+                  className="text-xs text-text-secondary hover:text-text-primary"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

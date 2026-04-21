@@ -1,14 +1,17 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from nutrack.auth.dependencies import get_current_user
 from nutrack.mock_exams.dependencies import get_mock_exam_service
 from nutrack.mock_exams.schemas import (
+    CurateQuestionRequest,
     MockExamAttemptResponse,
     MockExamAttemptReviewResponse,
     MockExamAttemptSessionResponse,
     MockExamCourseGroup,
     MockExamDashboardResponse,
     SaveMockExamAnswerRequest,
+    UserSubmitQuestionRequest,
+    UserSubmittedQuestionResponse,
 )
 from nutrack.mock_exams.service import MockExamService
 from nutrack.users.models import User
@@ -103,3 +106,29 @@ async def submit_mock_exam_attempt(
 ):
     attempt = await service.submit_mock_exam_attempt(user.id, attempt_id)
     return ApiResponse(data=attempt)
+
+
+@router.post(
+    "/questions/submit",
+    response_model=ApiResponse[UserSubmittedQuestionResponse],
+)
+async def submit_question(
+    body: UserSubmitQuestionRequest,
+    user: User = Depends(get_current_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    question = await service.submit_question(user.id, body)
+    return ApiResponse(data=question)
+
+
+@router.get(
+    "/questions/my-submissions",
+    response_model=ApiResponse[list[UserSubmittedQuestionResponse]],
+)
+async def list_my_submissions(
+    course_id: int = Query(..., ge=1),
+    user: User = Depends(get_current_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    questions = await service.list_user_submissions(user.id, course_id)
+    return ApiResponse(data=questions)

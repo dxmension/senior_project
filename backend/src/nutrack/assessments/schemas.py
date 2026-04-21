@@ -70,3 +70,5 @@ class GenerateMockExamRequest(BaseModel):
     question_count: int | None = Field(default=None, ge=1, le=60)
     selected_upload_ids: list[int] | None = None
     selected_shared_material_ids: list[int] | None = None
+    include_rumored_questions: bool = False
+    include_historic_questions: bool = False

@@ -27,10 +27,11 @@ function answerOptions(question: MockExamQuestionItem) {
 }
 
 function sourceBadge(question: MockExamQuestionItem) {
-  if (!question.historical_course_offering_label) {
-    return question.source_label;
-  }
-  return `${question.source_label} · ${question.historical_course_offering_label}`;
+  const parts: string[] = [question.source_label];
+  if (question.historic_section) parts.push(question.historic_section);
+  if (question.historic_year) parts.push(String(question.historic_year));
+  if (question.historical_course_offering_label) parts.push(question.historical_course_offering_label);
+  return parts.join(" · ");
 }
 
 function scoreLabel(score: number | null) {

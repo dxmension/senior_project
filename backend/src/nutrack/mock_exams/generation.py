@@ -136,6 +136,8 @@ class GenerationOptions:
     question_count: int | None = None
     selected_upload_ids: list[int] | None = None
     selected_shared_material_ids: list[int] | None = None
+    include_rumored_questions: bool = False
+    include_historic_questions: bool = False
 
     def to_json(self) -> str:
         return json.dumps({
@@ -143,6 +145,8 @@ class GenerationOptions:
             "question_count": self.question_count,
             "selected_upload_ids": self.selected_upload_ids,
             "selected_shared_material_ids": self.selected_shared_material_ids,
+            "include_rumored_questions": self.include_rumored_questions,
+            "include_historic_questions": self.include_historic_questions,
         })
 
     @classmethod
@@ -155,6 +159,8 @@ class GenerationOptions:
             question_count=data.get("question_count"),
             selected_upload_ids=data.get("selected_upload_ids"),
             selected_shared_material_ids=data.get("selected_shared_material_ids"),
+            include_rumored_questions=data.get("include_rumored_questions", False),
+            include_historic_questions=data.get("include_historic_questions", False),
         )
 
 
@@ -192,6 +198,8 @@ class MockExamGenerationService:
         assessment: Assessment,
     ) -> tuple[list[MockExamGenerationJob], list[str]]:
         cancelled_task_ids = await self.job_repo.cancel_pending_for_assessment(assessment.id)
+        if assessment.is_completed:
+            return [], cancelled_task_ids
         if not _is_eligible_type(assessment.assessment_type):
             return [], cancelled_task_ids
         settings = await self.get_effective_settings(assessment.assessment_type)
@@ -215,6 +223,8 @@ class MockExamGenerationService:
         question_count: int | None = None,
         selected_upload_ids: list[int] | None = None,
         selected_shared_material_ids: list[int] | None = None,
+        include_rumored_questions: bool = False,
+        include_historic_questions: bool = False,
     ) -> tuple[MockExamGenerationJob, list[str]]:
         cancelled_task_ids = await self.job_repo.cancel_pending_for_assessment(assessment.id)
         now = datetime.now(timezone.utc)
@@ -223,6 +233,8 @@ class MockExamGenerationService:
             question_count=question_count,
             selected_upload_ids=selected_upload_ids,
             selected_shared_material_ids=selected_shared_material_ids,
+            include_rumored_questions=include_rumored_questions,
+            include_historic_questions=include_historic_questions,
         )
         job = await self._create_job(
             assessment,
@@ -368,7 +380,7 @@ class MockExamGenerationService:
             tool_handler=state.handle_tool,
             model=settings.model,
             temperature=settings.temperature,
-            max_output_tokens=4000,
+            max_output_tokens=32000,
         )
         result = GenerationResult.model_validate_json(text)
         if state.created_exam_id is None:

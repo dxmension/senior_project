@@ -21,6 +21,7 @@ def _profile() -> dict[str, object]:
         "total_credits_earned": 42,
         "total_credits_enrolled": 48,
         "is_onboarded": True,
+        "subscribed_to_notifications": True,
         "created_at": datetime(2026, 1, 1).isoformat(),
     }
 
@@ -45,13 +46,14 @@ async def test_update_profile_passes_body_to_service(client, test_app, current_u
 
     response = await client.patch(
         "/v1/profile",
-        json={"major": "Biology", "study_year": 4},
+        json={"major": "Biology", "study_year": 4, "subscribed_to_notifications": False},
     )
 
     assert response.status_code == 200
     body_arg = service.update_profile.await_args.args[1]
     assert body_arg.major == "Biology"
     assert body_arg.study_year == 4
+    assert body_arg.subscribed_to_notifications is False
 
 
 @pytest.mark.asyncio
@@ -108,4 +110,3 @@ async def test_get_stats_returns_aggregated_payload(
 
     assert response.status_code == 200
     assert response.json()["data"]["completed_courses"] == 7
-

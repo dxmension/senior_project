@@ -198,12 +198,40 @@ class MockExamQuestionRepository(BaseRepository[MockExamQuestion]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, MockExamQuestion)
 
-    async def list_by_course(self, course_id: int) -> list[MockExamQuestion]:
+    async def list_by_course(
+        self,
+        course_id: int,
+        curation_status=None,
+    ) -> list[MockExamQuestion]:
+        from nutrack.mock_exams.models import MockExamQuestionCurationStatus
         stmt = (
             select(MockExamQuestion)
             .options(_question_offering_loader())
             .where(MockExamQuestion.course_id == course_id)
-            .order_by(MockExamQuestion.updated_at.desc())
+        )
+        if curation_status is not None:
+            stmt = stmt.where(MockExamQuestion.curation_status == curation_status)
+        else:
+            stmt = stmt.where(
+                MockExamQuestion.curation_status == MockExamQuestionCurationStatus.APPROVED
+            )
+        stmt = stmt.order_by(MockExamQuestion.updated_at.desc())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_by_user(
+        self,
+        user_id: int,
+        course_id: int,
+    ) -> list[MockExamQuestion]:
+        stmt = (
+            select(MockExamQuestion)
+            .options(_question_offering_loader())
+            .where(
+                MockExamQuestion.course_id == course_id,
+                MockExamQuestion.submitted_by_user_id == user_id,
+            )
+            .order_by(MockExamQuestion.created_at.desc())
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())

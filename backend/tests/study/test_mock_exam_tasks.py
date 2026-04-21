@@ -21,6 +21,7 @@ class _AsyncSessionContext:
 async def test_run_generation_updates_task_id_and_runs_job(monkeypatch) -> None:
     session = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
     job = SimpleNamespace(
+        id=7,
         status=SimpleNamespace(value="completed"),
         error_message=None,
         generated_mock_exam_id=21,
@@ -39,6 +40,11 @@ async def test_run_generation_updates_task_id_and_runs_job(monkeypatch) -> None:
         tasks,
         "MockExamGenerationService",
         lambda session: service,
+    )
+    monkeypatch.setattr(
+        tasks,
+        "NotificationsService",
+        lambda session: SimpleNamespace(send_mock_exam_ready_email=AsyncMock(return_value=False)),
     )
 
     await tasks._run_generation(7, "task-7")
@@ -66,6 +72,11 @@ async def test_run_generation_rolls_back_on_error(monkeypatch) -> None:
         tasks,
         "MockExamGenerationService",
         lambda session: service,
+    )
+    monkeypatch.setattr(
+        tasks,
+        "NotificationsService",
+        lambda session: SimpleNamespace(send_mock_exam_ready_email=AsyncMock(return_value=False)),
     )
 
     with pytest.raises(RuntimeError, match="boom"):
@@ -95,6 +106,45 @@ async def test_reset_job_marks_job_queued(monkeypatch) -> None:
 
     service.reset_job_to_queued.assert_awaited_once_with(7, "boom", "task-7")
     session.commit.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_run_generation_sends_ready_notification(monkeypatch) -> None:
+    session = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+    job = SimpleNamespace(
+        id=7,
+        status=SimpleNamespace(value="completed"),
+        error_message=None,
+        generated_mock_exam_id=21,
+    )
+    service = SimpleNamespace(
+        set_celery_task_id=AsyncMock(),
+        run_job=AsyncMock(return_value=job),
+    )
+    notifications = SimpleNamespace(
+        send_mock_exam_ready_email=AsyncMock(return_value=True),
+    )
+
+    monkeypatch.setattr(
+        tasks,
+        "AsyncSessionLocal",
+        lambda: _AsyncSessionContext(session),
+    )
+    monkeypatch.setattr(
+        tasks,
+        "MockExamGenerationService",
+        lambda session: service,
+    )
+    monkeypatch.setattr(
+        tasks,
+        "NotificationsService",
+        lambda session: notifications,
+    )
+
+    await tasks._run_generation(7, "task-7")
+
+    notifications.send_mock_exam_ready_email.assert_awaited_once_with(job)
+    assert session.commit.await_count == 2
 
 
 def test_generate_task_retries_and_resets_job(monkeypatch) -> None:

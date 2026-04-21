@@ -32,6 +32,7 @@ def _user() -> SimpleNamespace:
         total_credits_earned=40,
         total_credits_enrolled=48,
         is_onboarded=True,
+        subscribed_to_notifications=True,
         created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
 
@@ -56,6 +57,24 @@ async def test_update_profile_skips_empty_updates() -> None:
 
     assert response.email == user.email
     service.user_repo.update.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_update_profile_can_toggle_notifications() -> None:
+    service = UserService(session=None)
+    user = _user()
+    service.user_repo.get_by_id = AsyncMock(return_value=user)
+    service.user_repo.update = AsyncMock()
+
+    await service.update_profile(
+        1,
+        UserProfileUpdate(subscribed_to_notifications=False),
+    )
+
+    service.user_repo.update.assert_awaited_once_with(
+        user,
+        subscribed_to_notifications=False,
+    )
 
 
 @pytest.mark.asyncio

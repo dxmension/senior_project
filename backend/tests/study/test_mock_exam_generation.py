@@ -140,7 +140,7 @@ async def test_generate_returns_private_material_skip_reason_when_none() -> None
         user_id=1,
         course_id=4,
     )
-    job = SimpleNamespace(assessment_id=7)
+    job = SimpleNamespace(assessment_id=7, generation_options=None)
     service.assessment_repo = SimpleNamespace(get_by_id=AsyncMock(return_value=assessment))
     service.get_effective_settings = AsyncMock(
         return_value=SimpleNamespace(enabled=True)
@@ -160,11 +160,12 @@ async def test_schedule_for_assessment_creates_deadline_job_without_uploads() ->
     service = MockExamGenerationService(session=AsyncMock())
     assessment = SimpleNamespace(
         id=7,
+        is_completed=False,
         deadline=datetime.now(timezone.utc) + timedelta(days=3),
         assessment_type=AssessmentType.QUIZ,
     )
     service.job_repo = SimpleNamespace(
-        cancel_pending_for_assessment=AsyncMock(),
+        cancel_pending_for_assessment=AsyncMock(return_value=[]),
     )
     service.get_effective_settings = AsyncMock(
         return_value=SimpleNamespace(regeneration_offset_hours=24)
@@ -176,10 +177,30 @@ async def test_schedule_for_assessment_creates_deadline_job_without_uploads() ->
         )
     )
 
-    jobs = await service.schedule_for_assessment(assessment)
+    jobs, cancelled_task_ids = await service.schedule_for_assessment(assessment)
 
     assert len(jobs) == 1
+    assert cancelled_task_ids == []
     assert jobs[0].trigger == MockExamGenerationTrigger.DEADLINE_REMINDER
+
+
+@pytest.mark.asyncio
+async def test_schedule_for_assessment_skips_completed_assessment() -> None:
+    service = MockExamGenerationService(session=AsyncMock())
+    assessment = SimpleNamespace(
+        id=7,
+        is_completed=True,
+        deadline=datetime.now(timezone.utc) + timedelta(days=3),
+        assessment_type=AssessmentType.QUIZ,
+    )
+    service.job_repo = SimpleNamespace(
+        cancel_pending_for_assessment=AsyncMock(return_value=["task-7"]),
+    )
+
+    jobs, cancelled_task_ids = await service.schedule_for_assessment(assessment)
+
+    assert jobs == []
+    assert cancelled_task_ids == ["task-7"]
 
 
 def test_tool_schema_closes_nested_objects() -> None:

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Menu, LogOut, UserCircle, Settings } from "lucide-react";
+import { Menu, LogOut, UserCircle } from "lucide-react";
 import Link from "next/link";
 import { useAuthStore } from "@/stores/auth";
 import { Avatar } from "@/components/ui/avatar";
@@ -62,14 +62,6 @@ export function Header({ onMenuClick }: HeaderProps) {
             >
               <UserCircle size={16} />
               Profile
-            </Link>
-            <Link
-              href="/settings"
-              onClick={() => setDropdownOpen(false)}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-bg-card rounded-[var(--radius-sm)] transition-colors"
-            >
-              <Settings size={16} />
-              Settings
             </Link>
             <div className="border-t border-border-primary my-1" />
             <button

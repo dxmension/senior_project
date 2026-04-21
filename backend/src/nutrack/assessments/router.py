@@ -85,6 +85,8 @@ async def generate_mock_exam(
         question_count=body.question_count,
         selected_upload_ids=body.selected_upload_ids,
         selected_shared_material_ids=body.selected_shared_material_ids,
+        include_rumored_questions=body.include_rumored_questions,
+        include_historic_questions=body.include_historic_questions,
     )
     return ApiResponse(data=job)
 

@@ -110,7 +110,7 @@ export function UploadStep({ onNext, onSkip }: UploadStepProps) {
                 ))}
               </select>
               <p className="text-xs text-text-muted">
-                You can change this later in your profile settings.
+                You can change this later in your profile.
               </p>
             </div>
           </div>

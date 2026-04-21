@@ -23,6 +23,7 @@ class UserProfileResponse(BaseModel):
     total_credits_enrolled: int | None = None
     is_onboarded: bool
     is_admin: bool = False
+    subscribed_to_notifications: bool = True
     created_at: datetime
 
 
@@ -33,6 +34,7 @@ class UserProfileUpdate(BaseModel):
     kazakh_level: str | None = None
     study_year: int | None = None
     avatar_url: str | None = None
+    subscribed_to_notifications: bool | None = None
 
 
 class CreditsBySemester(BaseModel):

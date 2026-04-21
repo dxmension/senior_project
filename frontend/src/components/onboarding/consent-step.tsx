@@ -24,7 +24,7 @@ All personal data is stored securely on encrypted servers. Academic transcript d
 We do not sell or share your personal information with third parties. Anonymized, aggregate statistics may be used for platform improvement and academic research with your consent.
 
 5. Your Rights
-You may request access to, correction of, or deletion of your personal data at any time through the platform settings or by contacting our support team.
+You may request access to, correction of, or deletion of your personal data at any time through your profile or by contacting our support team.
 
 6. Data Retention
 Your data is retained for the duration of your enrollment at Nazarbayev University. You may request deletion of your account and associated data at any time.`;
