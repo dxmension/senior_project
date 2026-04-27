@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     CURRENT_TERM: str = "Spring"
     CURRENT_YEAR: int = 2026
 
+    RESEND_API_KEY: str = ""
+
+    FRONTEND_URL: str = "http://localhost:3000"
+
     model_config = SettingsConfigDict(
         env_file=[Path(__file__).resolve().parents[2] / ".env"],
         extra="ignore",

@@ -40,6 +40,10 @@ class User(Base, IDMixin, TimestampMixin):
         nullable=False,
     )
 
+    is_subscribed_notifications: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True
+    )
+
     enrollments: Mapped[list["Enrollment"]] = relationship(
         back_populates="user",
     )
