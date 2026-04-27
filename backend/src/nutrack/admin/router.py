@@ -23,11 +23,13 @@ from nutrack.course_materials.schemas import (
 )
 from nutrack.course_materials.service import CourseMaterialService
 from nutrack.mock_exams.dependencies import get_mock_exam_service
+from nutrack.mock_exams.models import MockExamQuestionCurationStatus
 from nutrack.mock_exams.schemas import (
     AdminCourseOfferingResponse,
     AdminMockExamListItem,
     CreateMockExamQuestionRequest,
     CreateMockExamRequest,
+    CurateQuestionRequest,
     MockExamGenerationJobResponse,
     MockExamGenerationSettingsResponse,
     MockExamAdminDetailResponse,
@@ -385,10 +387,11 @@ async def delete_admin_mock_exam(
 )
 async def list_admin_mock_exam_questions(
     course_id: int = Query(..., ge=1),
+    curation_status: MockExamQuestionCurationStatus | None = Query(default=None),
     _: User = Depends(get_current_admin_user),
     service: MockExamService = Depends(get_mock_exam_service),
 ):
-    questions = await service.list_admin_mock_exam_questions(course_id)
+    questions = await service.list_admin_mock_exam_questions(course_id, curation_status=curation_status)
     return ApiResponse(data=questions)
 
 
@@ -427,3 +430,17 @@ async def delete_admin_mock_exam_question(
 ):
     result = await service.delete_mock_exam_question(question_id)
     return ApiResponse(data=result)
+
+
+@router.patch(
+    "/mock-exam-questions/{question_id}/curate",
+    response_model=ApiResponse[MockExamQuestionAdminResponse],
+)
+async def curate_admin_mock_exam_question(
+    question_id: int,
+    body: CurateQuestionRequest,
+    _: User = Depends(get_current_admin_user),
+    service: MockExamService = Depends(get_mock_exam_service),
+):
+    question = await service.curate_question(question_id, body.status, body.rejection_reason)
+    return ApiResponse(data=question)

@@ -4,12 +4,18 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
 
+import { AiInsightsPanel } from "@/components/study/ai-insights-panel";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
 import { predictedGradeBadge } from "@/lib/predicted-grade";
 import { resolveStudyRouteCourseId } from "@/lib/study-course-route";
-import type { ApiResponse, EnrollmentItem, MockExamCourseGroup } from "@/types";
+import type {
+  ApiResponse,
+  EnrollmentItem,
+  InsightsData,
+  MockExamCourseGroup,
+} from "@/types";
 
 type StudyCourseGroup = MockExamCourseGroup & { route_course_id: number };
 
@@ -17,9 +23,12 @@ export default function StudyPage() {
   const [groups, setGroups] = useState<StudyCourseGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [insights, setInsights] = useState<InsightsData | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(true);
+  const [insightsError, setInsightsError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function load() {
+    async function loadStudyCourses() {
       setLoading(true);
       setError(null);
       try {
@@ -41,7 +50,24 @@ export default function StudyPage() {
       }
     }
 
-    void load();
+    async function loadInsights() {
+      setInsightsLoading(true);
+      setInsightsError(null);
+      try {
+        const insightsResponse = await api.get<ApiResponse<InsightsData>>("/insights");
+        setInsights(insightsResponse.data);
+      } catch (err) {
+        setInsightsError(
+          err instanceof Error ? err.message : "Failed to load insights",
+        );
+        setInsights(null);
+      } finally {
+        setInsightsLoading(false);
+      }
+    }
+
+    void loadStudyCourses();
+    void loadInsights();
   }, []);
 
   return (
@@ -70,32 +96,11 @@ export default function StudyPage() {
         </GlassCard>
       ) : (
         <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-          <GlassCard className="min-h-[420px] p-8">
-            <div className="space-y-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent-green">
-                AI Recommendations
-              </p>
-              <div>
-                <h2 className="text-2xl font-semibold text-text-primary">
-                  Study Assistant recommendations will appear here
-                </h2>
-                <p className="mt-3 max-w-xl text-sm leading-6 text-text-secondary">
-                  This panel is reserved for AI-generated study recommendations,
-                  priority suggestions, and next best actions across your current
-                  courses.
-                </p>
-              </div>
-              <div className="rounded-3xl border border-dashed border-border-primary bg-white/[0.03] p-6">
-                <p className="text-sm font-medium text-text-primary">
-                  Placeholder
-                </p>
-                <p className="mt-2 text-sm text-text-secondary">
-                  Upcoming recommendations can summarize weak areas, suggest which
-                  mock family to open next, and help sequence your study time.
-                </p>
-              </div>
-            </div>
-          </GlassCard>
+          <AiInsightsPanel
+            data={insights}
+            loading={insightsLoading}
+            error={insightsError}
+          />
 
           <div className="flex min-w-0 flex-col gap-5">
             {groups.map((group) => (

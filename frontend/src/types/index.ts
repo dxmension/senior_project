@@ -13,6 +13,7 @@ export interface User {
   total_credits_enrolled: number | null;
   is_onboarded: boolean;
   is_admin: boolean;
+  subscribed_to_notifications: boolean;
   created_at: string;
 }
 
@@ -466,6 +467,28 @@ export interface DashboardData {
   weekly_workload: WeeklyWorkloadItem[];
 }
 
+export type InsightActionType =
+  | "take_mock"
+  | "start_flashcards"
+  | "view_mindmap"
+  | "take_quiz"
+  | "take_midterm";
+
+export interface InsightAction {
+  label: string;
+  description: string;
+  action_type: InsightActionType;
+  action_url: string;
+}
+
+export interface InsightsData {
+  short_summary: string;
+  long_summary: string;
+  actions: InsightAction[];
+  generated_at: string;
+  cached: boolean;
+}
+
 export interface UpdateAssessmentPayload {
   assessment_type?: AssessmentType;
   assessment_number?: number;
@@ -489,6 +512,8 @@ export interface GenerateMockOptions {
   question_count: number;
   selected_upload_ids: number[];
   selected_shared_material_ids: number[];
+  include_rumored_questions: boolean;
+  include_historic_questions: boolean;
 }
 
 export type CalendarEventType =
@@ -609,6 +634,107 @@ export interface SharedCourseMaterial {
   download_url: string | null;
   is_owned_by_current_user: boolean;
   published_at: string;
+}
+
+export type FlashcardDifficulty = "easy" | "medium" | "hard";
+
+export interface GenerateFlashcardOptions {
+  course_id: number;
+  difficulty: FlashcardDifficulty;
+  card_count: number;
+  title?: string;
+  selected_upload_ids?: number[];
+  selected_shared_material_ids?: number[];
+}
+
+export interface FlashcardItem {
+  id: number;
+  position: number;
+  question: string;
+  answer: string;
+  topic: string | null;
+}
+
+export interface FlashcardCardStats {
+  times_seen: number;
+  times_easy: number;
+  times_medium: number;
+  times_hard: number;
+  last_response: FlashcardDifficulty | null;
+}
+
+export interface FlashcardDeckListItem {
+  id: number;
+  course_id: number;
+  title: string;
+  card_count: number;
+  difficulty: string;
+  created_at: string;
+  completed_sessions: number;
+  latest_grade_pct: number | null;
+  latest_grade_letter: string | null;
+  average_grade_pct: number | null;
+  best_grade_pct: number | null;
+  latest_completed_session_id: number | null;
+}
+
+export interface FlashcardDeck {
+  id: number;
+  course_id: number;
+  title: string;
+  card_count: number;
+  difficulty: string;
+  created_at: string;
+  cards: FlashcardItem[];
+}
+
+export interface FlashcardSession {
+  id: number;
+  deck_id: number;
+  deck_title: string;
+  status: string;
+  started_at: string;
+  cards: FlashcardItem[];
+  card_stats: Record<number, FlashcardCardStats>;
+}
+
+export interface FlashcardSessionHistoryItem {
+  session_id: number;
+  completed_at: string;
+  grade_pct: number;
+  grade_letter: string;
+  easy_count: number;
+  medium_count: number;
+  hard_count: number;
+  total_responses: number;
+}
+
+export interface FlashcardDeckHistory {
+  deck_id: number;
+  deck_title: string;
+  total_completed: number;
+  average_grade_pct: number | null;
+  best_grade_pct: number | null;
+  predicted_grade_pct: number | null;
+  predicted_grade_letter: string | null;
+  sessions: FlashcardSessionHistoryItem[];
+}
+
+export interface FlashcardSessionReview {
+  session_id: number;
+  deck_id: number;
+  deck_title: string;
+  total_cards: number;
+  total_responses: number;
+  easy_count: number;
+  medium_count: number;
+  hard_count: number;
+  grade_pct: number;
+  grade_letter: string;
+  top_struggled_cards: FlashcardItem[];
+  ai_summary: string;
+  ai_weak_topics: string[];
+  ai_study_plan: string;
 }
 
 export interface MindmapNode {
@@ -750,6 +876,30 @@ export type MockExamQuestionSource =
   | "rumored"
   | "tutor_made";
 
+export type MockExamQuestionCurationStatus = "pending" | "approved" | "rejected";
+
+export interface UserSubmittedQuestion {
+  id: number;
+  course_id: number;
+  source: MockExamQuestionSource;
+  source_label: string;
+  historic_section: string | null;
+  historic_year: number | null;
+  question_text: string;
+  answer_variant_1: string;
+  answer_variant_2: string;
+  answer_variant_3: string | null;
+  answer_variant_4: string | null;
+  answer_variant_5: string | null;
+  answer_variant_6: string | null;
+  correct_option_index: number;
+  explanation: string | null;
+  curation_status: MockExamQuestionCurationStatus;
+  rejection_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface MockExamSourceSummary {
   source: MockExamQuestionSource;
   label: string;
@@ -760,6 +910,8 @@ export interface MockExamQuestionItem {
   course_id: number;
   source: MockExamQuestionSource;
   source_label: string;
+  historic_section: string | null;
+  historic_year: number | null;
   historical_course_offering_id: number | null;
   historical_course_offering_label: string | null;
   question_text: string;
@@ -787,6 +939,8 @@ export interface MockExamQuestionStudentItem {
   course_id: number;
   source: MockExamQuestionSource;
   source_label: string;
+  historic_section: string | null;
+  historic_year: number | null;
   historical_course_offering_id: number | null;
   historical_course_offering_label: string | null;
   question_text: string;
@@ -919,6 +1073,9 @@ export interface MockExamAdminDetail {
 
 export interface AdminMockExamQuestion extends MockExamQuestionItem {
   usage_count: number;
+  curation_status: MockExamQuestionCurationStatus;
+  submitted_by_user_id: number | null;
+  rejection_reason: string | null;
 }
 
 export interface RecommendedOfferingSummary {

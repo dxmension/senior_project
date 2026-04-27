@@ -17,7 +17,11 @@ from nutrack.main import app  # noqa: E402
 
 @pytest.fixture
 def current_user() -> SimpleNamespace:
-    return SimpleNamespace(id=1, email="student@nu.edu.kz")
+    return SimpleNamespace(
+        id=1,
+        email="student@nu.edu.kz",
+        subscribed_to_notifications=True,
+    )
 
 
 @pytest.fixture

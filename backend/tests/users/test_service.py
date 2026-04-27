@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.exc import ProgrammingError
 
+from nutrack.courses.repository import CourseRepository
 from nutrack.enrollments.models import EnrollmentStatus
 from nutrack.users.exceptions import NotFoundError
 from nutrack.users.schemas import UserProfileUpdate
@@ -25,11 +26,13 @@ def _user() -> SimpleNamespace:
         last_name="Doe",
         avatar_url=None,
         major="Computer Science",
+        kazakh_level=None,
         study_year=3,
         cgpa=3.7,
         total_credits_earned=40,
         total_credits_enrolled=48,
         is_onboarded=True,
+        subscribed_to_notifications=True,
         created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
 
@@ -54,6 +57,24 @@ async def test_update_profile_skips_empty_updates() -> None:
 
     assert response.email == user.email
     service.user_repo.update.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_update_profile_can_toggle_notifications() -> None:
+    service = UserService(session=None)
+    user = _user()
+    service.user_repo.get_by_id = AsyncMock(return_value=user)
+    service.user_repo.update = AsyncMock()
+
+    await service.update_profile(
+        1,
+        UserProfileUpdate(subscribed_to_notifications=False),
+    )
+
+    service.user_repo.update.assert_awaited_once_with(
+        user,
+        subscribed_to_notifications=False,
+    )
 
 
 @pytest.mark.asyncio
@@ -116,6 +137,11 @@ async def test_get_audit_ignores_missing_handbook_table(monkeypatch) -> None:
     monkeypatch.setattr(
         "nutrack.users.service.HandbookService.get_plans_for_year",
         AsyncMock(side_effect=error),
+    )
+    monkeypatch.setattr(
+        CourseRepository,
+        "get_all_course_terms",
+        AsyncMock(return_value=[]),
     )
 
     result = await service.get_audit(1)

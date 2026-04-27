@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Brain, LoaderCircle, PlayCircle } from "lucide-react";
+import { ArrowLeft, Brain, ClipboardList, LoaderCircle, PlayCircle } from "lucide-react";
 
 import { MockExamCountdown } from "@/components/study/mock-exam-countdown";
 import { GenerateMockPopup } from "@/components/study/generate-mock-popup";
+import { SubmitQuestionModal } from "@/components/study/submit-question-modal";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
@@ -22,6 +23,8 @@ import type {
   MockExamGenerationQueued,
   MockExamCourseGroup,
   MockExamListItem,
+  MockExamQuestionCurationStatus,
+  UserSubmittedQuestion,
 } from "@/types";
 
 type PageParams = Promise<{
@@ -71,6 +74,8 @@ export default function StudyAssessmentFamilyPage({
   const [isPopupOpen, setIsPopupOpen] = useState(
     searchParams.get("generateMock") === "1"
   );
+  const [isSubmitOpen, setIsSubmitOpen] = useState(false);
+  const [mySubmissions, setMySubmissions] = useState<UserSubmittedQuestion[]>([]);
   const examsBeforeGenerate = useRef<number>(0);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -98,6 +103,7 @@ export default function StudyAssessmentFamilyPage({
       }
       setGroup(next);
       setAssessments(assessmentsResponse.data ?? []);
+      void loadSubmissions(next.course_id);
     } catch (err) {
       const message = err instanceof Error
         ? err.message
@@ -105,6 +111,17 @@ export default function StudyAssessmentFamilyPage({
       setError(message);
     } finally {
       if (!silent) setLoading(false);
+    }
+  }
+
+  async function loadSubmissions(resolvedCourseId: number) {
+    try {
+      const res = await api.get<ApiResponse<UserSubmittedQuestion[]>>(
+        `/mock-exams/questions/my-submissions?course_id=${resolvedCourseId}`,
+      );
+      setMySubmissions(res.data ?? []);
+    } catch {
+      // non-critical, don't surface error
     }
   }
 
@@ -228,11 +245,23 @@ export default function StudyAssessmentFamilyPage({
             Stats and available mocks for this assessment family.
           </p>
         </div>
-        <GenerateFamilyButton
-          assessment={assessment}
-          isGenerating={isGenerating}
-          onClick={() => setIsPopupOpen(true)}
-        />
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setIsSubmitOpen(true)}
+            className="inline-flex items-center gap-2 rounded-lg border border-border-primary
+              px-4 py-2 text-sm text-text-secondary transition-colors
+              hover:border-accent-blue hover:bg-accent-blue/10 hover:text-accent-blue"
+          >
+            <ClipboardList size={15} />
+            Submit Question
+          </button>
+          <GenerateFamilyButton
+            assessment={assessment}
+            isGenerating={isGenerating}
+            onClick={() => setIsPopupOpen(true)}
+          />
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -282,6 +311,10 @@ export default function StudyAssessmentFamilyPage({
         </div>
       )}
 
+      {mySubmissions.length > 0 && (
+        <MySubmissionsPanel submissions={mySubmissions} />
+      )}
+
       {assessment && (
         <GenerateMockPopup
           isOpen={isPopupOpen}
@@ -289,6 +322,15 @@ export default function StudyAssessmentFamilyPage({
           courseId={assessment.course_id}
           assessmentType={assessment_type}
           onGenerate={(opts) => void handleGenerateWithOptions(opts)}
+        />
+      )}
+
+      {group && (
+        <SubmitQuestionModal
+          isOpen={isSubmitOpen}
+          onClose={() => setIsSubmitOpen(false)}
+          courseId={group.course_id}
+          onSubmitted={(q) => setMySubmissions((prev) => [q, ...prev])}
         />
       )}
     </div>
@@ -468,5 +510,50 @@ function StatChip({
     <span className={`rounded-full bg-white/[0.05] px-3 py-1 ${tone}`}>
       {label}
     </span>
+  );
+}
+
+const CURATION_STYLES: Record<MockExamQuestionCurationStatus, string> = {
+  pending: "bg-accent-orange/10 text-accent-orange",
+  approved: "bg-accent-green/10 text-accent-green",
+  rejected: "bg-accent-red/10 text-accent-red",
+};
+
+function MySubmissionsPanel({ submissions }: { submissions: UserSubmittedQuestion[] }) {
+  return (
+    <GlassCard padding={false} className="p-5">
+      <h3 className="mb-4 text-sm font-semibold text-text-primary">
+        My Submitted Questions ({submissions.length})
+      </h3>
+      <div className="space-y-2">
+        {submissions.map((q) => (
+          <div
+            key={q.id}
+            className="flex items-start justify-between gap-3 rounded-lg border border-border-primary bg-white/[0.02] px-4 py-3"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm text-text-primary">{q.question_text}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <span className="text-xs capitalize text-text-muted">{q.source_label}</span>
+                {q.historic_section && (
+                  <span className="text-xs text-text-muted">· {q.historic_section}</span>
+                )}
+                {q.historic_year && (
+                  <span className="text-xs text-text-muted">· {q.historic_year}</span>
+                )}
+              </div>
+              {q.rejection_reason && (
+                <p className="mt-1 text-xs text-accent-red">{q.rejection_reason}</p>
+              )}
+            </div>
+            <span
+              className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium capitalize ${CURATION_STYLES[q.curation_status]}`}
+            >
+              {q.curation_status}
+            </span>
+          </div>
+        ))}
+      </div>
+    </GlassCard>
   );
 }

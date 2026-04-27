@@ -34,6 +34,11 @@ class User(Base, IDMixin, TimestampMixin):
     avatar_url: Mapped[str | None] = mapped_column(String, nullable=True)
     is_onboarded: Mapped[bool] = mapped_column(Boolean, default=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    subscribed_to_notifications: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
 
     is_subscribed_notifications: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True

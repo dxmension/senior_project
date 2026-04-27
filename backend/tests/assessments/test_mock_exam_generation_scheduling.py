@@ -45,7 +45,7 @@ async def test_update_assessment_reschedules_mock_exam_generation() -> None:
 
     await service.update_assessment(1, 7, payload)
 
-    service._schedule_mock_exam_generation.assert_awaited_once()  # noqa: SLF001
+    service._schedule_mock_exam_generation.assert_awaited_once_with(assessment)  # noqa: SLF001
 
 
 @pytest.mark.asyncio
@@ -74,13 +74,17 @@ async def test_schedule_mock_exam_generation_stores_celery_task_ids(monkeypatch)
     assessment = _assessment()
     jobs = [SimpleNamespace(id=11), SimpleNamespace(id=12)]
     generation_service = SimpleNamespace(
-        schedule_for_assessment=AsyncMock(return_value=jobs),
+        schedule_for_assessment=AsyncMock(return_value=(jobs, [])),
         set_celery_task_id=AsyncMock(),
     )
 
     monkeypatch.setattr(
         "nutrack.mock_exams.generation.MockExamGenerationService",
         lambda _session: generation_service,
+    )
+    monkeypatch.setattr(
+        "nutrack.assessments.service._revoke_tasks",
+        lambda task_ids: None,
     )
     service._enqueue_generation_job = lambda job: f"task-{job.id}"  # noqa: SLF001
 

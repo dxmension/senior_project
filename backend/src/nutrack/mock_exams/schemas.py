@@ -9,6 +9,7 @@ from nutrack.mock_exams.models import (
     MockExamGenerationStatus,
     MockExamGenerationTrigger,
     MockExamOrigin,
+    MockExamQuestionCurationStatus,
     MockExamQuestionSource,
 )
 
@@ -16,6 +17,8 @@ from nutrack.mock_exams.models import (
 class MockExamQuestionBase(BaseModel):
     course_id: int
     source: MockExamQuestionSource = MockExamQuestionSource.AI
+    historic_section: str | None = None
+    historic_year: int | None = None
     historical_course_offering_id: int | None = None
     question_text: str = Field(min_length=1)
     answer_variant_1: str = Field(min_length=1)
@@ -50,6 +53,8 @@ class CreateMockExamQuestionRequest(MockExamQuestionBase):
 
 class UpdateMockExamQuestionRequest(BaseModel):
     source: MockExamQuestionSource | None = None
+    historic_section: str | None = None
+    historic_year: int | None = None
     historical_course_offering_id: int | None = None
     question_text: str | None = None
     answer_variant_1: str | None = None
@@ -72,6 +77,59 @@ class MockExamQuestionResponse(MockExamQuestionBase):
 
 class MockExamQuestionAdminResponse(MockExamQuestionResponse):
     usage_count: int
+    curation_status: MockExamQuestionCurationStatus
+    submitted_by_user_id: int | None = None
+    rejection_reason: str | None = None
+
+
+class UserSubmitQuestionRequest(BaseModel):
+    course_id: int
+    source: MockExamQuestionSource
+    historic_section: str | None = None
+    historic_year: int | None = None
+    question_text: str = Field(min_length=1)
+    answer_variant_1: str = Field(min_length=1)
+    answer_variant_2: str = Field(min_length=1)
+    answer_variant_3: str | None = None
+    answer_variant_4: str | None = None
+    answer_variant_5: str | None = None
+    answer_variant_6: str | None = None
+    correct_option_index: int = Field(ge=1, le=6)
+    explanation: str | None = None
+
+    @model_validator(mode="after")
+    def validate_source(self):
+        allowed = {MockExamQuestionSource.RUMORED, MockExamQuestionSource.HISTORIC}
+        if self.source not in allowed:
+            raise ValueError("User submissions must be rumored or historic questions")
+        return self
+
+
+class UserSubmittedQuestionResponse(BaseModel):
+    id: int
+    course_id: int
+    source: MockExamQuestionSource
+    source_label: str
+    historic_section: str | None = None
+    historic_year: int | None = None
+    question_text: str
+    answer_variant_1: str
+    answer_variant_2: str
+    answer_variant_3: str | None = None
+    answer_variant_4: str | None = None
+    answer_variant_5: str | None = None
+    answer_variant_6: str | None = None
+    correct_option_index: int
+    explanation: str | None = None
+    curation_status: MockExamQuestionCurationStatus
+    rejection_reason: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CurateQuestionRequest(BaseModel):
+    status: MockExamQuestionCurationStatus
+    rejection_reason: str | None = None
 
 
 class MockExamSourceSummary(BaseModel):
@@ -84,6 +142,8 @@ class MockExamQuestionStudentResponse(BaseModel):
     course_id: int
     source: MockExamQuestionSource
     source_label: str
+    historic_section: str | None = None
+    historic_year: int | None = None
     historical_course_offering_id: int | None = None
     historical_course_offering_label: str | None = None
     question_text: str

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import pdfplumber
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nutrack.assessments.models import Assessment, AssessmentType
@@ -102,6 +102,33 @@ class GenerationResult(BaseModel):
     coverage_summary: str
     warnings: list[str] = Field(default_factory=list)
 
+    @field_validator("coverage_summary", mode="before")
+    @classmethod
+    def normalize_coverage_summary(cls, value: Any) -> str:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, dict):
+            topics = value.get("topics_covered")
+            notes = value.get("notes")
+            missing = value.get("gaps") or value.get("missing_topics")
+            parts: list[str] = []
+            if isinstance(topics, list) and topics:
+                parts.append(
+                    "Topics covered: " + ", ".join(str(item) for item in topics[:8])
+                )
+            if isinstance(missing, list) and missing:
+                parts.append(
+                    "Gaps: " + ", ".join(str(item) for item in missing[:5])
+                )
+            if isinstance(notes, str) and notes.strip():
+                parts.append(notes.strip())
+            if parts:
+                return ". ".join(parts)
+            return json.dumps(value, ensure_ascii=True)
+        if isinstance(value, list):
+            return ", ".join(str(item) for item in value)
+        return str(value)
+
 
 @dataclass
 class GenerationOptions:
@@ -109,6 +136,8 @@ class GenerationOptions:
     question_count: int | None = None
     selected_upload_ids: list[int] | None = None
     selected_shared_material_ids: list[int] | None = None
+    include_rumored_questions: bool = False
+    include_historic_questions: bool = False
 
     def to_json(self) -> str:
         return json.dumps({
@@ -116,6 +145,8 @@ class GenerationOptions:
             "question_count": self.question_count,
             "selected_upload_ids": self.selected_upload_ids,
             "selected_shared_material_ids": self.selected_shared_material_ids,
+            "include_rumored_questions": self.include_rumored_questions,
+            "include_historic_questions": self.include_historic_questions,
         })
 
     @classmethod
@@ -128,6 +159,8 @@ class GenerationOptions:
             question_count=data.get("question_count"),
             selected_upload_ids=data.get("selected_upload_ids"),
             selected_shared_material_ids=data.get("selected_shared_material_ids"),
+            include_rumored_questions=data.get("include_rumored_questions", False),
+            include_historic_questions=data.get("include_historic_questions", False),
         )
 
 
@@ -165,6 +198,8 @@ class MockExamGenerationService:
         assessment: Assessment,
     ) -> tuple[list[MockExamGenerationJob], list[str]]:
         cancelled_task_ids = await self.job_repo.cancel_pending_for_assessment(assessment.id)
+        if assessment.is_completed:
+            return [], cancelled_task_ids
         if not _is_eligible_type(assessment.assessment_type):
             return [], cancelled_task_ids
         settings = await self.get_effective_settings(assessment.assessment_type)
@@ -188,6 +223,8 @@ class MockExamGenerationService:
         question_count: int | None = None,
         selected_upload_ids: list[int] | None = None,
         selected_shared_material_ids: list[int] | None = None,
+        include_rumored_questions: bool = False,
+        include_historic_questions: bool = False,
     ) -> tuple[MockExamGenerationJob, list[str]]:
         cancelled_task_ids = await self.job_repo.cancel_pending_for_assessment(assessment.id)
         now = datetime.now(timezone.utc)
@@ -196,6 +233,8 @@ class MockExamGenerationService:
             question_count=question_count,
             selected_upload_ids=selected_upload_ids,
             selected_shared_material_ids=selected_shared_material_ids,
+            include_rumored_questions=include_rumored_questions,
+            include_historic_questions=include_historic_questions,
         )
         job = await self._create_job(
             assessment,
@@ -341,7 +380,7 @@ class MockExamGenerationService:
             tool_handler=state.handle_tool,
             model=settings.model,
             temperature=settings.temperature,
-            max_output_tokens=4000,
+            max_output_tokens=32000,
         )
         result = GenerationResult.model_validate_json(text)
         if state.created_exam_id is None:

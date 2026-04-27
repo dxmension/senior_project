@@ -154,6 +154,7 @@ class AssessmentService:
             assessment_id,
             user_id,
         )
+        await self._schedule_mock_exam_generation(refreshed)
         return _build_response(refreshed)
 
     async def generate_mock_exam(
@@ -165,6 +166,8 @@ class AssessmentService:
         question_count: int | None = None,
         selected_upload_ids: list[int] | None = None,
         selected_shared_material_ids: list[int] | None = None,
+        include_rumored_questions: bool = False,
+        include_historic_questions: bool = False,
     ) -> MockExamGenerationQueuedResponse:
         assessment = await self.assessment_repo.get_by_id_and_user(
             assessment_id,
@@ -178,6 +181,8 @@ class AssessmentService:
             question_count=question_count,
             selected_upload_ids=selected_upload_ids,
             selected_shared_material_ids=selected_shared_material_ids,
+            include_rumored_questions=include_rumored_questions,
+            include_historic_questions=include_historic_questions,
         )
         return MockExamGenerationQueuedResponse(job_id=job.id, status="queued")
 
@@ -246,6 +251,8 @@ class AssessmentService:
         question_count: int | None = None,
         selected_upload_ids: list[int] | None = None,
         selected_shared_material_ids: list[int] | None = None,
+        include_rumored_questions: bool = False,
+        include_historic_questions: bool = False,
     ) -> MockExamGenerationJob:
         from nutrack.mock_exams.generation import MockExamGenerationService
 
@@ -256,6 +263,8 @@ class AssessmentService:
             question_count=question_count,
             selected_upload_ids=selected_upload_ids,
             selected_shared_material_ids=selected_shared_material_ids,
+            include_rumored_questions=include_rumored_questions,
+            include_historic_questions=include_historic_questions,
         )
         _revoke_tasks(stale_task_ids)
         task_id = self._enqueue_generation_job(job)

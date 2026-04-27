@@ -4,6 +4,7 @@ import logging
 from nutrack.celery_app import celery_app
 from nutrack.database import AsyncSessionLocal
 from nutrack.mock_exams.generation import MockExamGenerationService
+from nutrack.notifications.service import NotificationsService
 
 logger = logging.getLogger(__name__)
 
@@ -11,11 +12,13 @@ logger = logging.getLogger(__name__)
 async def _run_generation(job_id: int, task_id: str | None) -> None:
     async with AsyncSessionLocal() as session:
         service = MockExamGenerationService(session=session)
+        notifications = NotificationsService(session=session)
         if task_id is not None:
             await service.set_celery_task_id(job_id, task_id)
         try:
             job = await service.run_job(job_id)
             await session.commit()
+            await _send_ready_notification(notifications, job, session)
         except Exception:
             await session.rollback()
             raise
@@ -27,6 +30,23 @@ async def _run_generation(job_id: int, task_id: str | None) -> None:
             job.status.value,
             job.error_message,
             job.generated_mock_exam_id,
+        )
+
+
+async def _send_ready_notification(
+    notifications: NotificationsService,
+    job,
+    session,
+) -> None:
+    try:
+        sent = await notifications.send_mock_exam_ready_email(job)
+        if sent:
+            await session.commit()
+    except Exception:
+        await session.rollback()
+        logger.exception(
+            "failed to send mock exam reminder email job_id=%s",
+            job.id,
         )
 
 

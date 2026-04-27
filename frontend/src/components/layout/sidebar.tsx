@@ -8,7 +8,6 @@ import {
   Search,
   Brain,
   UserCircle,
-  Settings,
   X,
   CalendarDays,
 } from "lucide-react";
@@ -23,7 +22,6 @@ const mainNav = [
 
 const bottomNav = [
   { href: "/profile", label: "Profile", icon: UserCircle },
-  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 interface SidebarProps {
